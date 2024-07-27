@@ -1,0 +1,4 @@
+[theme]
+font = "monospace"
+[logger]
+messageFormat = "[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"
