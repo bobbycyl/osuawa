@@ -4,6 +4,7 @@ from enum import Enum, unique
 
 import orjson
 import pandas as pd
+import streamlit as st
 from clayutil.futil import Properties
 from osu import Client, GameModeStr
 
@@ -59,8 +60,9 @@ class Osuawa(object):
                 "hit_length",
                 "is_nf",
                 "is_hd",
-                "is_hr",
-                "is_ez",
+                "is_high_ar",
+                "is_low_ar",
+                "is_very_low_ar",
                 "is_speed_up",
                 "is_speed_down",
                 "info",
@@ -74,9 +76,9 @@ class Osuawa(object):
                 "b_approach_rate",
                 "b_overall_difficulty",
                 "b_pp_100if",
-                "b_pp_99if",
                 "b_pp_95if",
                 "b_pp_90if",
+                "b_pp_85if",
             ],
         )
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
@@ -112,59 +114,64 @@ class Osuawa(object):
         return self.create_scores_dataframe(scores_compact)
 
     def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
-        # get
-        user_scores = []
-        offset = 0
-        while True:
-            user_scores_current = self.client.get_user_scores(
-                user=user,
-                type="recent",
-                mode=GameModeStr.STANDARD,
-                include_fails=include_fails,
-                limit=50,
-                offset=offset,
-            )
-            if len(user_scores_current) == 0:
-                break
-            user_scores.extend(user_scores_current)
-            offset += 50
-
-        recent_scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
-        len_got = len(recent_scores_compact)
-
-        # concatenate
-        len_local = 0
-        if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
-            with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")) as fi:
-                recent_scores_compact_old = orjson.loads(fi.read())
-            len_local = len(recent_scores_compact_old)
-            recent_scores_compact = {
-                **recent_scores_compact,
-                **recent_scores_compact_old,
-            }
-        len_diff = len(recent_scores_compact) - len_local
-
-        # calculate difficulty attributes
-        bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
-        beatmaps_dict = self.get_beatmaps(tuple(bids_not_calculated))
-        for score_id in recent_scores_compact:
-            if len(recent_scores_compact[score_id]) == 9:
-                recent_scores_compact[score_id].extend(
-                    calc_beatmap_attributes(
-                        self.osu_tools_path,
-                        beatmaps_dict[recent_scores_compact[score_id][0]],
-                        recent_scores_compact[score_id][7],
-                    )
+        with st.status("saving recent scores for %d" % user, expanded=True) as status:
+            st.write("getting scores...")
+            # get
+            user_scores = []
+            offset = 0
+            while True:
+                user_scores_current = self.client.get_user_scores(
+                    user=user,
+                    type="recent",
+                    mode=GameModeStr.STANDARD,
+                    include_fails=include_fails,
+                    limit=50,
+                    offset=offset,
                 )
+                if len(user_scores_current) == 0:
+                    break
+                user_scores.extend(user_scores_current)
+                offset += 50
 
-        # save
-        with open(
-            os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"),
-            "w",
-        ) as fo:
-            fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
-        df = self.create_scores_dataframe(recent_scores_compact)
-        df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
+            recent_scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
+            len_got = len(recent_scores_compact)
+
+            st.write("merging scores...")
+            # concatenate
+            len_local = 0
+            if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
+                with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")) as fi:
+                    recent_scores_compact_old = orjson.loads(fi.read())
+                len_local = len(recent_scores_compact_old)
+                recent_scores_compact = {
+                    **recent_scores_compact,
+                    **recent_scores_compact_old,
+                }
+            len_diff = len(recent_scores_compact) - len_local
+
+            st.write("calculating difficulty attributes...")
+            # calculate difficulty attributes
+            bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
+            beatmaps_dict = self.get_beatmaps(tuple(bids_not_calculated))
+            for score_id in recent_scores_compact:
+                if len(recent_scores_compact[score_id]) == 9:
+                    recent_scores_compact[score_id].extend(
+                        calc_beatmap_attributes(
+                            self.osu_tools_path,
+                            beatmaps_dict[recent_scores_compact[score_id][0]],
+                            recent_scores_compact[score_id][7],
+                        )
+                    )
+
+            # save
+            with open(
+                os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"),
+                "w",
+            ) as fo:
+                fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
+            df = self.create_scores_dataframe(recent_scores_compact)
+            df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
+            status.update(label="saved", state="complete", expanded=False)
         return "%s: len local/got/diff = %d/%d/%d" % (
             self.get_username(user),
             len_local,

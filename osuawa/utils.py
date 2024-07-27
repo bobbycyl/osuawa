@@ -42,8 +42,9 @@ class OsuDifficultyAttribute(object):
         self.hit_length = hit_length
         self.is_nf = False
         self.is_hd = False
-        self.is_hr = False
-        self.is_ez = False
+        self.is_high_ar = False
+        self.is_low_ar = False
+        self.is_very_low_ar = False
         self.is_speed_up = False
         self.is_speed_down = False
 
@@ -54,7 +55,6 @@ class OsuDifficultyAttribute(object):
         if Mod.Hidden.value in mods_dict:
             self.is_hd = True
         if Mod.HardRock.value in mods_dict:
-            self.is_hr = True
             self.cs = self.cs * 1.3
             if self.cs > 10:
                 self.cs = 10
@@ -63,7 +63,6 @@ class OsuDifficultyAttribute(object):
                 self.accuracy = 10
             self.ar = self.ar * 1.4
         elif Mod.Easy.value in mods_dict:
-            self.is_ez = True
             self.cs = self.cs * 0.5
             self.accuracy = self.accuracy * 0.5
             self.ar = self.ar * 0.5
@@ -96,6 +95,12 @@ class OsuDifficultyAttribute(object):
         self.accuracy = calc_accuracy(self.hit_window)
         self.preempt = calc_preempt(self.ar, magnitude)
         self.ar = calc_ar(self.preempt)
+        if self.preempt <= 450:
+            self.is_high_ar = True
+        elif 750 <= self.preempt < 1050:
+            self.is_low_ar = True
+        elif self.preempt >= 1050:
+            self.is_very_low_ar = True
         self.bpm *= magnitude
         self.hit_length /= magnitude
 
@@ -126,14 +131,15 @@ def rosu_calc(beatmap_file: str, mods: list) -> tuple:
     beatmap = rosu.Beatmap(path=beatmap_file)
     diff = rosu.Difficulty(mods=mods)
     diff_attr = diff.calculate(beatmap)
+    note_count = diff_attr.n_circles
     perf100 = rosu.Performance(accuracy=100, misses=0, hitresult_priority=rosu.HitResultPriority.BestCase)
-    perf99 = rosu.Performance(accuracy=99, misses=0, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf95 = rosu.Performance(accuracy=95, misses=0, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf90 = rosu.Performance(accuracy=90, misses=0, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf95 = rosu.Performance(accuracy=95, misses=1, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf90 = rosu.Performance(accuracy=90, misses=min(5, note_count), hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf85 = rosu.Performance(accuracy=85, misses=min(15, note_count), hitresult_priority=rosu.HitResultPriority.WorstCase)
     pp100 = perf100.calculate(diff_attr).pp
-    pp99 = perf99.calculate(diff_attr).pp
     pp95 = perf95.calculate(diff_attr).pp
     pp90 = perf90.calculate(diff_attr).pp
+    pp85 = perf85.calculate(diff_attr).pp
     return (
         diff_attr.stars,
         diff_attr.max_combo,
@@ -144,9 +150,9 @@ def rosu_calc(beatmap_file: str, mods: list) -> tuple:
         diff_attr.ar,
         diff_attr.od,
         pp100,
-        pp99,
         pp95,
         pp90,
+        pp85,
     )
 
 
@@ -181,8 +187,9 @@ def calc_beatmap_attributes(osu_tools_path: str, beatmap: Beatmap, mods: list) -
         osu_diff_attr.hit_length,
         osu_diff_attr.is_nf,
         osu_diff_attr.is_hd,
-        osu_diff_attr.is_hr,
-        osu_diff_attr.is_ez,
+        osu_diff_attr.is_high_ar,
+        osu_diff_attr.is_low_ar,
+        osu_diff_attr.is_very_low_ar,
         osu_diff_attr.is_speed_up,
         osu_diff_attr.is_speed_down,
         "%s - %s (%s) [%s]"

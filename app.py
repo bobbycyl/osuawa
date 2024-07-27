@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os.path
+import time
 from secrets import token_hex
 from typing import Optional
 from uuid import UUID
@@ -18,15 +19,14 @@ from clayutil.cmdparse import (
 )
 from streamlit import logger, runtime
 from streamlit.components.v1 import html
+from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Osuawa, Path
 
 if not os.path.exists("./logs"):
     os.mkdir("./logs")
-fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
-fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
-logger.get_logger("streamlit").addHandler(fh)
+
 DEBUG_MODE = True
 
 arg_parser = argparse.ArgumentParser(description="osuawa")
@@ -38,7 +38,14 @@ if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 if "query" not in st.session_state:
     st.session_state.query = ""
-logger.get_logger(runtime.get_instance().get_client(get_script_run_ctx().session_id).request.remote_ip).addHandler(fh)
+
+
+@st.cache_data
+def init_logger():
+    fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
+    fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
+    logger.get_logger("streamlit").addHandler(fh)
+    logger.get_logger(runtime.get_instance().get_client(get_script_run_ctx().session_id).request.remote_ip).addHandler(fh)
 
 
 def run(g):
@@ -49,16 +56,20 @@ def run(g):
             st.error(e)
             break
         except StopIteration as e:
-            st.text("%s done" % e.value)
+            st.success("%s done" % e.value)
+            break
+        except Error as e:
+            logger.get_logger("streamlit").exception(e)
             break
         except Exception as e:
-            st.write("uncaught exception: %s" % str(e))
+            st.error("uncaught exception: %s" % str(e))
             logger.get_logger("streamlit").exception(e)
             break
 
 
 def register_osu_api():
-    return Osuawa(args.oauth_filename, args.osu_tools_path, args.output_dir)
+    with st.spinner("registering a client..."):
+        return Osuawa(args.oauth_filename, args.osu_tools_path, args.output_dir)
 
 
 def commands():
@@ -75,7 +86,7 @@ def commands():
             "save user recent scores",
             [Int("user"), Bool("include_fails", True)],
             1,
-            awa.save_recent_scores,
+            st.session_state.awa.save_recent_scores,
         ),
         Command(
             "psa",
@@ -87,15 +98,15 @@ def commands():
                 )
             ],
             1,
-            awa.save_recent_scores,
+            st.session_state.awa.save_recent_scores,
         ),
-        Command("s2", "get and show score", [Int("score_id")], 1, awa.get_score),
+        Command("s2", "get and show score", [Int("score_id")], 1, st.session_state.awa.get_score),
         Command(
             "s",
             "get and show user scores of a beatmap",
             [Int("beatmap"), Int("user")],
             1,
-            awa.get_user_beatmap_scores,
+            st.session_state.awa.get_user_beatmap_scores,
         ),
         Command("cat", "show user recent scores", [Int("user")], 0, cat),
     ]
@@ -112,8 +123,10 @@ def register_cmdparser(obj: Optional[dict] = None):
             ret = "token matched"
         else:
             st.session_state.token = token_hex(16)
-            logger.get_logger("streamlit").info("%s -> %s" % (get_script_run_ctx().session_id, st.session_state.token))
+            logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
             ret = "token generated"
+        if "awa" in st.session_state and obj.get("refresh", False):
+            st.session_state.awa = register_osu_api()
     else:
         if DEBUG_MODE:
             perm = 999
@@ -122,16 +135,86 @@ def register_cmdparser(obj: Optional[dict] = None):
     return ret
 
 
+@st.fragment
 def cat(user: int):
     if not os.path.exists(os.path.join(str(args.output_dir), Path.RECENT_SCORES.value, f"{user}.csv")):
         raise ValueError("User not found")
-    return pd.read_csv(
+    df = pd.read_csv(
         os.path.join(str(args.output_dir), Path.RECENT_SCORES.value, f"{user}.csv"),
         index_col=0,
+        parse_dates=["ts"]
     )
+    st.link_button("user profile", f"https://osu.ppy.sh/users/{user}")
+    with st.container(border=True):
+        st.markdown(
+            f"""## PP Overall
+based on {len(df)} ({len(df[df["passed"]])} passed) score(s)
+
+got/100/95/90/85 {df["pp"].sum():.2f}/{df["b_pp_100if"].sum():.2f}/{df["b_pp_95if"].sum():.2f}/{df["b_pp_90if"].sum():.2f}/{df["b_pp_85if"].sum():.2f}pp
+
+| Tag         | pp%                                                              | count%                                              |
+| ----------- | ---------------------------------------------------------------- | --------------------------------------------------- |
+| HD          |{df[df["is_hd"]]["pp"].sum() / df["pp"].sum() * 100:.2f}          | {len(df[df["is_hd"]]) / len(df) * 100:.2f}          |
+| High_AR     |{df[df["is_high_ar"]]["pp"].sum() / df["pp"].sum() * 100:.2f}     | {len(df[df["is_high_ar"]]) / len(df) * 100:.2f}     |
+| Low_AR      |{df[df["is_low_ar"]]["pp"].sum() / df["pp"].sum() * 100:.2f}      | {len(df[df["is_low_ar"]]) / len(df) * 100:.2f}      |
+| Very_Low_AR |{df[df["is_very_low_ar"]]["pp"].sum() / df["pp"].sum() * 100:.2f} | {len(df[df["is_very_low_ar"]]) / len(df) * 100:.2f} |
+| Speed_Up    |{df[df["is_speed_up"]]["pp"].sum() / df["pp"].sum() * 100:.2f}    | {len(df[df["is_speed_up"]]) / len(df) * 100:.2f}    |
+| Speed_Down  |{df[df["is_speed_down"]]["pp"].sum() / df["pp"].sum() * 100:.2f}  | {len(df[df["is_speed_down"]]) / len(df) * 100:.2f}  |
+
+"""
+        )
+    with st.container(border=True):
+        st.markdown("## Scatter Plot")
+        begin_date, end_date = st.date_input("date range", [df["ts"].min() - pd.Timedelta(days=1), pd.Timestamp.today() + pd.Timedelta(days=1)])
+        df1 = df[(df["ts"].dt.date > begin_date) & (df["ts"].dt.date < end_date)]
+        sr_slider = st.slider("SR", 0.0, 13.5, (0.5, 8.5))
+        df2 = df1[(df1["b_star_rating"] > sr_slider[0]) & (df1["b_star_rating"] < sr_slider[1])]
+        advanced_filter = st.text_input("advanced filter")
+        if advanced_filter:
+            df3 = df2.query(advanced_filter)
+        else:
+            df3 = df2
+        enable_size = st.checkbox("enable scatter plot size parameter")
+        if "default_x_with_size_enabled" not in st.session_state:
+            st.session_state.default_x_with_size_enabled = 25
+        if "default_size" not in st.session_state:
+            st.session_state.default_size = 23
+        if "default_x" not in st.session_state:
+            st.session_state.default_x = 23
+
+        if enable_size:
+            col1, col2 = st.columns(2)
+            with col1:
+                x_radio = st.radio("x", df.columns, index=st.session_state.default_x_with_size_enabled)
+            with col2:
+                size_radio = st.radio("size", df.columns, index=st.session_state.default_size)
+            y_multiselect = st.multiselect("y", df.columns, default="score_nf")
+            st.scatter_chart(
+                df3,
+                x=x_radio,
+                y=y_multiselect,
+                size=size_radio,
+            )
+        else:
+            x_radio = st.radio("x", df.columns, index=st.session_state.default_x)
+            y_multiselect = st.multiselect("y", df.columns, default="score_nf")
+            st.scatter_chart(
+                df3,
+                x=x_radio,
+                y=y_multiselect,
+            )
+    with st.container(border=True):
+        st.markdown("## filtered data")
+        st.dataframe(df3)
+    return df
 
 
-awa = register_osu_api()
+init_logger()
+if "awa" not in st.session_state:
+    st.session_state.awa = register_osu_api()
+else:
+    with st.spinner("preparing..."):
+        time.sleep(3)
 register_cmdparser({"simple": True})
 
 
@@ -150,7 +233,7 @@ if st.session_state["delete_line"]:
     st.session_state["input"] = ""
     st.session_state["delete_line"] = False
 
-y = st.text_input("> ", key="input", on_change=submit)
+y = st.text_input("> ", key="input", on_change=submit, placeholder="type 'help' to get started")
 
 html(
     f"""<script>
