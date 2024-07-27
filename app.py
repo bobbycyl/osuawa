@@ -95,7 +95,7 @@ def commands():
             [
                 Coll(
                     "user",
-                    [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(args.output_dir), Path.RAW_RECENT_SCORES.value))],
+                    [int(os.path.splitext(os.path.basename(x))[0]) for x in os.listdir(os.path.join(str(args.output_dir), Path.RAW_RECENT_SCORES.value))],
                 )
             ],
             1,
