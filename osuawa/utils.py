@@ -40,6 +40,7 @@ class OsuDifficultyAttribute(object):
         self.preempt = calc_preempt(self.ar)
         self.bpm = bpm
         self.hit_length = hit_length
+        self.is_nf = False
         self.is_hd = False
         self.is_hr = False
         self.is_ez = False
@@ -48,6 +49,8 @@ class OsuDifficultyAttribute(object):
 
     def set_mods(self, mods: list):
         mods_dict = {mod["acronym"]: (mod["settings"] if mod.get("settings", None) is not None else {}) for mod in mods}
+        if Mod.NoFail.value in mods_dict:
+            self.is_nf = True
         if Mod.Hidden.value in mods_dict:
             self.is_hd = True
         if Mod.HardRock.value in mods_dict:
@@ -78,13 +81,13 @@ class OsuDifficultyAttribute(object):
         elif Mod.Daycore.value in mods_dict:
             magnitude = mods_dict[Mod.Daycore.value].get("speed_change", 0.75)
         elif Mod.WindUp.value in mods_dict:
-            # not official
+            # harmonic mean
             _settings = mods_dict[Mod.WindUp.value]
-            magnitude = (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 1.5) * 3) / 4
+            magnitude = 2 / (1 / _settings.get("initial_rate", 1.0) + 1 / _settings.get("final_rate", 1.5))
         elif Mod.WindDown.value in mods_dict:
-            # not official
+            # harmonic mean
             _settings = mods_dict[Mod.WindDown.value]
-            magnitude = (_settings.get("initial_rate", 1.0) * 3 + _settings.get("final_rate", 0.75)) / 4
+            magnitude = 2 / (1 / _settings.get("initial_rate", 1.0) + 1 / _settings.get("final_rate", 0.75))
         if magnitude > 1:
             self.is_speed_up = True
         elif magnitude < 1:
@@ -176,6 +179,7 @@ def calc_beatmap_attributes(osu_tools_path: str, beatmap: Beatmap, mods: list) -
         osu_diff_attr.preempt,
         osu_diff_attr.bpm,
         osu_diff_attr.hit_length,
+        osu_diff_attr.is_nf,
         osu_diff_attr.is_hd,
         osu_diff_attr.is_hr,
         osu_diff_attr.is_ez,

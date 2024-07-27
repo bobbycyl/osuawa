@@ -57,6 +57,7 @@ class Osuawa(object):
                 "preempt",
                 "bpm",
                 "hit_length",
+                "is_nf",
                 "is_hd",
                 "is_hr",
                 "is_ez",
@@ -79,6 +80,7 @@ class Osuawa(object):
             ],
         )
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
+        df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
         return df
 
     def get_username(self, user: int) -> str:

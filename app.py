@@ -28,7 +28,6 @@ fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
 fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
 logger.get_logger("streamlit").addHandler(fh)
 DEBUG_MODE = True
-tokens = {}
 
 arg_parser = argparse.ArgumentParser(description="osuawa")
 arg_parser.add_argument("oauth_filename")
