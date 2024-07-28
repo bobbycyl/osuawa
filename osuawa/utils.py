@@ -2,7 +2,19 @@ import os
 import subprocess
 
 import rosu_pp_py as rosu
-from osu.objects import Beatmap, LegacyScore, Mod, SoloScore
+from osu.objects import Beatmap, LegacyScore, Mod, SoloScore, UserCompact, UserStatistics
+
+
+def user_to_dict(user: UserCompact):
+    attr_dict = {}
+    for attr in UserCompact.__slots__:
+        attr_dict[attr] = getattr(user, attr)
+    stats = user.statistics
+    stats_dict = {}
+    for attr in UserStatistics.__slots__:
+        stats_dict[attr] = getattr(stats, attr)
+    attr_dict["statistics"] = stats_dict
+    return attr_dict
 
 
 def calc_hit_window(original_accuracy: float, magnitude: float = 1.0) -> float:

@@ -5,14 +5,15 @@ from enum import Enum, unique
 import orjson
 import pandas as pd
 import streamlit as st
-from clayutil.futil import Properties
+from clayutil.futil import Properties, filelock
 from osu import Client, GameModeStr
 
-from .utils import Beatmap, calc_beatmap_attributes, score_info_list
+from .utils import Beatmap, calc_beatmap_attributes, score_info_list, user_to_dict
 
 
 @unique
 class Path(Enum):
+    OUTPUT_DIRECTORY: str = "./output"
     RAW_RECENT_SCORES: str = "raw_recent_scores"
     RECENT_SCORES: str = "recent_scores"
 
@@ -85,8 +86,11 @@ class Osuawa(object):
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
         return df
 
+    def get_user_info(self, username: str):
+        return user_to_dict(self.client.get_user(username, key="username"))
+
     def get_username(self, user: int) -> str:
-        return self.client.get_user(user).username
+        return self.client.get_user(user, key="id").username
 
     def get_score(self, score_id: int) -> pd.DataFrame:
         score = self.client.get_score_by_id_only(score_id)
@@ -113,9 +117,10 @@ class Osuawa(object):
             )
         return self.create_scores_dataframe(scores_compact)
 
+    @filelock
     def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
-        with st.status("saving recent scores for %d" % user, expanded=True) as status:
-            st.write("getting scores...")
+        with st.status("saving recent scores of %d" % user, expanded=True) as status:
+            st.text("getting scores...")
             # get
             user_scores = []
             offset = 0
@@ -136,7 +141,7 @@ class Osuawa(object):
             recent_scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
             len_got = len(recent_scores_compact)
 
-            st.write("merging scores...")
+            st.text("merging scores...")
             # concatenate
             len_local = 0
             if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
@@ -149,12 +154,15 @@ class Osuawa(object):
                 }
             len_diff = len(recent_scores_compact) - len_local
 
-            st.write("calculating difficulty attributes...")
+            writer = st.text("calculating difficulty attributes...")
             # calculate difficulty attributes
             bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
             beatmaps_dict = self.get_beatmaps(tuple(bids_not_calculated))
+            current = 0
             for score_id in recent_scores_compact:
                 if len(recent_scores_compact[score_id]) == 9:
+                    current += 1
+                    writer.text(f"calculating difficulty attributes... {current}/{len(recent_scores_compact)} ({len(bids_not_calculated)} unique)")
                     recent_scores_compact[score_id].extend(
                         calc_beatmap_attributes(
                             self.osu_tools_path,
@@ -171,7 +179,7 @@ class Osuawa(object):
                 fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
             df = self.create_scores_dataframe(recent_scores_compact)
             df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
-            status.update(label="saved", state="complete", expanded=False)
+            status.update(label="recent scores of %d saved" % user, state="complete", expanded=False)
         return "%s: len local/got/diff = %d/%d/%d" % (
             self.get_username(user),
             len_local,
