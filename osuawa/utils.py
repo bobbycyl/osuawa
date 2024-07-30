@@ -1,11 +1,21 @@
 import os
 import subprocess
+from collections.abc import Sequence
+from typing import Any
 
+import numpy as np
 import rosu_pp_py as rosu
+from osu import Client
 from osu.objects import Beatmap, LegacyScore, Mod, SoloScore, UserCompact, UserStatistics
 
+# https://github.com/ppy/osu/blob/master/osu.Game/Graphics/OsuColour.cs
+XP = [0.1, 1.25, 2.0, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9.0]
+YP_R = [66, 79, 79, 124, 246, 255, 255, 198, 101, 24, 0]
+YP_G = [144, 192, 255, 255, 240, 128, 78, 69, 99, 21, 0]
+YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
-def user_to_dict(user: UserCompact):
+
+def user_to_dict(user: UserCompact) -> dict[str, Any]:
     attr_dict = {}
     for attr in UserCompact.__slots__:
         attr_dict[attr] = getattr(user, attr)
@@ -15,6 +25,23 @@ def user_to_dict(user: UserCompact):
         stats_dict[attr] = getattr(stats, attr)
     attr_dict["statistics"] = stats_dict
     return attr_dict
+
+
+def get_user_info(client: Client, username: str) -> dict[str, Any]:
+    return user_to_dict(client.get_user(username, key="username"))
+
+
+def get_username(client, user: int) -> str:
+    return client.get_user(user, key="id").username
+
+
+def get_beatmap_dict(client: Client, bids: Sequence[int]) -> dict[int, Beatmap]:
+    beatmaps_dict = {}
+    for i in range(0, len(bids), 50):
+        bs_current = client.get_beatmaps(bids[i: i + 50])
+        for b_current in bs_current:
+            beatmaps_dict[b_current.id] = b_current
+    return beatmaps_dict
 
 
 def calc_hit_window(original_accuracy: float, magnitude: float = 1.0) -> float:
@@ -215,3 +242,15 @@ def calc_beatmap_attributes(osu_tools_path: str, beatmap: Beatmap, mods: list) -
     ]
     attr.extend(calc_difficulty_and_performance(osu_tools_path, beatmap.id, mods))
     return attr
+
+
+def calc_star_rating_color(stars: float) -> str:
+    if stars < 0.1:
+        return "#aaaaaa"
+    elif stars > 9.0:
+        return "#000000"
+    else:
+        interp_r = np.interp(stars, XP, YP_R)
+        interp_g = np.interp(stars, XP, YP_G)
+        interp_b = np.interp(stars, XP, YP_B)
+        return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))

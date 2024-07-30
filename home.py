@@ -1,8 +1,10 @@
 import argparse
 import logging
 import os.path
+import re
 import time
 from secrets import token_hex
+from shutil import copyfile
 from typing import Optional
 from uuid import UUID
 
@@ -23,7 +25,7 @@ from streamlit.components.v1 import html
 from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import Osuawa, Path
+from osuawa import OsuPlaylist, Osuawa, Path
 
 if not os.path.exists("./logs"):
     os.mkdir("./logs")
@@ -114,6 +116,13 @@ def commands():
             1,
             st.session_state.awa.get_user_beatmap_scores,
         ),
+        Command(
+            "autogen",
+            "generate local playlists",
+            [Bool("fast_gen", True), Bool("output_zip", True)],
+            1,
+            generate_all_playlists,
+        ),
         Command("cat", "show user recent scores", [Int("user")], 0, cat),
     ]
 
@@ -122,10 +131,11 @@ def register_cmdparser(obj: Optional[dict] = None):
     ret = ""
     if obj is None:
         obj = {}
-    perm = 0
+    if "perm" not in st.session_state:
+        st.session_state.perm = 0
     if not obj.get("simple", False):
         if "token" in st.session_state and obj.get("token", "") == st.session_state.token:
-            perm = 1
+            st.session_state.perm = 1
             ret = "token matched"
         else:
             st.session_state.token = token_hex(16)
@@ -135,10 +145,33 @@ def register_cmdparser(obj: Optional[dict] = None):
             st.session_state.awa = register_osu_api()
     else:
         if DEBUG_MODE:
-            perm = 999
+            st.session_state.perm = 999
             ret = "**WARNING: DEBUG MODE ON**"
-    st.session_state.cmdparser.register_command(perm, *commands())
+    st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
     return ret
+
+
+def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
+    original_playlist_pattern = re.compile(r"O\.(.*)\.properties")
+    match_playlist_pattern = re.compile(r"M\.(.*)\.properties")
+    community_playlist_pattern = re.compile(r"C\.(.*)\.properties")
+    for filename in os.listdir("./playlists/raw/"):
+        if m := original_playlist_pattern.match(filename):
+            suffix = " — original playlist"
+        elif m := match_playlist_pattern.match(filename):
+            suffix = " — match playlist"
+        elif m := community_playlist_pattern.match(filename):
+            suffix = " — community playlist"
+        else:
+            continue
+        if os.path.exists("./playlists/%s.html" % m.group(1)) and fast_gen:
+            st.write("skipped %s" % m.group(1))
+            continue
+        try:
+            copyfile("./playlists/raw/%s" % m.group(0), "./playlists/%s.properties" % m.group(1))
+            OsuPlaylist(st.session_state.awa.client, "./playlists/%s.properties" % m.group(1), suffix=suffix, output_zip=output_zip).generate()
+        finally:
+            os.remove("./playlists/%s.properties" % m.group(1))
 
 
 def cat(user: int):
