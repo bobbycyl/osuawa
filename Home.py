@@ -45,6 +45,10 @@ def run(g):
             break
 
 
+def select_language(language_code: str) -> None:
+    st.session_state.lang = language_code
+
+
 def register_osu_api():
     with st.spinner(_("registering a client...")):
         return Osuawa(st.session_state.args.oauth_filename, st.session_state.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value)
@@ -100,7 +104,8 @@ def commands():
             1,
             generate_all_playlists,
         ),
-        Command("cat", "show user recent scores", [Int("user")], 0, cat),
+        Command("lang", _("select language"), [Str("code")], 1, select_language),
+        Command("cat", _("show user recent scores"), [Int("user")], 0, cat),
     ]
 
 
@@ -111,9 +116,12 @@ def register_cmdparser(obj: Optional[dict] = None):
     if "perm" not in st.session_state:
         st.session_state.perm = 0
     if not obj.get("simple", False):
-        if "token" in st.session_state and obj.get("token", "") == st.session_state.token:
-            st.session_state.perm = 1
-            ret = _("token matched")
+        if "token" in st.session_state:
+            if obj.get("token", "") == st.session_state.token:
+                st.session_state.perm = 1
+                ret = _("token matched")
+            else:
+                ret = _("token mismatched")
         else:
             st.session_state.token = token_hex(16)
             logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
@@ -123,7 +131,7 @@ def register_cmdparser(obj: Optional[dict] = None):
     else:
         if st.session_state.DEBUG_MODE:
             st.session_state.perm = 999
-            ret = _("**WARNING: DEBUG MODE ON**")
+            st.warning(_("**WARNING: DEBUG MODE ON**"))
     st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
     return ret
 
@@ -181,7 +189,7 @@ if st.session_state["delete_line"]:
     st.session_state["input"] = ""
     st.session_state["delete_line"] = False
 
-y = st.text_input("> ", key="input", on_change=submit, placeholder="type 'help' to get started")
+y = st.text_input("> ", key="input", on_change=submit, placeholder=_("type 'help' to get started"))
 
 html(
     f"""<script>

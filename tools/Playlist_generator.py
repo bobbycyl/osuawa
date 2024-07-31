@@ -13,10 +13,10 @@ if "content" not in st.session_state:
     st.session_state.content = b""
 
 st.write(_("1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/account/edit))"))
-client_id = st.text_input("Client ID", key="gen_client_id")
+client_id = st.text_input(_("Client ID"), key="gen_client_id")
 if not client_id.isdigit():
     st.error(_("Client ID must be an integer"))
-client_secret = st.text_input("Client Secret", key="gen_client_secret")
+client_secret = st.text_input(_("Client Secret"), key="gen_client_secret")
 st.divider()
 st.write(_("2. **Upload a playlist source file.**"))
 uploaded_file = st.file_uploader(_("Choose a file"), type=["properties"])

@@ -158,7 +158,7 @@ class Osuawa(object):
             for score_id in recent_scores_compact:
                 if len(recent_scores_compact[score_id]) == 9:
                     current += 1
-                    writer.text(_(f"calculating difficulty attributes... {current}/{len(recent_scores_compact)} ({len(bids_not_calculated)} unique)"))
+                    writer.text(_("calculating difficulty attributes... %d/%d (%d unique)" % (current, len(recent_scores_compact), len(bids_not_calculated))))
                     recent_scores_compact[score_id].extend(
                         calc_beatmap_attributes(
                             self.osu_tools_path,
@@ -392,7 +392,7 @@ class OsuPlaylist(object):
                     except IsADirectoryError:
                         continue
                 if found_beatmap_filename == "":
-                    raise ValueError("beatmap %s not found" % bid)
+                    raise ValueError(_("beatmap %s not found") % bid)
 
                 b_writer.text(_("%16d: calculating difficulty...") % bid)
                 my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)

@@ -17,7 +17,7 @@ def main():
     with st.container(border=True):
         st.markdown(_("## PP Overall"))
         st.markdown(
-            """based on {len(df)} ({len(df[df["passed"]])} passed) score(s)
+            f"""based on {len(df)} ({len(df[df["passed"]])} passed) score(s)
 
 got/100/95/90/85 {df["pp"].sum():.2f}/{df["b_pp_100if"].sum():.2f}/{df["b_pp_95if"].sum():.2f}/{df["b_pp_90if"].sum():.2f}/{df["b_pp_85if"].sum():.2f}pp
 
