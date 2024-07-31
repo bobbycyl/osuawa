@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import time
@@ -13,6 +14,7 @@ from clayutil.cmdparse import (
     CollectionField as Coll,
     Command,
     CommandError,
+    CommandParser,
     IntegerField as Int,
     JSONStringField as JsonStr,
     StringField as Str,
@@ -23,6 +25,8 @@ from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa, Path
+
+st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
 
 def run(g):
@@ -51,7 +55,7 @@ def select_language(language_code: str) -> None:
 
 def register_osu_api():
     with st.spinner(_("registering a client...")):
-        return Osuawa(st.session_state.args.oauth_filename, st.session_state.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value)
+        return Osuawa(st.secrets.args.oauth_filename, st.secrets.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value)
 
 
 def commands():
@@ -166,6 +170,17 @@ def cat(user: int):
     return df
 
 
+@st.cache_data
+def init_logger():
+    fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
+    fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
+    logger.get_logger("streamlit").addHandler(fh)
+    logger.get_logger(runtime.get_instance().get_client(get_script_run_ctx().session_id).request.remote_ip).addHandler(fh)
+
+
+init_logger()
+if "cmdparser" not in st.session_state:
+    st.session_state.cmdparser = CommandParser()
 if "awa" in st.session_state:
     with st.spinner(_("preparing for the next command...")):
         time.sleep(1.5)
