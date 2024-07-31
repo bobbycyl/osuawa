@@ -12,13 +12,13 @@ if not os.path.exists("./static/uploaded"):
 if "content" not in st.session_state:
     st.session_state.content = b""
 
-st.write("1. Enter your client credential. You may get one from your [settings page](https://osu.ppy.sh/home/account/edit)")
+st.write("1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/account/edit))")
 client_id = st.text_input("Client ID", key="gen_client_id")
 if not client_id.isdigit():
     st.error("Client ID must be an integer")
 client_secret = st.text_input("Client Secret", key="gen_client_secret")
 st.divider()
-st.write("2. Upload a playlist source file.")
+st.write("2. **Upload a playlist source file.**")
 uploaded_file = st.file_uploader("Choose a file", type=["properties"])
 if uploaded_file is None:
     st.error("Please upload a file first.")
@@ -44,8 +44,8 @@ else:
         client = Osuawa.create_client_credential_grant_client(int(client_id), client_secret)
         st.session_state.table = OsuPlaylist(client, playlist_filename).generate()
     st.divider()
-    st.write("3. Preview and download the generated playlist.")
-    for pic in sorted(os.listdir(covers_dir)):
+    st.write("3. **Preview and download the generated playlist.**")
+    for pic in [x[0] for x in sorted([(x, int(x[:x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
         st.image(os.path.join(covers_dir, pic), caption=pic, use_column_width=True)
     st.dataframe(st.session_state.table, hide_index=True)
     compress_as_zip(session_path, zip_filename)

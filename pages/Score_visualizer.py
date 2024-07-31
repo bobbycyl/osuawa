@@ -6,7 +6,7 @@ import streamlit as st
 
 from osuawa import Path
 
-user = st.selectbox("select user", [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
+user = st.selectbox("user", [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
 
 
 def main():
