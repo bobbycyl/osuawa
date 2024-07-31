@@ -15,12 +15,12 @@ def main():
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
         raise ValueError(_("User not found"))
     df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts"])
-    dfp = df["passed"]
+    dfp = df[df["passed"]]
     st.link_button(_("user profile"), f"https://osu.ppy.sh/users/{user}")
     with st.container(border=True):
         st.markdown(_("## PP Overall"))
         st.markdown(
-            f"""based on {len(df)} ({len(df[dfp])} passed) score(s)
+            f"""based on {len(df)} ({len(dfp)} passed) score(s)
 
 got/100/95/90/85 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_95if"].sum():.2f}/{dfp["b_pp_90if"].sum():.2f}/{dfp["b_pp_85if"].sum():.2f}pp
 

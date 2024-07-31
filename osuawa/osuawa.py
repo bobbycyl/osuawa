@@ -440,7 +440,7 @@ class OsuPlaylist(object):
                         "BID": b.id,
                         # "SID": b.beatmapset_id,
                         "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>' % (img_link, img_src, b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
-                        "Mods": orjson.dumps(mods).decode("utf-8"),
+                        "Mods": mods_easy,
                         "Notes": notes,
                     }
                 )
