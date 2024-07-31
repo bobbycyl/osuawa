@@ -104,7 +104,7 @@ def commands():
             1,
             generate_all_playlists,
         ),
-        Command("lang", _("select language"), [Str("code")], 1, select_language),
+        Command("lang", _("select language"), [Str("code")], 0, select_language),
         Command("cat", _("show user recent scores"), [Int("user")], 0, cat),
     ]
 
