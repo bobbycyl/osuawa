@@ -1,5 +1,6 @@
 import os
 import os.path
+import re
 import zipfile
 from enum import Enum, unique
 from shutil import rmtree
@@ -315,7 +316,7 @@ class OsuPlaylist(object):
         p.load()
         self.playlist_filename = playlist_filename
         self.suffix = suffix
-        self.footer = p.pop("footer")
+        self.footer = p.pop("footer") if "footer" in p else ""
         parsed_beatmap_list = []
 
         # pop p from end until empty
@@ -323,8 +324,6 @@ class OsuPlaylist(object):
         while p:
             k, v = p.popitem()
             if k[0] == "#":  # notes
-                if current_parsed_beatmap["notes"] != "":
-                    current_parsed_beatmap["notes"] += "\n"
                 current_parsed_beatmap["notes"] += v.lstrip("#").lstrip(" ")
             else:
                 current_parsed_beatmap["bid"] = int(k)
@@ -334,6 +333,7 @@ class OsuPlaylist(object):
 
         beatmap_dict = get_beatmap_dict(self.client, [int(x["bid"]) for x in parsed_beatmap_list])
         for element in parsed_beatmap_list:
+            element["notes"] = element["notes"].rstrip("\n")
             element["beatmap"] = beatmap_dict[element["bid"]]
         self.beatmap_list = parsed_beatmap_list
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
@@ -443,7 +443,7 @@ class OsuPlaylist(object):
             df.sort_values(by=["#"], inplace=True)
             pd.set_option("colheader_justify", "center")
             html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body bgcolor="#1f1f1f">{table}<footer>%s</footer></body></html>' % (
-                os.path.splitext(os.path.split(self.playlist_filename)[1])[0],
+                self.playlist_name,
                 self.suffix,
                 self.footer,
             )
@@ -452,13 +452,31 @@ class OsuPlaylist(object):
 
             if self.output_zip:
                 # 生成课题压缩包
-                if not os.path.exists("./output"):
-                    os.mkdir("./output")
+                if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
+                    os.mkdir(Path.OUTPUT_DIRECTORY.value)
                 df.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
-                compress_as_zip(self.tmp_dir, "./output/%s.zip" % os.path.splitext(os.path.split(self.playlist_filename)[1])[0])
+                compress_as_zip(self.tmp_dir, "./output/%s.zip" % self.playlist_name)
 
             # 清理临时文件夹
             rmtree(self.tmp_dir)
 
             status.update(label="generated %s" % self.playlist_name, state="complete", expanded=False)
         return df
+
+    @staticmethod
+    def convert_legacy(legacy_playlist_filename: str):
+        split_pattern = re.compile(r"(.*) \[(.*)] \((.*)\)")
+        legacy_p = Properties(legacy_playlist_filename)
+        legacy_p.load()
+        open(os.path.join(Path.OUTPUT_DIRECTORY.value, os.path.split(legacy_playlist_filename)[1]), "w").close()
+        converted_p = Properties(os.path.join(Path.OUTPUT_DIRECTORY.value, os.path.split(legacy_playlist_filename)[1]))
+        legacy_playlist_raw = [int(x) for x in (legacy_p.keys()) if x[0] != "#"]
+        for bid in legacy_playlist_raw:
+            m = split_pattern.match(str(legacy_p[str(bid)]))  # mods、targets、notes
+            legacy_mods = m.group(1).split(" ")
+            mods = [{"acronym": mod} for mod in legacy_mods]
+            converted_p[str(bid)] = orjson.dumps(mods).decode("utf-8")
+            notes = m.group(3)
+            if notes:
+                converted_p["#%d" % (len(converted_p.keys()) + 1)] = "# %s\n" % notes
+        converted_p.dump()

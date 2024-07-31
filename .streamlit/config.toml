@@ -3,7 +3,3 @@ messageFormat = "[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"
 
 [server]
 enableStaticServing = true
-
-[theme]
-font = "monospace"
-
