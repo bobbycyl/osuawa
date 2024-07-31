@@ -11,13 +11,13 @@ user = st.selectbox("user", [os.path.splitext(os.path.basename(x))[0] for x in o
 
 def main():
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
-        raise ValueError("User not found")
+        raise ValueError(_("User not found"))
     df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts"])
-    st.link_button("user profile", f"https://osu.ppy.sh/users/{user}")
+    st.link_button(_("user profile"), f"https://osu.ppy.sh/users/{user}")
     with st.container(border=True):
+        st.markdown(_("## PP Overall"))
         st.markdown(
-            f"""## PP Overall
-based on {len(df)} ({len(df[df["passed"]])} passed) score(s)
+            """based on {len(df)} ({len(df[df["passed"]])} passed) score(s)
 
 got/100/95/90/85 {df["pp"].sum():.2f}/{df["b_pp_100if"].sum():.2f}/{df["b_pp_95if"].sum():.2f}/{df["b_pp_90if"].sum():.2f}/{df["b_pp_85if"].sum():.2f}pp
 
@@ -33,18 +33,18 @@ got/100/95/90/85 {df["pp"].sum():.2f}/{df["b_pp_100if"].sum():.2f}/{df["b_pp_95i
 """
         )
     with st.container(border=True):
-        st.markdown("## Scatter Plot")
-        begin_date, end_date = st.date_input("date range", [df["ts"].min() - pd.Timedelta(days=1), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
+        st.markdown(_("## Scatter Plot"))
+        begin_date, end_date = st.date_input(_("date range"), [df["ts"].min() - pd.Timedelta(days=1), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
         df1 = df[(df["ts"].dt.date > begin_date) & (df["ts"].dt.date < end_date)]
-        sr_slider = st.slider("star rating", 0.0, 13.5, (0.5, 8.5))
+        sr_slider = st.slider(_("star rating"), 0.0, 13.5, (0.5, 8.5))
         df2 = df1[(df1["b_star_rating"] > sr_slider[0]) & (df1["b_star_rating"] < sr_slider[1])]
-        advanced_filter = st.text_input("advanced filter", key="cat_advanced_filter")
+        advanced_filter = st.text_input(_("advanced filter"), key="cat_advanced_filter")
         if advanced_filter:
             df3 = df2.query(advanced_filter)
         else:
             df3 = df2
-            t1 = st.toast("advanced filter disabled")
-        enable_size = st.checkbox("enable scatter plot size parameter", key="cat_enable_size")
+            t1 = st.toast(_("advanced filter disabled"))
+        enable_size = st.checkbox(_("enable scatter plot size parameter"), key="cat_enable_size")
         if "default_x_with_size_enabled" not in st.session_state:
             st.session_state.default_x_with_size_enabled = 25
         if "default_size" not in st.session_state:
@@ -67,7 +67,7 @@ got/100/95/90/85 {df["pp"].sum():.2f}/{df["b_pp_100if"].sum():.2f}/{df["b_pp_95i
             )
             st.session_state.default_x_with_size_enabled = pd.Index.get_loc(df.columns, x_radio_with_size_enabled)
             st.session_state.default_size = pd.Index.get_loc(df.columns, size_radio)
-            t2 = st.toast("set default x to %s and default size to %s when size enabled" % (st.session_state.default_x_with_size_enabled, st.session_state.default_size))
+            t2 = st.toast(_("set default x to %s and default size to %s when size enabled") % (st.session_state.default_x_with_size_enabled, st.session_state.default_size))
             sleep(1)
             t2.empty()
         else:
@@ -79,13 +79,13 @@ got/100/95/90/85 {df["pp"].sum():.2f}/{df["b_pp_100if"].sum():.2f}/{df["b_pp_95i
                 y=y_multiselect,
             )
             st.session_state.default_x = pd.Index.get_loc(df.columns, x_radio)
-            t3 = st.toast("set default x to %s when size disabled" % st.session_state.default_x)
+            t3 = st.toast(_("set default x to %s when size disabled") % st.session_state.default_x)
             sleep(1)
             t3.empty()
         t1.empty()
 
     with st.container(border=True):
-        st.markdown("## filtered data")
+        st.markdown(_("## filtered data"))
         st.dataframe(df3, key="cat_dataframe")
 
 

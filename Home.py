@@ -1,4 +1,6 @@
 import argparse
+import gettext
+import locale
 import logging
 import os.path
 import re
@@ -30,7 +32,7 @@ from osuawa import OsuPlaylist, Osuawa, Path
 if not os.path.exists("./logs"):
     os.mkdir("./logs")
 
-DEBUG_MODE = True
+DEBUG_MODE = True  # switch to False when deploying
 
 arg_parser = argparse.ArgumentParser(description="osuawa")
 arg_parser.add_argument("oauth_filename")
@@ -38,6 +40,14 @@ arg_parser.add_argument("osu_tools_path")
 args = arg_parser.parse_args()
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
+
+
+@st.cache_data
+def load_i18n(language_code: Optional[str] = None):
+    gettext.bindtextdomain("osuawa", localedir=Path.LOCALE.value)
+    gettext.textdomain("osuawa")
+    lang = gettext.translation("osuawa", localedir=Path.LOCALE.value, languages=[language_code], fallback=True)
+    lang.install()
 
 
 @st.cache_data
@@ -63,13 +73,13 @@ def run(g):
             # st.session_state.clear()
             break
         except Exception as e:
-            st.error("uncaught exception: %s" % str(e))
+            st.error(_("uncaught exception: %s") % str(e))
             logger.get_logger("streamlit").exception(e)
             break
 
 
 def register_osu_api():
-    with st.spinner("registering a client..."):
+    with st.spinner(_("registering a client...")):
         return Osuawa(args.oauth_filename, args.osu_tools_path, Path.OUTPUT_DIRECTORY.value)
 
 
@@ -77,28 +87,28 @@ def commands():
     return [
         Command(
             "reg",
-            "register command parser",
+            _("register command parser"),
             [JsonStr("obj", True)],
             0,
             register_cmdparser,
         ),
         Command(
             "where",
-            "get user info",
+            _("get user info"),
             [Str("username")],
             1,
             st.session_state.awa.get_user_info,
         ),
         Command(
             "ps",
-            "save user recent scores",
+            _("save user recent scores"),
             [Int("user"), Bool("include_fails", True)],
             1,
             st.session_state.awa.save_recent_scores,
         ),
         Command(
             "psa",
-            "update user recent scores",
+            _("update user recent scores"),
             [
                 Coll(
                     "user",
@@ -108,17 +118,17 @@ def commands():
             1,
             st.session_state.awa.save_recent_scores,
         ),
-        Command("s2", "get and show score", [Int("score_id")], 1, st.session_state.awa.get_score),
+        Command("s2", _("get and show score"), [Int("score_id")], 1, st.session_state.awa.get_score),
         Command(
             "s",
-            "get and show user scores of a beatmap",
+            _("get and show user scores of a beatmap"),
             [Int("beatmap"), Int("user")],
             1,
             st.session_state.awa.get_user_beatmap_scores,
         ),
         Command(
             "autogen",
-            "generate local playlists",
+            _("generate local playlists"),
             [Bool("fast_gen", True), Bool("output_zip", True)],
             1,
             generate_all_playlists,
@@ -136,17 +146,17 @@ def register_cmdparser(obj: Optional[dict] = None):
     if not obj.get("simple", False):
         if "token" in st.session_state and obj.get("token", "") == st.session_state.token:
             st.session_state.perm = 1
-            ret = "token matched"
+            ret = _("token matched")
         else:
             st.session_state.token = token_hex(16)
             logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
-            ret = "token generated"
+            ret = _("token generated")
         if "awa" in st.session_state and obj.get("refresh", False):
             st.session_state.awa = register_osu_api()
     else:
         if DEBUG_MODE:
             st.session_state.perm = 999
-            ret = "**WARNING: DEBUG MODE ON**"
+            ret = _("**WARNING: DEBUG MODE ON**")
     st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
     return ret
 
@@ -176,16 +186,17 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
 
 def cat(user: int):
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
-        raise ValueError("user %d not found" % user)
+        raise ValueError(_("user %d not found") % user)
     df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts"])
     return df
 
 
+load_i18n(locale.getdefaultlocale()[0])
 init_logger()
 if "awa" not in st.session_state:
     st.session_state.awa = register_osu_api()
 else:
-    with st.spinner("preparing..."):
+    with st.spinner(_("preparing...")):
         time.sleep(3)
 register_cmdparser({"simple": True})
 
@@ -221,4 +232,4 @@ html(
 if y:
     st.text(y)
 
-st.text("Session: %s" % UUID(get_script_run_ctx().session_id).hex)
+st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)
