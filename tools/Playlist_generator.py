@@ -7,6 +7,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa
 
+_ = st.session_state._
 st.set_page_config(page_title=_("Playlist generator") + " - osuawa")
 if not os.path.exists("./static/uploaded"):
     os.makedirs("./static/uploaded")
