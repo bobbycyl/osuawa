@@ -22,6 +22,7 @@ from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, cal
 
 @unique
 class Path(Enum):
+    LOCALE: str = "./locale"
     OUTPUT_DIRECTORY: str = "./output"
     RAW_RECENT_SCORES: str = "raw_recent_scores"
     RECENT_SCORES: str = "recent_scores"
@@ -117,8 +118,8 @@ class Osuawa(object):
 
     @filelock
     def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
-        with st.status("saving recent scores of %d" % user, expanded=True) as status:
-            st.text("getting scores...")
+        with st.status(_("saving recent scores of %d") % user, expanded=True) as status:
+            st.text(_("getting scores..."))
             # get
             user_scores = []
             offset = 0
@@ -139,7 +140,7 @@ class Osuawa(object):
             recent_scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
             len_got = len(recent_scores_compact)
 
-            st.text("merging scores...")
+            st.text(_("merging scores..."))
             # concatenate
             len_local = 0
             if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
@@ -152,7 +153,7 @@ class Osuawa(object):
                 }
             len_diff = len(recent_scores_compact) - len_local
 
-            writer = st.text("calculating difficulty attributes...")
+            writer = st.text(_("calculating difficulty attributes..."))
             # calculate difficulty attributes
             bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
             beatmaps_dict = get_beatmap_dict(self.client, tuple(bids_not_calculated))
@@ -160,7 +161,7 @@ class Osuawa(object):
             for score_id in recent_scores_compact:
                 if len(recent_scores_compact[score_id]) == 9:
                     current += 1
-                    writer.text(f"calculating difficulty attributes... {current}/{len(recent_scores_compact)} ({len(bids_not_calculated)} unique)")
+                    writer.text(_(f"calculating difficulty attributes... {current}/{len(recent_scores_compact)} ({len(bids_not_calculated)} unique)"))
                     recent_scores_compact[score_id].extend(
                         calc_beatmap_attributes(
                             self.osu_tools_path,
@@ -177,7 +178,7 @@ class Osuawa(object):
                 fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
             df = self.create_scores_dataframe(recent_scores_compact)
             df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
-            status.update(label="recent scores of %d saved" % user, state="complete", expanded=False)
+            status.update(label=_("recent scores of %d saved") % user, state="complete", expanded=False)
         return "%s: len local/got/diff = %d/%d/%d" % (
             get_username(self.client, user),
             len_local,
@@ -348,7 +349,7 @@ class OsuPlaylist(object):
 
     def generate(self) -> pd.DataFrame:
         playlist: list[dict] = []
-        with st.status("generating %s" % self.playlist_name, expanded=True) as status:
+        with st.status(_("generating %s") % self.playlist_name, expanded=True) as status:
             for i, element in enumerate(self.beatmap_list, start=1):
                 bid: int = element["bid"]
                 b_writer = st.text("%16d" % bid)
@@ -368,7 +369,7 @@ class OsuPlaylist(object):
                         mods = []
 
                 # 下载谱面
-                b_writer.text("%16d: downloading the beatmapset..." % bid)
+                b_writer.text(_("%16d: downloading the beatmapset...") % bid)
                 beatmapset_filename = self.tmp_d.start("https://dl.sayobot.cn/beatmaps/download/%s/%s" % (self.osz_type, b.beatmapset_id))
                 beatmapset_dir = os.path.join(self.tmp_dir, str(b.beatmapset_id))
                 with zipfile.ZipFile(beatmapset_filename, "r") as zipf:
@@ -395,7 +396,7 @@ class OsuPlaylist(object):
                 if found_beatmap_filename == "":
                     raise ValueError("beatmap %s not found" % bid)
 
-                b_writer.text("%16d: calculating difficulty..." % bid)
+                b_writer.text(_("%16d: calculating difficulty...") % bid)
                 my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
                 if mods:
                     my_attr.set_mods(mods)
@@ -418,7 +419,7 @@ class OsuPlaylist(object):
                 max_combo = "%d" % rosu_attr.max_combo
 
                 # 绘制cover
-                b_writer.text("%16d: drawing the cover..." % bid)
+                b_writer.text(_("%16d: drawing the cover...") % bid)
                 cover = BeatmapCover(b, self.mod_color.get(color_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
                 cover_filename = cover.draw(self.d, "%d-%d.jpg" % (i, bid))
 
@@ -435,7 +436,7 @@ class OsuPlaylist(object):
                         "Notes": notes,
                     }
                 )
-                b_writer.text("%16d: finished" % bid)
+                b_writer.text(_("%16d: finished") % bid)
 
                 sleep(0.5)
                 rmtree(beatmapset_dir)
@@ -460,7 +461,7 @@ class OsuPlaylist(object):
             # 清理临时文件夹
             rmtree(self.tmp_dir)
 
-            status.update(label="generated %s" % self.playlist_name, state="complete", expanded=False)
+            status.update(label=_("generated %s") % self.playlist_name, state="complete", expanded=False)
         return df
 
     @staticmethod
