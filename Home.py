@@ -1,8 +1,4 @@
-import argparse
-import gettext
-import locale
-import logging
-import os.path
+import os
 import re
 import time
 from secrets import token_hex
@@ -17,7 +13,6 @@ from clayutil.cmdparse import (
     CollectionField as Coll,
     Command,
     CommandError,
-    CommandParser,
     IntegerField as Int,
     JSONStringField as JsonStr,
     StringField as Str,
@@ -28,34 +23,6 @@ from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa, Path
-
-if not os.path.exists("./logs"):
-    os.mkdir("./logs")
-
-DEBUG_MODE = True  # switch to False when deploying
-
-arg_parser = argparse.ArgumentParser(description="osuawa")
-arg_parser.add_argument("oauth_filename")
-arg_parser.add_argument("osu_tools_path")
-args = arg_parser.parse_args()
-if "cmdparser" not in st.session_state:
-    st.session_state.cmdparser = CommandParser()
-
-
-@st.cache_data
-def load_i18n(language_code: Optional[str] = None):
-    gettext.bindtextdomain("osuawa", localedir=Path.LOCALE.value)
-    gettext.textdomain("osuawa")
-    lang = gettext.translation("osuawa", localedir=Path.LOCALE.value, languages=[language_code], fallback=True)
-    lang.install()
-
-
-@st.cache_data
-def init_logger():
-    fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
-    fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
-    logger.get_logger("streamlit").addHandler(fh)
-    logger.get_logger(runtime.get_instance().get_client(get_script_run_ctx().session_id).request.remote_ip).addHandler(fh)
 
 
 def run(g):
@@ -80,7 +47,7 @@ def run(g):
 
 def register_osu_api():
     with st.spinner(_("registering a client...")):
-        return Osuawa(args.oauth_filename, args.osu_tools_path, Path.OUTPUT_DIRECTORY.value)
+        return Osuawa(st.session_state.args.oauth_filename, st.session_state.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value)
 
 
 def commands():
@@ -154,7 +121,7 @@ def register_cmdparser(obj: Optional[dict] = None):
         if "awa" in st.session_state and obj.get("refresh", False):
             st.session_state.awa = register_osu_api()
     else:
-        if DEBUG_MODE:
+        if st.session_state.DEBUG_MODE:
             st.session_state.perm = 999
             ret = _("**WARNING: DEBUG MODE ON**")
     st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
@@ -191,13 +158,11 @@ def cat(user: int):
     return df
 
 
-load_i18n(locale.getdefaultlocale()[0])
-init_logger()
-if "awa" not in st.session_state:
-    st.session_state.awa = register_osu_api()
+if "awa" in st.session_state:
+    with st.spinner(_("preparing for the next command...")):
+        time.sleep(1.5)
 else:
-    with st.spinner(_("preparing...")):
-        time.sleep(3)
+    st.session_state.awa = register_osu_api()
 register_cmdparser({"simple": True})
 
 
