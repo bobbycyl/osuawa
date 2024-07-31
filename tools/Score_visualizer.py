@@ -6,6 +6,7 @@ import streamlit as st
 
 from osuawa import Path
 
+_ = st.session_state._
 st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
 user = st.selectbox("user", [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
 

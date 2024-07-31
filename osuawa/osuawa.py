@@ -19,6 +19,11 @@ from osu import Client, GameModeStr
 
 from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, calc_star_rating_color, get_beatmap_dict, get_username, score_info_list, user_to_dict
 
+if "_" in st.session_state:
+    _ = st.session_state._
+else:
+    _ = lambda x: x  # fallback to no translation
+
 
 @unique
 class Path(Enum):
@@ -353,6 +358,7 @@ class OsuPlaylist(object):
                 b_writer = st.text("%16d" % bid)
                 b: Beatmap = element["beatmap"]
                 raw_mods: list[dict[str, Any]] = orjson.loads(element["mods"])
+                mods_easy: list[str] = []
                 notes: str = element["notes"]
 
                 # 处理NM, FM, TB
@@ -365,6 +371,10 @@ class OsuPlaylist(object):
                     if raw_mods[j]["acronym"] == "FM":
                         is_fm = True
                         mods = []
+                    if "settings" in raw_mods[j]:
+                        mods_easy.append("%s(%s)" % (raw_mods[j]["acronym"], ",".join(["%s=%s" % it for it in raw_mods[j]["settings"].items()])))
+                    else:
+                        mods_easy.append(raw_mods[j]["acronym"])
 
                 # 下载谱面
                 b_writer.text(_("%16d: downloading the beatmapset...") % bid)
