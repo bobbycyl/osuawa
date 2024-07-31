@@ -22,6 +22,7 @@ from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, cal
 
 @unique
 class Path(Enum):
+    LOGS: str = "./logs"
     LOCALE: str = "./locale"
     OUTPUT_DIRECTORY: str = "./output"
     RAW_RECENT_SCORES: str = "raw_recent_scores"
@@ -35,10 +36,6 @@ class Osuawa(object):
         p = Properties(oauth_filename)
         p.load()
         self.client = Client.from_client_credentials(p["client_id"], p["client_secret"], p["redirect_url"])
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
-            os.mkdir(os.path.join(output_dir, Path.RAW_RECENT_SCORES.value))
-            os.mkdir(os.path.join(output_dir, Path.RECENT_SCORES.value))
         self.osu_tools_path = osu_tools_path
         self.output_dir = output_dir
 
@@ -210,6 +207,7 @@ class BeatmapCover(object):
         self.hit_length = hit_length
         self.max_combo = max_combo
 
+    # noinspection PyTypeChecker
     def draw(self, d: Downloader, filename: str) -> str:
         b = self.beatmap
 
