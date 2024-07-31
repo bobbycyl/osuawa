@@ -1,0 +1,270 @@
+# Translations template for osuawa.
+# Copyright (C) 2024 ORGANIZATION
+# This file is distributed under the same license as the osuawa project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2024.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: osuawa VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2024-07-31 19:36+0800\n"
+"PO-Revision-Date: 2024-07-31 19:45+0800\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.14.0\n"
+
+#: Home.py:43
+#, python-format
+msgid "uncaught exception: %s"
+msgstr "未捕获异常：%s"
+
+#: Home.py:53
+msgid "registering a client..."
+msgstr "正在注册客户端……"
+
+#: Home.py:61
+msgid "register command parser"
+msgstr "注册命令解析器"
+
+#: Home.py:68
+msgid "get user info"
+msgstr "获取用户信息"
+
+#: Home.py:75
+msgid "save user recent scores"
+msgstr "保存用户最近分数"
+
+#: Home.py:82
+msgid "update user recent scores"
+msgstr "更新用户最近分数"
+
+#: Home.py:92
+msgid "get and show score"
+msgstr "展示分数"
+
+#: Home.py:95
+msgid "get and show user scores of a beatmap"
+msgstr "展示用户谱面分数"
+
+#: Home.py:102
+msgid "generate local playlists"
+msgstr "生成本地课题"
+
+#: Home.py:107
+msgid "select language"
+msgstr "选择语言"
+
+#: Home.py:108
+msgid "show user recent scores"
+msgstr "展示用户最近分数"
+
+#: Home.py:122
+msgid "token matched"
+msgstr "令牌验证通过"
+
+#: Home.py:124
+msgid "token mismatched"
+msgstr "令牌验证失败"
+
+#: Home.py:128
+msgid "token generated"
+msgstr "令牌已生成（请向网站管理员索取）"
+
+#: Home.py:134
+msgid "**WARNING: DEBUG MODE ON**"
+msgstr "**警告: 调试模式已开启**"
+
+#: Home.py:164
+#, python-format
+msgid "user %d not found"
+msgstr "用户 %d 不存在"
+
+#: Home.py:170
+msgid "preparing for the next command..."
+msgstr "请稍候……"
+
+#: Home.py:192
+msgid "type 'help' to get started"
+msgstr "键入“help”以开始"
+
+#: Home.py:208
+#, python-format
+msgid "Session: %s"
+msgstr "当前会话：%s"
+
+#: app.py:38
+msgid "Homepage"
+msgstr "主页"
+
+#: app.py:39
+msgid "Score visualizer"
+msgstr "查成分"
+
+#: app.py:40
+msgid "Playlist generator"
+msgstr "做课题"
+
+#: osuawa/osuawa.py:118
+#, python-format
+msgid "saving recent scores of %d"
+msgstr "正在保存 %d 的最近分数"
+
+#: osuawa/osuawa.py:119
+msgid "getting scores..."
+msgstr "获取分数……"
+
+#: osuawa/osuawa.py:140
+msgid "merging scores..."
+msgstr "合并分数……"
+
+#: osuawa/osuawa.py:153
+msgid "calculating difficulty attributes..."
+msgstr "计算难度……"
+
+#: osuawa/osuawa.py:161
+#, python-format
+msgid "calculating difficulty attributes... %d/%d (%d unique)"
+msgstr "计算难度…… %d/%d（其中 %d 唯一）"
+
+#: osuawa/osuawa.py:178
+#, python-format
+msgid "recent scores of %d saved"
+msgstr "已保存 %d 的最近分数"
+
+#: osuawa/osuawa.py:350
+#, python-format
+msgid "generating %s"
+msgstr "正在生成 %s"
+
+#: osuawa/osuawa.py:370
+#, python-format
+msgid "%16d: downloading the beatmapset..."
+msgstr "%16d：下载谱面……"
+
+#: osuawa/osuawa.py:395
+#, python-format
+msgid "beatmap %s not found"
+msgstr "谱面难度 %s 不存在"
+
+#: osuawa/osuawa.py:397
+#, python-format
+msgid "%16d: calculating difficulty..."
+msgstr "%16d：计算难度……"
+
+#: osuawa/osuawa.py:420
+#, python-format
+msgid "%16d: drawing the cover..."
+msgstr "%16d：绘制封面……"
+
+#: osuawa/osuawa.py:437
+#, python-format
+msgid "%16d: finished"
+msgstr "%16d：完成"
+
+#: osuawa/osuawa.py:462
+#, python-format
+msgid "generated %s"
+msgstr "已生成 %s"
+
+#: tools/Playlist_generator.py:15
+msgid ""
+"1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/"
+"account/edit))"
+msgstr ""
+"1. **输入客户端凭据** ([点这里获取](https://osu.ppy.sh/home/account/edit))"
+
+#: tools/Playlist_generator.py:16
+msgid "Client ID"
+msgstr "客户端 ID"
+
+#: tools/Playlist_generator.py:18
+msgid "Client ID must be an integer"
+msgstr "客户端 ID 须为整型"
+
+#: tools/Playlist_generator.py:19
+msgid "Client Secret"
+msgstr "客户端密钥"
+
+#: tools/Playlist_generator.py:21
+msgid "2. **Upload a playlist source file.**"
+msgstr "2. **上传一个谱面源文件**"
+
+#: tools/Playlist_generator.py:22
+msgid "Choose a file"
+msgstr "选择文件"
+
+#: tools/Playlist_generator.py:24
+msgid "Please upload a file first."
+msgstr "请先上传文件。"
+
+#: tools/Playlist_generator.py:26
+msgid "Please enter your client ID and secret first."
+msgstr "请先填写客户端 ID 和密钥。"
+
+#: tools/Playlist_generator.py:37
+#, python-format
+msgid "using filename: %s"
+msgstr "使用文件名：%s"
+
+#: tools/Playlist_generator.py:47
+msgid "3. **Preview and download the generated resources.**"
+msgstr "3. **预览和下载生成的资源**"
+
+#: tools/Playlist_generator.py:53
+msgid "Download the resources"
+msgstr "下载资源"
+
+#: tools/Score_visualizer.py:14
+msgid "User not found"
+msgstr "无此用户"
+
+#: tools/Score_visualizer.py:16
+msgid "user profile"
+msgstr "用户主页"
+
+#: tools/Score_visualizer.py:18
+msgid "## PP Overall"
+msgstr "## 总体 PP"
+
+#: tools/Score_visualizer.py:36
+msgid "## Scatter Plot"
+msgstr "## 散点图"
+
+#: tools/Score_visualizer.py:37
+msgid "date range"
+msgstr "日期范围"
+
+#: tools/Score_visualizer.py:39
+msgid "star rating"
+msgstr "难度星数"
+
+#: tools/Score_visualizer.py:41
+msgid "advanced filter"
+msgstr "高级筛选"
+
+#: tools/Score_visualizer.py:46
+msgid "advanced filter disabled"
+msgstr "高级筛选未启用"
+
+#: tools/Score_visualizer.py:47
+msgid "enable scatter plot size parameter"
+msgstr "启用散点图图形尺寸参数"
+
+#: tools/Score_visualizer.py:70
+#, python-format
+msgid "set default x to %s and default size to %s when size enabled"
+msgstr "当散点图图形尺寸启用时，默认x变量设置为 %s，默认尺寸变量设置为 %s"
+
+#: tools/Score_visualizer.py:82
+#, python-format
+msgid "set default x to %s when size disabled"
+msgstr "当散点图图形尺寸未启用时，默认x变量设置为 %s"
+
+#: tools/Score_visualizer.py:88
+msgid "## filtered data"
+msgstr "## 目前筛选数据"

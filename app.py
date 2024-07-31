@@ -1,5 +1,6 @@
 import argparse
 import gettext
+import locale
 import logging
 import os.path
 
@@ -10,7 +11,6 @@ from clayutil.cmdparse import (
 from streamlit import logger, runtime
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-import locale
 from osuawa import Path
 
 DEBUG_MODE = True  # switch to False when deploying
@@ -29,9 +29,11 @@ st.session_state.args = arg_parser.parse_args()
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
-gettext.bindtextdomain("osuawa", localedir=Path.LOCALE.value)
-gettext.textdomain("osuawa")
-lang = gettext.translation("osuawa", localedir=Path.LOCALE.value, languages=[locale.getdefaultlocale()[0]], fallback=True)
+gettext.bindtextdomain(domain="messages", localedir=Path.LOCALE.value)
+if "lang" not in st.session_state:
+    lang = gettext.translation("messages", localedir=Path.LOCALE.value, languages=[locale.getlocale()[0]], fallback=True)
+else:
+    lang = gettext.translation("messages", localedir=Path.LOCALE.value, languages=[st.session_state.lang], fallback=True)
 lang.install()
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
