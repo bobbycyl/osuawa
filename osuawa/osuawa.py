@@ -118,7 +118,7 @@ class Osuawa(object):
             )
         return self.create_scores_dataframe(scores_compact)
 
-    @filelock
+    @filelock(1)
     def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
         with st.status(_("saving recent scores of %d") % user, expanded=True) as status:
             st.text(_("getting scores..."))
