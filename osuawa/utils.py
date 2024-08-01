@@ -38,7 +38,7 @@ def get_username(client, user: int) -> str:
 def get_beatmap_dict(client: Client, bids: Sequence[int]) -> dict[int, Beatmap]:
     beatmaps_dict = {}
     for i in range(0, len(bids), 50):
-        bs_current = client.get_beatmaps(bids[i: i + 50])
+        bs_current = client.get_beatmaps(bids[i : i + 50])
         for b_current in bs_current:
             beatmaps_dict[b_current.id] = b_current
     return beatmaps_dict
