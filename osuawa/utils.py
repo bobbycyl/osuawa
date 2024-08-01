@@ -209,6 +209,7 @@ def calc_difficulty_and_performance(osu_tools_path: str, beatmap: int, mods: lis
             shell=True,
             cwd=perf_calc_path,
             capture_output=True,
+            encoding="utf-8",
             text=True,
         )
         return calc_difficulty_and_performance(osu_tools_path, beatmap, mods)
