@@ -358,7 +358,7 @@ class OsuPlaylist(object):
                 b_writer = st.text("%16d" % bid)
                 b: Beatmap = element["beatmap"]
                 raw_mods: list[dict[str, Any]] = orjson.loads(element["mods"])
-                mods_easy: list[str] = []
+                mods_ready: list[str] = []
                 notes: str = element["notes"]
 
                 # 处理NM, FM, TB
@@ -372,9 +372,9 @@ class OsuPlaylist(object):
                         is_fm = True
                         mods = []
                     if "settings" in raw_mods[j]:
-                        mods_easy.append("%s(%s)" % (raw_mods[j]["acronym"], ",".join(["%s=%s" % it for it in raw_mods[j]["settings"].items()])))
+                        mods_ready.append("%s(%s)" % (raw_mods[j]["acronym"], ",".join(["%s=%s" % it for it in raw_mods[j]["settings"].items()])))
                     else:
-                        mods_easy.append(raw_mods[j]["acronym"])
+                        mods_ready.append(raw_mods[j]["acronym"])
 
                 # 下载谱面
                 b_writer.text(_("%16d: downloading the beatmapset...") % bid)
@@ -440,7 +440,7 @@ class OsuPlaylist(object):
                         "BID": b.id,
                         # "SID": b.beatmapset_id,
                         "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>' % (img_link, img_src, b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
-                        "Mods": mods_easy,
+                        "Mods": "; ".join(mods_ready),
                         "Notes": notes,
                     }
                 )
