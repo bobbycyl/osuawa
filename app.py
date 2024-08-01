@@ -1,26 +1,28 @@
 import gettext
+import importlib
 import os.path
 
 import streamlit as st
 
 import locale
-from osuawa import Path
+import osuawa
 
 DEBUG_MODE = False  # switch to False when deploying
 
-if not os.path.exists(Path.LOGS.value):
-    os.mkdir(Path.LOGS.value)
-if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
-    os.mkdir(Path.OUTPUT_DIRECTORY.value)
-    os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RAW_RECENT_SCORES.value))
-    os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RECENT_SCORES.value))
+if not os.path.exists(osuawa.Path.LOGS.value):
+    os.mkdir(osuawa.Path.LOGS.value)
+if not os.path.exists(osuawa.Path.OUTPUT_DIRECTORY.value):
+    os.mkdir(osuawa.Path.OUTPUT_DIRECTORY.value)
+    os.mkdir(os.path.join(osuawa.Path.OUTPUT_DIRECTORY.value, osuawa.Path.RAW_RECENT_SCORES.value))
+    os.mkdir(os.path.join(osuawa.Path.OUTPUT_DIRECTORY.value, osuawa.Path.RECENT_SCORES.value))
 
-gettext.bindtextdomain(domain="messages", localedir=Path.LOCALE.value)
+gettext.bindtextdomain(domain="messages", localedir=osuawa.Path.LOCALE.value)
 if "lang" not in st.session_state:
-    lang = gettext.translation("messages", localedir=Path.LOCALE.value, languages=[locale.getlocale()[0]], fallback=True)
+    lang = gettext.translation("messages", localedir=osuawa.Path.LOCALE.value, languages=[locale.getlocale()[0]], fallback=True)
 else:
-    lang = gettext.translation("messages", localedir=Path.LOCALE.value, languages=[st.session_state.lang], fallback=True)
+    lang = gettext.translation("messages", localedir=osuawa.Path.LOCALE.value, languages=[st.session_state.lang], fallback=True)
 st.session_state._ = lang.gettext
+importlib.reload(osuawa)  # load translation
 _ = st.session_state._
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
