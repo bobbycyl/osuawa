@@ -7,7 +7,6 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa
 
-_ = st.session_state._
 st.set_page_config(page_title=_("Playlist generator") + " - osuawa")
 if not os.path.exists("./static/uploaded"):
     os.makedirs("./static/uploaded")
@@ -47,7 +46,7 @@ else:
         st.session_state.table = OsuPlaylist(client, playlist_filename).generate()
     st.divider()
     st.write(_("3. **Preview and download the generated resources.**"))
-    for pic in [x[0] for x in sorted([(x, int(x[:x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
+    for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
         st.image(os.path.join(covers_dir, pic), caption=pic, use_column_width=True)
     st.dataframe(st.session_state.table, hide_index=True)
     compress_as_zip(session_path, zip_filename)

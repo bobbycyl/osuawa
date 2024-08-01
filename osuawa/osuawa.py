@@ -19,16 +19,11 @@ from osu import Client, GameModeStr
 
 from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, calc_star_rating_color, get_beatmap_dict, get_username, score_info_list, user_to_dict
 
-if "_" in st.session_state:
-    _ = st.session_state._
-else:
-    _ = lambda x: x  # fallback to no translation
-
 
 @unique
 class Path(Enum):
     LOGS: str = "./logs"
-    LOCALE: str = "./locale"
+    LOCALE: str = "./share/locale"
     OUTPUT_DIRECTORY: str = "./output"
     RAW_RECENT_SCORES: str = "raw_recent_scores"
     RECENT_SCORES: str = "recent_scores"
@@ -40,8 +35,10 @@ class Osuawa(object):
     def __init__(self, oauth_filename: str, osu_tools_path: str, output_dir: str):
         p = Properties(oauth_filename)
         p.load()
-        self.client = Client.from_client_credentials(p["client_id"], p["client_secret"], p["redirect_url"])
+        self.client = Client.from_credentials(p["client_id"], p["client_secret"], p["redirect_url"])
         self.osu_tools_path = osu_tools_path
+        if not os.path.exists(os.path.join(osu_tools_path, "PerformanceCalculator", "cache")):
+            os.mkdir(os.path.join(osu_tools_path, "PerformanceCalculator", "cache"))
         self.output_dir = output_dir
 
     def create_scores_dataframe(self, scores: dict[str, list]) -> pd.DataFrame:
@@ -163,7 +160,7 @@ class Osuawa(object):
             for score_id in recent_scores_compact:
                 if len(recent_scores_compact[score_id]) == 9:
                     current += 1
-                    writer.text(_("calculating difficulty attributes... %d/%d (%d unique)" % (current, len(recent_scores_compact), len(bids_not_calculated))))
+                    writer.text(_("calculating difficulty attributes... %d/%d (%d unique)") % (current, len(recent_scores_compact), len(bids_not_calculated)))
                     recent_scores_compact[score_id].extend(
                         calc_beatmap_attributes(
                             self.osu_tools_path,
@@ -190,7 +187,7 @@ class Osuawa(object):
 
     @staticmethod
     def create_client_credential_grant_client(client_id: int, client_secret: str) -> Client:
-        return Client.from_client_credentials(client_id=client_id, client_secret=client_secret, redirect_url=None)
+        return Client.from_credentials(client_id=client_id, client_secret=client_secret, redirect_url=None)
 
 
 class BeatmapCover(object):

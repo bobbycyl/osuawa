@@ -1,3 +1,4 @@
+import locale
 import logging
 import os
 import re
@@ -26,10 +27,6 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa, Path
 
-if "_" in st.session_state:
-    _ = st.session_state._
-else:
-    _ = lambda x: x  # fallback to no translation
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
 
@@ -54,7 +51,7 @@ def run(g):
 
 
 def select_language(language_code: str) -> None:
-    st.session_state.lang = language_code
+    st.session_state.lang = locale.normalize(language_code)
 
 
 def register_osu_api():
