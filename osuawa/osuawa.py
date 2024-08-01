@@ -79,11 +79,16 @@ class Osuawa(object):
                 "b_overall_difficulty",
                 "b_pp_100if",
                 "b_pp_95if",
-                "b_pp_90if",
-                "b_pp_85if",
+                "b_pp_80hif",
+                "b_pp_80lif",
             ],
         )
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
+        df["pp_pct"] = df["pp"] / df["b_pp_100if"]
+        df["pp_95pct"] = df["pp"] / df["b_pp_95if"]
+        df["pp_85hpct"] = df["pp"] / df["b_pp_80hif"]
+        df["pp_85lpct"] = df["pp"] / df["b_pp_80lif"]
+        df["combo_pct"] = df["max_combo"] / df["b_max_combo"]
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
         return df
 

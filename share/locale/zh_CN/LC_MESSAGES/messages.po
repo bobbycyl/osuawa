@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-08-01 23:17+0800\n"
-"PO-Revision-Date: 2024-08-01 23:26+0800\n"
+"POT-Creation-Date: 2024-08-02 00:40+0800\n"
+"PO-Revision-Date: 2024-08-02 00:41+0800\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "Language: \n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.14.0\n"
 
-#: Home.py:30 app.py:27
+#: Home.py:30 app.py:25
 msgid "Homepage"
 msgstr "主页"
 
@@ -101,72 +101,72 @@ msgstr "键入“help”以开始"
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:28 tools/Score_visualizer.py:9
+#: app.py:26 tools/Score_visualizer.py:9
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:29 tools/Playlist_generator.py:10
+#: app.py:27 tools/Playlist_generator.py:10
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: osuawa/osuawa.py:120
+#: osuawa/osuawa.py:125
 #, python-format
 msgid "saving recent scores of %d"
 msgstr "正在保存 %d 的最近分数"
 
-#: osuawa/osuawa.py:121
+#: osuawa/osuawa.py:126
 msgid "getting scores..."
 msgstr "获取分数……"
 
-#: osuawa/osuawa.py:142
+#: osuawa/osuawa.py:147
 msgid "merging scores..."
 msgstr "合并分数……"
 
-#: osuawa/osuawa.py:155
+#: osuawa/osuawa.py:160
 msgid "calculating difficulty attributes..."
 msgstr "计算难度……"
 
-#: osuawa/osuawa.py:163
+#: osuawa/osuawa.py:168
 #, python-format
 msgid "calculating difficulty attributes... %d/%d (%d unique)"
 msgstr "计算难度…… %d/%d（%d 唯一项）"
 
-#: osuawa/osuawa.py:180
+#: osuawa/osuawa.py:185
 #, python-format
 msgid "recent scores of %d saved"
 msgstr "已保存 %d 的最近分数"
 
-#: osuawa/osuawa.py:352
+#: osuawa/osuawa.py:357
 #, python-format
 msgid "generating %s"
 msgstr "正在生成 %s"
 
-#: osuawa/osuawa.py:377
+#: osuawa/osuawa.py:382
 #, python-format
 msgid "%16d: downloading the beatmapset..."
 msgstr "%16d：下载谱面……"
 
-#: osuawa/osuawa.py:402
+#: osuawa/osuawa.py:407
 #, python-format
 msgid "beatmap %s not found"
 msgstr "谱面难度 %s 不存在"
 
-#: osuawa/osuawa.py:404
+#: osuawa/osuawa.py:409
 #, python-format
 msgid "%16d: calculating difficulty..."
 msgstr "%16d：计算难度……"
 
-#: osuawa/osuawa.py:427
+#: osuawa/osuawa.py:432
 #, python-format
 msgid "%16d: drawing the cover..."
 msgstr "%16d：绘制封面……"
 
-#: osuawa/osuawa.py:444
+#: osuawa/osuawa.py:449
 #, python-format
 msgid "%16d: finished"
 msgstr "%16d：完成"
 
-#: osuawa/osuawa.py:469
+#: osuawa/osuawa.py:474
 #, python-format
 msgid "generated %s"
 msgstr "已生成 %s"
@@ -176,7 +176,8 @@ msgid ""
 "1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/"
 "account/edit))"
 msgstr ""
-"1. **输入您的开放授权客户端凭据** ([前往获取](https://osu.ppy.sh/home/account/edit))"
+"1. **输入您的开放授权客户端凭据** ([前往获取](https://osu.ppy.sh/home/"
+"account/edit))"
 
 #: tools/Playlist_generator.py:17
 msgid "Client ID"

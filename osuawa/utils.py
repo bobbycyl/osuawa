@@ -172,13 +172,13 @@ def rosu_calc(beatmap_file: str, mods: list) -> tuple:
     diff_attr = diff.calculate(beatmap)
     note_count = diff_attr.n_circles
     perf100 = rosu.Performance(accuracy=100, misses=0, hitresult_priority=rosu.HitResultPriority.BestCase)
-    perf95 = rosu.Performance(accuracy=95, misses=1, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf90 = rosu.Performance(accuracy=90, misses=min(5, note_count), hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf85 = rosu.Performance(accuracy=85, misses=min(15, note_count), hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf95 = rosu.Performance(accuracy=95, misses=min(5, note_count), hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf80h = rosu.Performance(accuracy=80, misses=int(note_count * 0.035), hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf80l = rosu.Performance(accuracy=80, misses=int(note_count * 0.07), hitresult_priority=rosu.HitResultPriority.WorstCase)
     pp100 = perf100.calculate(diff_attr).pp
     pp95 = perf95.calculate(diff_attr).pp
-    pp90 = perf90.calculate(diff_attr).pp
-    pp85 = perf85.calculate(diff_attr).pp
+    pp80h = perf80h.calculate(diff_attr).pp
+    pp80l = perf80l.calculate(diff_attr).pp
     return (
         diff_attr.stars,
         diff_attr.max_combo,
@@ -190,8 +190,8 @@ def rosu_calc(beatmap_file: str, mods: list) -> tuple:
         diff_attr.od,
         pp100,
         pp95,
-        pp90,
-        pp85,
+        pp80h,
+        pp80l,
     )
 
 

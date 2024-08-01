@@ -21,7 +21,7 @@ def main():
         st.markdown(
             f"""based on {len(df)} ({len(dfp)} passed) score(s)
 
-got/100/95/90/85 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_95if"].sum():.2f}/{dfp["b_pp_90if"].sum():.2f}/{dfp["b_pp_85if"].sum():.2f}pp
+got/100/95/80h/80l {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_95if"].sum():.2f}/{dfp["b_pp_80hif"].sum():.2f}/{dfp["b_pp_80lif"].sum():.2f}pp
 
 | Tag         | pp%                                                              | count%                                              |
 | ----------- | ---------------------------------------------------------------- | --------------------------------------------------- |
@@ -69,7 +69,7 @@ got/100/95/90/85 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
             )
             st.session_state.default_x_with_size_enabled = pd.Index.get_loc(df.columns, x_radio_with_size_enabled)
             st.session_state.default_size = pd.Index.get_loc(df.columns, size_radio)
-            t2 = st.toast(_("set default x to %s and default size to %s when size enabled") % (st.session_state.default_x_with_size_enabled, st.session_state.default_size))
+            t2 = st.toast(_("set default x to %s and default size to %s when size enabled") % (x_radio_with_size_enabled, size_radio))
             sleep(1)
             t2.empty()
         else:
@@ -81,7 +81,7 @@ got/100/95/90/85 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
                 y=y_multiselect,
             )
             st.session_state.default_x = pd.Index.get_loc(df.columns, x_radio)
-            t3 = st.toast(_("set default x to %s when size disabled") % st.session_state.default_x)
+            t3 = st.toast(_("set default x to %s when size disabled") % x_radio)
             sleep(1)
             t3.empty()
         t1.empty()
