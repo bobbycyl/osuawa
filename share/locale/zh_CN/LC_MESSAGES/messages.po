@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-08-02 00:40+0800\n"
-"PO-Revision-Date: 2024-08-02 00:41+0800\n"
+"POT-Creation-Date: 2024-08-02 10:50+0800\n"
+"PO-Revision-Date: 2024-08-02 10:50+0800\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "Language: \n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.14.0\n"
 
-#: Home.py:30 app.py:25
+#: Home.py:30 app.py:32
 msgid "Homepage"
 msgstr "主页"
 
@@ -101,11 +101,11 @@ msgstr "键入“help”以开始"
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:26 tools/Score_visualizer.py:9
+#: app.py:33 tools/Score_visualizer.py:10 tools/Score_visualizer.py:12
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:27 tools/Playlist_generator.py:10
+#: app.py:34 tools/Playlist_generator.py:10
 msgid "Playlist generator"
 msgstr "做课题"
 
@@ -220,53 +220,47 @@ msgstr "3. **预览和下载生成的资源**"
 msgid "Download the resources"
 msgstr "下载资源"
 
+#: tools/Score_visualizer.py:14
+msgid "wide page layout"
+msgstr "宽页布局"
+
 #: tools/Score_visualizer.py:15
+msgid "user"
+msgstr "用户"
+
+#: tools/Score_visualizer.py:20
 msgid "User not found"
 msgstr "用户不存在"
 
-#: tools/Score_visualizer.py:18
+#: tools/Score_visualizer.py:23
 msgid "user profile"
 msgstr "用户主页"
 
-#: tools/Score_visualizer.py:20
+#: tools/Score_visualizer.py:25
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: tools/Score_visualizer.py:38
+#: tools/Score_visualizer.py:43
 msgid "## Scatter Plot"
 msgstr "## 散点图"
 
-#: tools/Score_visualizer.py:39
+#: tools/Score_visualizer.py:44
 msgid "date range"
 msgstr "日期范围"
 
-#: tools/Score_visualizer.py:41
+#: tools/Score_visualizer.py:46
 msgid "star rating"
 msgstr "难度星数"
 
-#: tools/Score_visualizer.py:43
+#: tools/Score_visualizer.py:48
 msgid "advanced filter"
 msgstr "高级筛选"
 
-#: tools/Score_visualizer.py:48
-msgid "advanced filter disabled"
-msgstr "高级筛选未启用"
-
-#: tools/Score_visualizer.py:49
+#: tools/Score_visualizer.py:53
 msgid "enable scatter plot size parameter"
-msgstr "启用散点图图形尺寸参数"
+msgstr "设置点的大小"
 
-#: tools/Score_visualizer.py:72
-#, python-format
-msgid "set default x to %s and default size to %s when size enabled"
-msgstr "当散点图图形尺寸启用时，默认x变量设置为 %s，默认尺寸变量设置为 %s"
-
-#: tools/Score_visualizer.py:84
-#, python-format
-msgid "set default x to %s when size disabled"
-msgstr "当散点图图形尺寸未启用时，默认x变量设置为 %s"
-
-#: tools/Score_visualizer.py:90
+#: tools/Score_visualizer.py:78
 msgid "## filtered data"
 msgstr "## 目前筛选数据"
 
