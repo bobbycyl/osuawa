@@ -4,7 +4,9 @@ from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import rosu_pp_py as rosu
+import streamlit as st
 from osu import Client
 from osu.objects import Beatmap, LegacyScore, Mod, SoloScore, UserCompact, UserStatistics
 
@@ -13,6 +15,28 @@ XP = [0.1, 1.25, 2.0, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9.0]
 YP_R = [66, 79, 79, 124, 246, 255, 255, 198, 101, 24, 0]
 YP_G = [144, 192, 255, 255, 240, 128, 78, 69, 99, 21, 0]
 YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
+
+
+def save_value(key: str) -> None:
+    st.session_state["_%s_value" % key] = st.session_state[key]
+
+
+def save_index(data: pd.DataFrame, key: str) -> None:
+    st.session_state["_%s_value" % key] = pd.Index.get_loc(data.columns, st.session_state[key])
+
+
+def load_value(key: str, default_value: Any) -> Any:
+    if "_%s_value" % key not in st.session_state:
+        st.session_state["_%s_value" % key] = default_value
+    return st.session_state["_%s_value" % key]
+
+
+def memorized_multiselect(label: str, key: str, data: pd.DataFrame, default_value: Any) -> None:
+    st.multiselect(label, data.columns, default=load_value(key, default_value), key=key, on_change=save_value, args=[key])
+
+
+def memorized_selectbox(label: str, key: str, data: pd.DataFrame, default_value: Any) -> None:
+    st.selectbox(label, data.columns, index=load_value(key, default_value), key=key, on_change=save_index, args=[data, key])
 
 
 def user_to_dict(user: UserCompact) -> dict[str, Any]:
@@ -38,7 +62,7 @@ def get_username(client, user: int) -> str:
 def get_beatmap_dict(client: Client, bids: Sequence[int]) -> dict[int, Beatmap]:
     beatmaps_dict = {}
     for i in range(0, len(bids), 50):
-        bs_current = client.get_beatmaps(bids[i : i + 50])
+        bs_current = client.get_beatmaps(bids[i: i + 50])
         for b_current in bs_current:
             beatmaps_dict[b_current.id] = b_current
     return beatmaps_dict
