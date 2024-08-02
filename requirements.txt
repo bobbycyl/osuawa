@@ -1,4 +1,4 @@
-clayutil
+git+https://github.com/bobbycyl/ClayUtilities.git
 fonttools
 numpy
 orjson
