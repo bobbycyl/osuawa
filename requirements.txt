@@ -2,6 +2,7 @@ git+https://github.com/bobbycyl/ClayUtilities.git
 fonttools
 numpy
 orjson
+osu.py
 pandas
 pillow
 streamlit
