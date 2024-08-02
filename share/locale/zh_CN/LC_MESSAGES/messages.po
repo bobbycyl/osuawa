@@ -8,15 +8,16 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-08-02 10:50+0800\n"
-"PO-Revision-Date: 2024-08-02 10:50+0800\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"POT-Creation-Date: 2024-08-02 16:51+0800\n"
+"PO-Revision-Date: 2024-08-02 16:53+0800\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.14.0\n"
+"X-Generator: Poedit 3.4.2\n"
 
 #: Home.py:30 app.py:32
 msgid "Homepage"
@@ -79,24 +80,28 @@ msgstr "令牌验证失败"
 msgid "token generated"
 msgstr "令牌已生成（请向网站管理员索取）"
 
-#: Home.py:139
+#: Home.py:136
+msgid "client refreshed"
+msgstr "客户端已刷新"
+
+#: Home.py:140
 msgid "**WARNING: DEBUG MODE ON**"
 msgstr "**警告: 调试模式已开启**"
 
-#: Home.py:169
+#: Home.py:170
 #, python-format
 msgid "user %d not found"
 msgstr "用户 %d 不存在"
 
-#: Home.py:186
+#: Home.py:187
 msgid "preparing for the next command..."
 msgstr "请稍候……"
 
-#: Home.py:208
-msgid "type 'help' to get started"
-msgstr "键入“help”以开始"
+#: Home.py:212
+msgid "Type 'help' to get started."
+msgstr "键入“help”以开始。"
 
-#: Home.py:224
+#: Home.py:228
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
@@ -109,64 +114,76 @@ msgstr "查成分"
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: osuawa/osuawa.py:125
+#: app.py:35
+msgid "Recorder"
+msgstr "看记录"
+
+#: osuawa/osuawa.py:40
+msgid "Please click the button below to authorize the app."
+msgstr "请点击下方的按钮以完成授权。"
+
+#: osuawa/osuawa.py:41
+msgid "OAuth2 url"
+msgstr "授权链接"
+
+#: osuawa/osuawa.py:132
 #, python-format
 msgid "saving recent scores of %d"
 msgstr "正在保存 %d 的最近分数"
 
-#: osuawa/osuawa.py:126
+#: osuawa/osuawa.py:133
 msgid "getting scores..."
 msgstr "获取分数……"
 
-#: osuawa/osuawa.py:147
+#: osuawa/osuawa.py:154
 msgid "merging scores..."
 msgstr "合并分数……"
 
-#: osuawa/osuawa.py:160
+#: osuawa/osuawa.py:167
 msgid "calculating difficulty attributes..."
 msgstr "计算难度……"
 
-#: osuawa/osuawa.py:168
+#: osuawa/osuawa.py:175
 #, python-format
 msgid "calculating difficulty attributes... %d/%d (%d unique)"
 msgstr "计算难度…… %d/%d（%d 唯一项）"
 
-#: osuawa/osuawa.py:185
+#: osuawa/osuawa.py:192
 #, python-format
 msgid "recent scores of %d saved"
 msgstr "已保存 %d 的最近分数"
 
-#: osuawa/osuawa.py:357
+#: osuawa/osuawa.py:364
 #, python-format
 msgid "generating %s"
 msgstr "正在生成 %s"
 
-#: osuawa/osuawa.py:382
+#: osuawa/osuawa.py:389
 #, python-format
 msgid "%16d: downloading the beatmapset..."
 msgstr "%16d：下载谱面……"
 
-#: osuawa/osuawa.py:407
+#: osuawa/osuawa.py:414
 #, python-format
 msgid "beatmap %s not found"
 msgstr "谱面难度 %s 不存在"
 
-#: osuawa/osuawa.py:409
+#: osuawa/osuawa.py:416
 #, python-format
 msgid "%16d: calculating difficulty..."
 msgstr "%16d：计算难度……"
 
-#: osuawa/osuawa.py:432
+#: osuawa/osuawa.py:439
 #, python-format
 msgid "%16d: drawing the cover..."
 msgstr "%16d：绘制封面……"
 
-#: osuawa/osuawa.py:449
+#: osuawa/osuawa.py:456
 #, python-format
 msgid "%16d: finished"
 msgstr "%16d：完成"
 
-#: osuawa/osuawa.py:474
+#: osuawa/osuawa.py:481
 #, python-format
 msgid "generated %s"
 msgstr "已生成 %s"
@@ -219,6 +236,23 @@ msgstr "3. **预览和下载生成的资源**"
 #: tools/Playlist_generator.py:54
 msgid "Download the resources"
 msgstr "下载资源"
+
+#: tools/Recorder.py:9
+msgid "Ruleset"
+msgstr "游戏模式"
+
+#: tools/Recorder.py:10
+msgid "Limit"
+msgstr "数量限制"
+
+#: tools/Recorder.py:26
+#, python-format
+msgid "Next update in %d seconds"
+msgstr "%d秒后更新"
+
+#: tools/Recorder.py:30
+msgid "Permission denied"
+msgstr "无权限"
 
 #: tools/Score_visualizer.py:14
 msgid "wide page layout"
@@ -288,3 +322,7 @@ msgstr ""
 #, python-format
 msgid "%s option does not take a value"
 msgstr ""
+
+#, python-format
+#~ msgid "OAuth2 url: %s"
+#~ msgstr "授权链接：%s"
