@@ -1,4 +1,5 @@
 clayutil
+fonttools
 numpy
 orjson
 pandas
