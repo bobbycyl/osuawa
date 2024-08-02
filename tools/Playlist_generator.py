@@ -7,7 +7,6 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa
 
-_ = st.session_state._
 st.set_page_config(page_title=_("Playlist generator") + " - osuawa")
 if not os.path.exists("./static/uploaded"):
     os.makedirs("./static/uploaded")
@@ -52,4 +51,4 @@ else:
     st.dataframe(st.session_state.table, hide_index=True)
     compress_as_zip(session_path, zip_filename)
     with open(zip_filename, "rb") as zipfi:
-        st.download_button(label=_("Download the resources"), data=zipfi, file_name="%s.zip" % playlist_name)
+        st.download_button(label=_("Download the resources"), data=zipfi)

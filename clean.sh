@@ -1,3 +1,3 @@
 #!/bin/bash
 rm -r ./logs/
-rm -r ./static/uploads/
+rm -r ./static/uploaded/
