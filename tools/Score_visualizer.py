@@ -6,8 +6,13 @@ import streamlit as st
 from osuawa import Path
 from osuawa.utils import memorized_multiselect, memorized_selectbox
 
-st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
-user = st.selectbox("user", [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
+if "wide_layout" in st.session_state:
+    st.set_page_config(page_title=_("Score visualizer") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
+else:
+    st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
+with st.sidebar:
+    st.toggle(_("wide page layout"), key="wide_layout", value=False)
+user = st.selectbox(_("user"), [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
 
 
 def main():
