@@ -5,6 +5,7 @@ import streamlit as st
 
 from osuawa import Osuawa, Path
 
+_ = st.session_state._
 if st.session_state.perm >= 1:
     st.text_input(_("Ruleset"), value="osu", key="rec_mode")
     st.number_input(_("Limit"), min_value=1, max_value=50, value=5, key="rec_limit")
