@@ -19,6 +19,8 @@ from osu import AuthHandler, Client, GameModeStr, Scope
 
 from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, calc_star_rating_color, get_beatmap_dict, get_username, score_info_list, user_to_dict
 
+_ = st.session_state._
+
 
 @unique
 class Path(Enum):
@@ -43,6 +45,7 @@ class Osuawa(object):
         else:
             auth.get_auth_token(code)
         self.client = Client(auth)
+        st.session_state.user = self.client.get_own_data().username
         self.osu_tools_path = osu_tools_path
         if not os.path.exists(os.path.join(osu_tools_path, "PerformanceCalculator", "cache")):
             os.mkdir(os.path.join(osu_tools_path, "PerformanceCalculator", "cache"))

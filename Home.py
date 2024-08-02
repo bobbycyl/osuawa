@@ -9,6 +9,7 @@ from typing import Optional
 from uuid import UUID
 
 import pandas as pd
+import requests.exceptions
 import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
@@ -20,13 +21,14 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
     StringField as Str,
 )
-from streamlit import logger, runtime
+from streamlit import logger
 from streamlit.components.v1 import html
 from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa, Path
 
+_ = st.session_state._
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
 
@@ -35,6 +37,9 @@ def run(g):
         try:
             st.write(next(g))
         except CommandError as e:
+            st.error(e)
+            break  # use continue if you want to continue running the generator
+        except ValueError as e:
             st.error(e)
             break
         except StopIteration as e:
@@ -177,10 +182,9 @@ def init_logger():
     fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
     fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
     logger.get_logger("streamlit").addHandler(fh)
-    logger.get_logger(runtime.get_instance().get_client(get_script_run_ctx().session_id).request.remote_ip).addHandler(fh)
+    logger.get_logger(st.session_state.user).addHandler(fh)
 
 
-init_logger()
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 if "awa" in st.session_state:
@@ -188,14 +192,19 @@ if "awa" in st.session_state:
         time.sleep(1.5)
 else:
     if "code" in st.query_params:
-        st.session_state.awa = register_osu_api(st.query_params.code)
+        try:
+            st.session_state.awa = register_osu_api(st.query_params.code)
+        except requests.exceptions.HTTPError:
+            st.error(_("invalid code"))
+            st.session_state.awa = register_osu_api()
     else:
         st.session_state.awa = register_osu_api()
+init_logger()
 register_commands({"simple": True})
 
 
 def submit():
-    logger.get_logger(runtime.get_instance().get_client(get_script_run_ctx().session_id).request.remote_ip).info(st.session_state["input"])
+    logger.get_logger(st.session_state.user).info(st.session_state["input"])
     run(st.session_state.cmdparser.parse_command(st.session_state["input"]))
     st.session_state["delete_line"] = True
     st.session_state["counter"] += 1

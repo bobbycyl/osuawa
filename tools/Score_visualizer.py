@@ -6,6 +6,7 @@ import streamlit as st
 from osuawa import Path
 from osuawa.utils import memorized_multiselect, memorized_selectbox
 
+_ = st.session_state._
 if "wide_layout" in st.session_state:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
 else:
@@ -17,8 +18,12 @@ user = st.selectbox(_("user"), [os.path.splitext(os.path.basename(x))[0] for x i
 
 def main():
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
-        raise ValueError(_("User not found"))
+        st.error(_("user not found"))
+        st.stop()
     df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts"])
+    if len(df) == 0:
+        st.error(_("no scores found"))
+        st.stop()
     dfp = df[df["passed"]]
     st.link_button(_("user profile"), f"https://osu.ppy.sh/users/{user}")
     with st.container(border=True):
