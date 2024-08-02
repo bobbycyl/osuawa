@@ -51,7 +51,7 @@ def run(g):
 
 
 def select_language(language_code: str) -> None:
-    st.session_state.lang = locale.normalize(language_code)
+    st.session_state._lang = locale.normalize(language_code)
 
 
 def register_osu_api():
