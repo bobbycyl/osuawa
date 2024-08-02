@@ -39,6 +39,7 @@ and .NET 8.0 SDK (for [osu-tools](https://github.com/ppy/osu-tools))
 5. Configure the settings.
 
    1. Acquire your osu! OAuth client from [here](https://osu.ppy.sh/home/account/edit).
+      The port should match which set in `./.streamlit/config.toml`.
 
    2. Create a file called `osu.properties` somewhere. The file should like this:
 

@@ -39,6 +39,7 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
 5. 配置。
 
    1. 从[这里](https://osu.ppy.sh/home/account/edit)获取你的开放授权客户端。
+      端口号须和 `./.streamlit/config.toml` 中的 `server.port` 一致。
 
    2. 在一个你喜欢的地方创建 `osu.properties` 文件，并添加以下内容：
 
