@@ -2,7 +2,7 @@
 
 ## Introduction
 
-just some useful tools for osu! (Lazer supported!)
+just some useful tools for osu! (Lazer data supported!)
 
 ## Requirements
 
