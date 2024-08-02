@@ -28,7 +28,6 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import OsuPlaylist, Osuawa, Path
 
-_ = st.session_state._
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
 
@@ -56,7 +55,7 @@ def run(g):
 
 
 def select_language(language_code: str) -> None:
-    st.session_state._lang = locale.normalize(language_code)
+    st.session_state.lang = locale.normalize(language_code)
 
 
 def register_osu_api(code: str = None):

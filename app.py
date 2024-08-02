@@ -1,34 +1,39 @@
+import builtins
+import gettext
+import locale
 import os.path
 
 import streamlit as st
 
+from osuawa import Path
+
+# catalogs = threading.local()
 DEBUG_MODE = False  # switch to False when deploying
 
+
+def gettext_getfunc(lang):
+    def translate(text):
+        return gettext.translation("messages", localedir=Path.LOCALE.value, languages=[lang], fallback=True).gettext(text)
+
+    return translate
+
+
+def gettext_translate(text):
+    return st.session_state.translate(text)
+
+
 if "lang" not in st.session_state:
-    st.session_state._ = lambda x: x
+    if not os.path.exists(Path.LOGS.value):
+        os.mkdir(Path.LOGS.value)
+    if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
+        os.mkdir(Path.OUTPUT_DIRECTORY.value)
+        os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RAW_RECENT_SCORES.value))
+        os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RECENT_SCORES.value))
+    st.session_state.lang = locale.getlocale()[0]
 
-    import locale
+builtins.__dict__["_"] = gettext_translate
+st.session_state.translate = gettext_getfunc(st.session_state.lang)
 
-    st.session_state._lang = locale.getlocale()[0]
-    st.session_state.lang = None
-
-    import osuawa
-
-    if not os.path.exists(osuawa.Path.LOGS.value):
-        os.mkdir(osuawa.Path.LOGS.value)
-    if not os.path.exists(osuawa.Path.OUTPUT_DIRECTORY.value):
-        os.mkdir(osuawa.Path.OUTPUT_DIRECTORY.value)
-        os.mkdir(os.path.join(osuawa.Path.OUTPUT_DIRECTORY.value, osuawa.Path.RAW_RECENT_SCORES.value))
-        os.mkdir(os.path.join(osuawa.Path.OUTPUT_DIRECTORY.value, osuawa.Path.RECENT_SCORES.value))
-
-if st.session_state.lang != st.session_state._lang:  # language changed
-    import gettext
-    import osuawa
-
-    st.session_state.lang = st.session_state._lang
-    t = gettext.translation("messages", localedir=osuawa.Path.LOCALE.value, languages=[st.session_state.lang], fallback=True)
-    st.session_state._ = t.gettext
-_ = st.session_state._
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
 pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist generator"))

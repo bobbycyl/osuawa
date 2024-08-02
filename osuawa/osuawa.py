@@ -16,10 +16,9 @@ from clayutil.futil import Downloader, Properties, compress_as_zip, filelock
 from clayutil.validator import OneOf
 from fontfallback import writing
 from osu import AuthHandler, Client, GameModeStr, Scope
+from streamlit import logger
 
 from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, calc_star_rating_color, get_beatmap_dict, get_username, score_info_list, user_to_dict
-
-_ = st.session_state._
 
 
 @unique
@@ -363,6 +362,7 @@ class OsuPlaylist(object):
             self.osz_type = "full"
 
     def generate(self) -> pd.DataFrame:
+        logger.get_logger(st.session_state.user).info("generating playlist %s" % self.playlist_name)
         playlist: list[dict] = []
         with st.status(_("generating %s") % self.playlist_name, expanded=True) as status:
             for i, element in enumerate(self.beatmap_list, start=1):

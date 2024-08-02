@@ -6,7 +6,6 @@ import streamlit as st
 from osuawa import Path
 from osuawa.utils import memorized_multiselect, memorized_selectbox
 
-_ = st.session_state._
 if "wide_layout" in st.session_state:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
 else:

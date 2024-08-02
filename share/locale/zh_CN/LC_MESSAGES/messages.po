@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-08-02 18:53+0800\n"
+"POT-Creation-Date: 2024-08-02 20:41+0800\n"
 "PO-Revision-Date: 2024-08-02 18:56+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -19,140 +19,140 @@ msgstr ""
 "Generated-By: Babel 2.14.0\n"
 "X-Generator: Poedit 3.4.2\n"
 
-#: Home.py:32 app.py:32
+#: Home.py:31 app.py:37
 msgid "Homepage"
 msgstr "主页"
 
-#: Home.py:53
+#: Home.py:52
 #, python-format
 msgid "uncaught exception: %s"
 msgstr "未捕获异常：%s"
 
-#: Home.py:63
+#: Home.py:62
 msgid "registering a client..."
 msgstr "正在注册客户端……"
 
-#: Home.py:71
+#: Home.py:70
 msgid "register command parser"
 msgstr "注册命令解析器"
 
-#: Home.py:78
+#: Home.py:77
 msgid "get user info"
 msgstr "获取用户信息"
 
-#: Home.py:85
+#: Home.py:84
 msgid "save user recent scores"
 msgstr "保存用户最近分数"
 
-#: Home.py:92
+#: Home.py:91
 msgid "update user recent scores"
 msgstr "更新用户最近分数"
 
-#: Home.py:102
+#: Home.py:101
 msgid "get and show score"
 msgstr "展示分数"
 
-#: Home.py:105
+#: Home.py:104
 msgid "get and show user scores of a beatmap"
 msgstr "展示用户谱面分数"
 
-#: Home.py:112
+#: Home.py:111
 msgid "generate local playlists"
 msgstr "生成本地课题"
 
-#: Home.py:117
+#: Home.py:116
 msgid "select language"
 msgstr "选择语言"
 
-#: Home.py:118
+#: Home.py:117
 msgid "show user recent scores"
 msgstr "展示用户最近分数"
 
-#: Home.py:132
+#: Home.py:131
 msgid "token matched"
 msgstr "令牌验证通过"
 
-#: Home.py:134
+#: Home.py:133
 msgid "token mismatched"
 msgstr "令牌验证失败"
 
-#: Home.py:138
+#: Home.py:137
 msgid "token generated"
 msgstr "令牌已生成（请向网站管理员索取）"
 
-#: Home.py:141
+#: Home.py:140
 msgid "client refreshed"
 msgstr "客户端已刷新"
 
-#: Home.py:145
+#: Home.py:144
 msgid "**WARNING: DEBUG MODE ON**"
 msgstr "**警告: 调试模式已开启**"
 
-#: Home.py:175
+#: Home.py:174
 #, python-format
 msgid "user %d not found"
 msgstr "用户 %d 不存在"
 
-#: Home.py:191
+#: Home.py:190
 msgid "preparing for the next command..."
 msgstr "请稍候……"
 
-#: Home.py:198
+#: Home.py:197
 msgid "invalid code"
 msgstr "无效授权码"
 
-#: Home.py:221
+#: Home.py:220
 msgid "Type 'help' to get started."
 msgstr "键入“help”以开始。"
 
-#: Home.py:237
+#: Home.py:236
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:33 tools/Score_visualizer.py:11 tools/Score_visualizer.py:13
+#: app.py:38 tools/Score_visualizer.py:10 tools/Score_visualizer.py:12
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:34 tools/Playlist_generator.py:11
+#: app.py:39 tools/Playlist_generator.py:10
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:35
+#: app.py:40
 msgid "Recorder"
 msgstr "看记录"
 
-#: osuawa/osuawa.py:42
+#: osuawa/osuawa.py:41
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: osuawa/osuawa.py:43
+#: osuawa/osuawa.py:42
 msgid "OAuth2 url"
 msgstr "授权链接"
 
-#: osuawa/osuawa.py:135
+#: osuawa/osuawa.py:134
 #, python-format
 msgid "saving recent scores of %d"
 msgstr "正在保存 %d 的最近分数"
 
-#: osuawa/osuawa.py:136
+#: osuawa/osuawa.py:135
 msgid "getting scores..."
 msgstr "获取分数……"
 
-#: osuawa/osuawa.py:157
+#: osuawa/osuawa.py:156
 msgid "merging scores..."
 msgstr "合并分数……"
 
-#: osuawa/osuawa.py:170
+#: osuawa/osuawa.py:169
 msgid "calculating difficulty attributes..."
 msgstr "计算难度……"
 
-#: osuawa/osuawa.py:178
+#: osuawa/osuawa.py:177
 #, python-format
 msgid "calculating difficulty attributes... %d/%d (%d unique)"
 msgstr "计算难度…… %d/%d（%d 唯一项）"
 
-#: osuawa/osuawa.py:195
+#: osuawa/osuawa.py:194
 #, python-format
 msgid "recent scores of %d saved"
 msgstr "已保存 %d 的最近分数"
@@ -192,7 +192,7 @@ msgstr "%16d：完成"
 msgid "generated %s"
 msgstr "已生成 %s"
 
-#: tools/Playlist_generator.py:17
+#: tools/Playlist_generator.py:16
 msgid ""
 "1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/"
 "account/edit))"
@@ -200,109 +200,109 @@ msgstr ""
 "1. **输入您的开放授权客户端凭据** ([前往获取](https://osu.ppy.sh/home/"
 "account/edit))"
 
-#: tools/Playlist_generator.py:18
+#: tools/Playlist_generator.py:17
 msgid "Client ID"
 msgstr "客户端 ID"
 
-#: tools/Playlist_generator.py:20
+#: tools/Playlist_generator.py:19
 msgid "Client ID must be an integer"
 msgstr "客户端 ID 须为整型"
 
-#: tools/Playlist_generator.py:21
+#: tools/Playlist_generator.py:20
 msgid "Client Secret"
 msgstr "客户端密钥"
 
-#: tools/Playlist_generator.py:23
+#: tools/Playlist_generator.py:22
 msgid "2. **Upload a playlist source file.**"
 msgstr "2. **上传一个谱面源文件**"
 
-#: tools/Playlist_generator.py:24
+#: tools/Playlist_generator.py:23
 msgid "Choose a file"
 msgstr "选择文件"
 
-#: tools/Playlist_generator.py:26
+#: tools/Playlist_generator.py:25
 msgid "Please upload a file first."
 msgstr "请先上传文件。"
 
-#: tools/Playlist_generator.py:28
+#: tools/Playlist_generator.py:27
 msgid "Please enter your client ID and secret first."
 msgstr "请先填写您的客户端 ID 和密钥。"
 
-#: tools/Playlist_generator.py:39
+#: tools/Playlist_generator.py:38
 #, python-format
 msgid "using filename: %s"
 msgstr "使用文件名：%s"
 
-#: tools/Playlist_generator.py:49
+#: tools/Playlist_generator.py:48
 msgid "3. **Preview and download the generated resources.**"
 msgstr "3. **预览和下载生成的资源**"
 
-#: tools/Playlist_generator.py:55
+#: tools/Playlist_generator.py:54
 msgid "Download the resources"
 msgstr "下载资源"
 
-#: tools/Recorder.py:10
+#: tools/Recorder.py:9
 msgid "Ruleset"
 msgstr "游戏模式"
 
-#: tools/Recorder.py:11
+#: tools/Recorder.py:10
 msgid "Limit"
 msgstr "数量限制"
 
-#: tools/Recorder.py:27
+#: tools/Recorder.py:26
 #, python-format
 msgid "Next update in %d seconds"
 msgstr "%d秒后更新"
 
-#: tools/Recorder.py:31
+#: tools/Recorder.py:30
 msgid "Permission denied"
 msgstr "无权限"
 
-#: tools/Score_visualizer.py:15
+#: tools/Score_visualizer.py:14
 msgid "wide page layout"
 msgstr "宽页布局"
 
-#: tools/Score_visualizer.py:16
+#: tools/Score_visualizer.py:15
 msgid "user"
 msgstr "用户"
 
-#: tools/Score_visualizer.py:21
+#: tools/Score_visualizer.py:20
 msgid "user not found"
 msgstr "用户不存在"
 
-#: tools/Score_visualizer.py:25
+#: tools/Score_visualizer.py:24
 msgid "no scores found"
 msgstr "暂无本地分数"
 
-#: tools/Score_visualizer.py:28
+#: tools/Score_visualizer.py:27
 msgid "user profile"
 msgstr "用户主页"
 
-#: tools/Score_visualizer.py:30
+#: tools/Score_visualizer.py:29
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: tools/Score_visualizer.py:48
+#: tools/Score_visualizer.py:47
 msgid "## Scatter Plot"
 msgstr "## 散点图"
 
-#: tools/Score_visualizer.py:49
+#: tools/Score_visualizer.py:48
 msgid "date range"
 msgstr "日期范围"
 
-#: tools/Score_visualizer.py:51
+#: tools/Score_visualizer.py:50
 msgid "star rating"
 msgstr "难度星数"
 
-#: tools/Score_visualizer.py:53
+#: tools/Score_visualizer.py:52
 msgid "advanced filter"
 msgstr "高级筛选"
 
-#: tools/Score_visualizer.py:58
+#: tools/Score_visualizer.py:57
 msgid "enable scatter plot size parameter"
 msgstr "设置点的大小"
 
-#: tools/Score_visualizer.py:83
+#: tools/Score_visualizer.py:82
 msgid "## filtered data"
 msgstr "## 目前筛选数据"
 
