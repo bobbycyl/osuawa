@@ -54,9 +54,9 @@ def select_language(language_code: str) -> None:
     st.session_state._lang = locale.normalize(language_code)
 
 
-def register_osu_api():
+def register_osu_api(code: str = None):
     with st.spinner(_("registering a client...")):
-        return Osuawa(st.secrets.args.oauth_filename, st.secrets.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value)
+        return Osuawa(st.secrets.args.oauth_filename, st.secrets.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value, code)
 
 
 def commands():
@@ -66,7 +66,7 @@ def commands():
             _("register command parser"),
             [JsonStr("obj", True)],
             0,
-            register_cmdparser,
+            register_commands,
         ),
         Command(
             "where",
@@ -114,15 +114,15 @@ def commands():
     ]
 
 
-def register_cmdparser(obj: Optional[dict] = None):
+def register_commands(obj: Optional[dict] = None):
     ret = ""
     if obj is None:
         obj = {}
     if "perm" not in st.session_state:
         st.session_state.perm = 0
     if not obj.get("simple", False):
-        if "token" in st.session_state:
-            if obj.get("token", "") == st.session_state.token:
+        if "token" in st.session_state and "token" in obj:
+            if obj["token"] == st.session_state.token:
                 st.session_state.perm = 1
                 ret = _("token matched")
             else:
@@ -133,6 +133,7 @@ def register_cmdparser(obj: Optional[dict] = None):
             ret = _("token generated")
         if "awa" in st.session_state and obj.get("refresh", False):
             st.session_state.awa = register_osu_api()
+            ret = _("client refreshed")
     else:
         if st.session_state.DEBUG_MODE:
             st.session_state.perm = 999
@@ -186,8 +187,11 @@ if "awa" in st.session_state:
     with st.spinner(_("preparing for the next command...")):
         time.sleep(1.5)
 else:
-    st.session_state.awa = register_osu_api()
-register_cmdparser({"simple": True})
+    if "code" in st.query_params:
+        st.session_state.awa = register_osu_api(st.query_params.code)
+    else:
+        st.session_state.awa = register_osu_api()
+register_commands({"simple": True})
 
 
 def submit():
@@ -205,7 +209,7 @@ if st.session_state["delete_line"]:
     st.session_state["input"] = ""
     st.session_state["delete_line"] = False
 
-y = st.text_input("> ", key="input", on_change=submit, placeholder=_("type 'help' to get started"))
+y = st.text_input("> ", key="input", on_change=submit, placeholder=_("Type 'help' to get started."))
 
 html(
     f"""<script>

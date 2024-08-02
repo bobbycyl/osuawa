@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, Unidenti
 from clayutil.futil import Downloader, Properties, compress_as_zip, filelock
 from clayutil.validator import OneOf
 from fontfallback import writing
-from osu import Client, GameModeStr
+from osu import AuthHandler, Client, GameModeStr, Scope
 
 from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, calc_star_rating_color, get_beatmap_dict, get_username, score_info_list, user_to_dict
 
@@ -32,10 +32,17 @@ class Path(Enum):
 class Osuawa(object):
     tz = "Asia/Shanghai"
 
-    def __init__(self, oauth_filename: str, osu_tools_path: str, output_dir: str):
+    def __init__(self, oauth_filename: str, osu_tools_path: str, output_dir: str, code: str = None):
         p = Properties(oauth_filename)
         p.load()
-        self.client = Client.from_credentials(p["client_id"], p["client_secret"], p["redirect_url"])
+        auth = AuthHandler(p["client_id"], p["client_secret"], p["redirect_url"], Scope("public", "identify", "friends.read"))
+        if code is None:
+            st.info(_("Please click the button below to authorize the app."))
+            st.link_button(_("OAuth2 url"), auth.get_auth_url())
+            exit(0)
+        else:
+            auth.get_auth_token(code)
+        self.client = Client(auth)
         self.osu_tools_path = osu_tools_path
         if not os.path.exists(os.path.join(osu_tools_path, "PerformanceCalculator", "cache")):
             os.mkdir(os.path.join(osu_tools_path, "PerformanceCalculator", "cache"))
