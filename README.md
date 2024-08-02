@@ -1,5 +1,7 @@
 # osuawa
 
+[**简体中文**](README_zh_CN.md)
+
 ## Introduction
 
 just some useful tools for osu! (Lazer data supported!)
