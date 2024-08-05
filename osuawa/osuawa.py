@@ -261,10 +261,10 @@ class BeatmapCover(object):
 
         # 绘制左侧文字
         fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
-        draw.text((42, 19), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#1f1f1f")
-        draw.text((40, 16), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="white")
+        draw.text((42, 29), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#1f1f1f")
+        draw.text((40, 26), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="white")
         # draw.text((41, 16), b.version, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="white")
-        draw.text((40, 17), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="white")
+        draw.text((40, 27), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="white")
         # draw.text((41, 17), b.version, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="white")
         writing.draw_text_v2(draw, (42, 132), title_u, "#1f1f1f", fonts, 72)
         writing.draw_text_v2(draw, (42, 131), title_u, "#1f1f1f", fonts, 72)
@@ -286,18 +286,22 @@ class BeatmapCover(object):
         draw.text((264, 290), b.beatmapset.creator, font=ImageFont.truetype(font=self.font_mono_regular, size=36), fill=(180, 235, 250))
 
         # 在右上角绘制星数
-        draw.rounded_rectangle([len_set + 22, 18, 1920, 80], 12, fill="#1f1f1f")
-        draw.rounded_rectangle([len_set + 20, 16, 1920, 78], 12, fill=calc_star_rating_color(self.stars1))
-        stars = "%.2f" % self.stars1
+        stars = "󰓎 %.2f" % self.stars1
         if self.stars2 is not None:
             stars = "%s (%.2f)" % (stars, self.stars2)
+        text_pos = 408
+        padding = 28
+        text_len = draw.textlength(stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
+        draw.rounded_rectangle([len_set + text_pos-text_len-padding, 22, len_set+text_pos+padding, 96], 72, fill="#1f1f1f")
+        draw.rounded_rectangle([len_set + text_pos-text_len-padding, 20, len_set+text_pos+padding, 94], 72, fill=calc_star_rating_color(self.stars1))
+
         # draw.text((len_set + 50, 18), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#1f1f1f")
         if self.stars1 > 6.5:  # white text
-            draw.text((len_set + 48, 17), stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#f0dd55")
-            # draw.text((len_set + 49, 17), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#f0dd55")
+            draw.text((len_set + text_pos, 27), stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#f0dd55")
+            # draw.text((len_set + text_pos + 1, 17), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#f0dd55")
         else:  # black text
-            draw.text((len_set + 48, 17), stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#000000")
-            # draw.text((len_set + 49, 17), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#000000")
+            draw.text((len_set + text_pos, 27), stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#000000")
+            # draw.text((len_set + text_pos + 1, 17), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#000000")
 
         # 在右侧从下到上依次绘制CS AR OD 󰟚 󱑓 󰺕
         draw_list1: list[tuple[str, str]] = [("OD", self.od), ("AR", self.ar), ("CS", self.cs)]
@@ -362,7 +366,6 @@ class OsuPlaylist(object):
             self.osz_type = "full"
 
     def generate(self) -> pd.DataFrame:
-        logger.get_logger(st.session_state.user).info("generating playlist %s" % self.playlist_name)
         playlist: list[dict] = []
         with st.status(_("generating %s") % self.playlist_name, expanded=True) as status:
             for i, element in enumerate(self.beatmap_list, start=1):
