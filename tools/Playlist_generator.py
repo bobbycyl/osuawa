@@ -55,4 +55,4 @@ else:
     st.dataframe(st.session_state.table, hide_index=True)
     compress_as_zip(session_path, zip_filename)
     with open(zip_filename, "rb") as zipfi:
-        st.download_button(label=_("Download the resources"), data=zipfi)
+        st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zipfi)
