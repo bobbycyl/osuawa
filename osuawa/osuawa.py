@@ -463,7 +463,7 @@ class OsuPlaylist(object):
             df = pd.DataFrame(playlist)
             df.sort_values(by=["#"], inplace=True)
             pd.set_option("colheader_justify", "center")
-            html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body bgcolor="#1f1f1f">{table}<footer>%s</footer></body></html>' % (
+            html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body style="background-color:#1f1f1f">{table}<footer>%s</footer></body></html>' % (
                 self.playlist_name,
                 self.suffix,
                 self.footer,
