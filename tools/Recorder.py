@@ -16,11 +16,11 @@ if st.session_state.get("perm", 0) >= 1:
             user=user.id,
             type="recent",
             mode=st.session_state.rec_mode,
-            include_fails=False,
+            include_fails=True,
             limit=st.session_state.rec_limit,
         )
         with open(os.path.join(Path.OUTPUT_DIRECTORY.value, "records.txt"), "w") as fo:
-            fo.write("\n".join([f"{score.beatmap.id}" for score in user_scores_current]))
+            fo.write("\n".join([f"{score.beatmap_id}" for score in user_scores_current]))
         left = 30
         while left > 0:
             w.text(_("Next update in %d seconds") % left)
