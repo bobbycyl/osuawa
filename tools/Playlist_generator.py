@@ -1,6 +1,7 @@
 import os.path
 from uuid import UUID
 
+import pandas as pd
 import streamlit as st
 from clayutil.futil import compress_as_zip
 from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -47,6 +48,7 @@ else:
             st.session_state.table = OsuPlaylist(client, playlist_filename).generate()
         except Exception as e:
             st.error(e)
+            st.session_state.table = pd.DataFrame()
             st.stop()
     st.divider()
     st.write(_("3. **Preview and download the generated resources.**"))

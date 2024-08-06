@@ -4,3 +4,5 @@ messageFormat = "[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"
 [server]
 port = 8501
 enableStaticServing = true
+sslCertFile = '.streamlit/full_chain.pem'
+sslKeyFile = '.streamlit/private.key'

@@ -125,6 +125,7 @@ def register_commands(obj: Optional[dict] = None):
     if "perm" not in st.session_state:
         st.session_state.perm = 0
     if not obj.get("simple", False):
+        st.info(_('Use `reg {"token": "<token>"}` to pass the token, or `reg {"refresh": "true"}` to refresh the client.'))
         if "token" in st.session_state and "token" in obj:
             if obj["token"] == st.session_state.token:
                 st.session_state.perm = 1
@@ -135,6 +136,7 @@ def register_commands(obj: Optional[dict] = None):
             st.session_state.token = token_hex(16)
             logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
             ret = _("token generated")
+            st.toast(_("You need to ask the web admin for the session token to unlock the full features."))
         if "awa" in st.session_state and obj.get("refresh", False):
             st.session_state.awa = register_osu_api()
             ret = _("client refreshed")
