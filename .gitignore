@@ -4,3 +4,5 @@
 /static/uploaded/
 /venv/
 /playlists
+/.streamlit/private.key
+/.streamlit/full_chain.pem

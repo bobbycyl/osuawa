@@ -51,4 +51,6 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
 
    3. 编辑 `./.streamlit/secrets.toml`。
 
+   4. 如果不需要HTTPS，删除 `./.streamlit/config.toml` 中的SSL相关设置。
+
 6. 运行程序。 `python run.py`

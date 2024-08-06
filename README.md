@@ -51,4 +51,6 @@ and .NET 8.0 SDK (for [osu-tools](https://github.com/ppy/osu-tools))
 
    3. Edit `./.streamlit/secrets.toml`.
 
+   4. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
+
 6. Run the app. `python run.py`

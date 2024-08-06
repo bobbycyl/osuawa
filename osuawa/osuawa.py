@@ -16,7 +16,6 @@ from clayutil.futil import Downloader, Properties, compress_as_zip, filelock
 from clayutil.validator import OneOf
 from fontfallback import writing
 from osu import AuthHandler, Client, GameModeStr, Scope
-from streamlit import logger
 
 from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, calc_star_rating_color, get_beatmap_dict, get_username, score_info_list, user_to_dict
 
@@ -292,8 +291,8 @@ class BeatmapCover(object):
         text_pos = 408
         padding = 28
         text_len = draw.textlength(stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
-        draw.rounded_rectangle([len_set + text_pos-text_len-padding, 22, len_set+text_pos+padding, 96], 72, fill="#1f1f1f")
-        draw.rounded_rectangle([len_set + text_pos-text_len-padding, 20, len_set+text_pos+padding, 94], 72, fill=calc_star_rating_color(self.stars1))
+        draw.rounded_rectangle([len_set + text_pos - text_len - padding, 22, len_set + text_pos + padding, 96], 72, fill="#1f1f1f")
+        draw.rounded_rectangle([len_set + text_pos - text_len - padding, 20, len_set + text_pos + padding, 94], 72, fill=calc_star_rating_color(self.stars1))
 
         # draw.text((len_set + 50, 18), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#1f1f1f")
         if self.stars1 > 6.5:  # white text
