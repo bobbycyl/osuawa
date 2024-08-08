@@ -204,8 +204,8 @@ class Osuawa(object):
 
 
 class BeatmapCover(object):
-    font_sans = "./osuawa/DejaVuSansSC.ttf"
-    font_sans_fallback = "./osuawa/AlibabaPuHuiTi-3-55-Regular.ttf"
+    font_sans = "./osuawa/ResourceHanRoundedSC-Regular.ttf"
+    font_sans_fallback = "./osuawa/DejaVuSansCondensed.ttf"
     font_mono_regular = "./osuawa/MapleMono-NF-CN-Regular-V7.0-Beta22.ttf"
     font_mono_italic = "./osuawa/MapleMono-NF-CN-Italic-V7.0-Beta22.ttf"
     font_mono_semibold = "./osuawa/MapleMono-NF-CN-SemiBold-V7.0-Beta22.ttf"
@@ -265,18 +265,18 @@ class BeatmapCover(object):
         # draw.text((41, 16), b.version, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="white")
         draw.text((40, 27), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="white")
         # draw.text((41, 17), b.version, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="white")
-        writing.draw_text_v2(draw, (42, 132), title_u, "#1f1f1f", fonts, 72)
-        writing.draw_text_v2(draw, (42, 131), title_u, "#1f1f1f", fonts, 72)
-        writing.draw_text_v2(draw, (42, 133), title_u, (40, 40, 40), fonts, 72)
-        writing.draw_text_v2(draw, (41, 133), title_u, (40, 40, 40), fonts, 72)
-        writing.draw_text_v2(draw, (41, 132), title_u, (40, 40, 40), fonts, 72)
-        writing.draw_text_v2(draw, (40, 129), title_u, "white", fonts, 72)
-        writing.draw_text_v2(draw, (41, 129), title_u, "white", fonts, 72)
-        writing.draw_text_v2(draw, (40, 130), title_u, "white", fonts, 72)
-        writing.draw_text_v2(draw, (41, 130), title_u, "white", fonts, 72)
-        writing.draw_text_v2(draw, (41, 218), b.beatmapset.artist_unicode, "#1f1f1f", fonts, 44)
-        writing.draw_text_v2(draw, (40, 218), b.beatmapset.artist_unicode, (40, 40, 40), fonts, 44)
-        writing.draw_text_v2(draw, (40, 216), b.beatmapset.artist_unicode, "white", fonts, 44)
+        writing.draw_text_v2(draw, (42, 192), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (42, 191), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (42, 193), title_u, (40, 40, 40), fonts, 72, "ls")
+        writing.draw_text_v2(draw, (41, 193), title_u, (40, 40, 40), fonts, 72, "ls")
+        writing.draw_text_v2(draw, (41, 192), title_u, (40, 40, 40), fonts, 72, "ls")
+        writing.draw_text_v2(draw, (40, 189), title_u, "white", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (41, 189), title_u, "white", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (40, 190), title_u, "white", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (41, 190), title_u, "white", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (41, 260), b.beatmapset.artist_unicode, "#1f1f1f", fonts, 44, "ls")
+        writing.draw_text_v2(draw, (40, 260), b.beatmapset.artist_unicode, (40, 40, 40), fonts, 44, "ls")
+        writing.draw_text_v2(draw, (40, 258), b.beatmapset.artist_unicode, "white", fonts, 44, "ls")
         draw.text((41, 292), "mapped by", font=ImageFont.truetype(font=self.font_mono_italic, size=36), fill="#1f1f1f")
         draw.text((40, 292), "mapped by", font=ImageFont.truetype(font=self.font_mono_italic, size=36), fill=(40, 40, 40))
         draw.text((40, 290), "mapped by", font=ImageFont.truetype(font=self.font_mono_italic, size=36), fill="white")
@@ -431,13 +431,13 @@ class OsuPlaylist(object):
                     rosu_diff_fm = rosu.Difficulty(mods=[{"acronym": "HR"}])
                     rosu_attr_fm = rosu_diff_fm.calculate(rosu_map)
                     stars2 = rosu_attr_fm.stars
-                cs = "%.2f" % my_attr.cs
-                ar = "%.2f" % rosu_attr.ar
-                od = "%.2f" % rosu_attr.od
-                bpm = "%.2f" % my_attr.bpm
+                cs = "%s" % round(float(my_attr.cs), 2)
+                ar = "%s" % round(rosu_attr.ar, 2)
+                od = "%s" % round(rosu_attr.od, 2)
+                bpm = "%s" % round(my_attr.bpm, 2)
                 song_len_in_sec = my_attr.hit_length
                 song_len_m, song_len_s = divmod(song_len_in_sec, 60)
-                hit_length = "%2d:%02d" % (song_len_m, song_len_s)
+                hit_length = "%d:%02d" % (song_len_m, song_len_s)
                 max_combo = "%d" % rosu_attr.max_combo
 
                 # 绘制cover
