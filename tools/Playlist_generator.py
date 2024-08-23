@@ -39,7 +39,7 @@ else:
     html_filename = "./static/uploaded/%s/%s.html" % (uid, playlist_name)
     covers_dir = "./static/uploaded/%s/%s.covers" % (uid, playlist_name)
     csv_filename = "./static/uploaded/%s/%s.csv" % (uid, playlist_name)
-    css_filename = "./static/uploaded/%s/%s.css" % (uid, playlist_name)
+    css_filename = "./static/uploaded/%s/style.css" % uid
     zip_filename = "./static/uploaded/%s.zip" % uid
     st.write(_("using filename: %s") % playlist_filename.replace("./static/", "app/static/"))
     content = uploaded_file.getvalue()
