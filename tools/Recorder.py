@@ -3,7 +3,11 @@ import time
 
 import streamlit as st
 
-from osuawa import Osuawa, Path
+from osuawa import LANGUAGES, Osuawa, Path
+from osuawa.utils import memorized_selectbox
+
+with st.sidebar:
+    memorized_selectbox("lang", "lang", LANGUAGES, 0)
 
 if st.session_state.get("perm", 0) >= 1:
     st.text_input(_("Ruleset"), value="osu", key="rec_mode")

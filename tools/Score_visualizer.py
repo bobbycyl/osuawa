@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from osuawa import Path
+from osuawa import LANGUAGES, Path
 from osuawa.utils import memorized_multiselect, memorized_selectbox
 
 if "wide_layout" in st.session_state:
@@ -11,6 +11,7 @@ if "wide_layout" in st.session_state:
 else:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
 with st.sidebar:
+    memorized_selectbox("lang", "lang", LANGUAGES, 0)
     st.toggle(_("wide page layout"), key="wide_layout", value=False)
 user = st.selectbox(_("user"), [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
 
@@ -59,10 +60,10 @@ got/100/95/80h/80l {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_p
         if enable_size:
             col1, col2 = st.columns(2)
             with col1:
-                memorized_selectbox("x", "cat_x2", df, 25)
+                memorized_selectbox("x", "cat_x2", df.columns, 25)
             with col2:
-                memorized_selectbox("s", "cat_s", df, 23)
-            memorized_multiselect("y", "cat_y2", df, ["score_nf"])
+                memorized_selectbox("s", "cat_s", df.columns, 23)
+            memorized_multiselect("y", "cat_y2", df.columns, ["score_nf"])
             st.scatter_chart(
                 df3,
                 x=st.session_state.cat_x2,
@@ -70,8 +71,8 @@ got/100/95/80h/80l {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_p
                 size=st.session_state.cat_s,
             )
         else:
-            memorized_selectbox("x", "cat_x", df, 23)
-            memorized_multiselect("y", "cat_y", df, ["score_nf"])
+            memorized_selectbox("x", "cat_x", df.columns, 23)
+            memorized_multiselect("y", "cat_y", df.columns, ["score_nf"])
             st.scatter_chart(
                 df3,
                 x=st.session_state.cat_x,

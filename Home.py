@@ -1,4 +1,3 @@
-import locale
 import logging
 import os
 import re
@@ -26,7 +25,8 @@ from streamlit.components.v1 import html
 from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import OsuPlaylist, Osuawa, Path
+from osuawa import LANGUAGES, OsuPlaylist, Osuawa, Path
+from osuawa.utils import memorized_selectbox
 
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
@@ -52,10 +52,6 @@ def run(g):
             st.error(_("uncaught exception: %s") % str(e))
             logger.get_logger("streamlit").exception(e)
             break
-
-
-def select_language(language_code: str) -> None:
-    st.session_state.lang = locale.normalize(language_code)
 
 
 def register_osu_api(code: str = None):
@@ -113,7 +109,6 @@ def commands():
             1,
             generate_all_playlists,
         ),
-        Command("lang", _("select language"), [Str("code")], 0, select_language),
         Command("cat", _("show user recent scores"), [Int("user")], 0, cat),
     ]
 
@@ -186,8 +181,12 @@ def init_logger():
     logger.get_logger(st.session_state.user).addHandler(fh)
 
 
+with st.sidebar:
+    memorized_selectbox("lang", "uni_lang", LANGUAGES, 0)
+
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
+
 if "awa" in st.session_state:
     with st.spinner(_("preparing for the next command...")):
         time.sleep(1.5)
@@ -200,6 +199,7 @@ else:
             st.session_state.awa = register_osu_api()
     else:
         st.session_state.awa = register_osu_api()
+
 init_logger()
 register_commands({"simple": True})
 
