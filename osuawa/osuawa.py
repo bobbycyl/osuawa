@@ -1,4 +1,5 @@
 import ctypes
+import html
 import os
 import os.path
 import platform
@@ -470,9 +471,11 @@ class OsuPlaylist(object):
                     "#": i,
                     "BID": b.id,
                     "SID": b.beatmapset_id,
-                    "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>' % (img_link, img_src, b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
+                    "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>'
+                    % (img_link, img_src, html.escape(b.beatmapset.artist), html.escape(b.beatmapset.title), html.escape(b.beatmapset.creator), html.escape(b.version)),
                     "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
                     "Stars": cover.stars,
+                    "SR": cover.stars.replace("󰓎", "★"),
                     "BPM": cover.bpm,
                     "Hit Length": cover.hit_length,
                     "Max Combo": cover.max_combo,
@@ -493,7 +496,7 @@ class OsuPlaylist(object):
                 sleep(0.5)
                 rmtree(beatmapset_dir)
             df_columns = ["#", "BID", "Beatmap Info", "Mods"]
-            df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "Stars", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
+            df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
             for column in self.custom_columns:
                 if column == "mods":
                     continue

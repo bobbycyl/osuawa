@@ -54,7 +54,7 @@ def run(g):
             break
 
 
-def register_osu_api(code: str = None):
+def register_awa(code: str = None):
     with st.spinner(_("registering a client...")):
         return Osuawa(st.secrets.args.oauth_filename, st.secrets.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value, code)
 
@@ -72,7 +72,7 @@ def commands():
             "where",
             _("get user info"),
             [Str("username")],
-            1,
+            0,
             st.session_state.awa.get_user_info,
         ),
         Command(
@@ -94,12 +94,12 @@ def commands():
             1,
             st.session_state.awa.save_recent_scores,
         ),
-        Command("s2", _("get and show score"), [Int("score_id")], 1, st.session_state.awa.get_score),
+        Command("s2", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
         Command(
             "s",
             _("get and show user scores of a beatmap"),
             [Int("beatmap"), Int("user")],
-            1,
+            0,
             st.session_state.awa.get_user_beatmap_scores,
         ),
         Command(
@@ -133,12 +133,11 @@ def register_commands(obj: Optional[dict] = None):
             ret = _("token generated")
             st.toast(_("You need to ask the web admin for the session token to unlock the full features."))
         if "awa" in st.session_state and obj.get("refresh", False):
-            st.session_state.awa = register_osu_api()
+            st.session_state.awa = register_awa()
             ret = _("client refreshed")
     else:
-        if st.session_state.DEBUG_MODE:
-            st.session_state.perm = 999
-            st.warning(_("**WARNING: DEBUG MODE ON**"))
+        # 冗余设计
+        pass
     st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
     return ret
 
@@ -181,29 +180,6 @@ def init_logger():
     logger.get_logger(st.session_state.user).addHandler(fh)
 
 
-with st.sidebar:
-    memorized_selectbox("lang", "uni_lang", LANGUAGES, 0)
-
-if "cmdparser" not in st.session_state:
-    st.session_state.cmdparser = CommandParser()
-
-if "awa" in st.session_state:
-    with st.spinner(_("preparing for the next command...")):
-        time.sleep(1.5)
-else:
-    if "code" in st.query_params:
-        try:
-            st.session_state.awa = register_osu_api(st.query_params.code)
-        except requests.exceptions.HTTPError:
-            st.error(_("invalid code"))
-            st.session_state.awa = register_osu_api()
-    else:
-        st.session_state.awa = register_osu_api()
-
-init_logger()
-register_commands({"simple": True})
-
-
 def submit():
     logger.get_logger(st.session_state.user).info(st.session_state["input"])
     run(st.session_state.cmdparser.parse_command(st.session_state["input"]))
@@ -211,28 +187,53 @@ def submit():
     st.session_state["counter"] += 1
 
 
-if "delete_line" not in st.session_state:
-    st.session_state["delete_line"] = True
-if "counter" not in st.session_state:
-    st.session_state["counter"] = 0
-if st.session_state["delete_line"]:
-    st.session_state["input"] = ""
-    st.session_state["delete_line"] = False
+if "cmdparser" not in st.session_state:
+    st.session_state.cmdparser = CommandParser()
 
-y = st.text_input("> ", key="input", on_change=submit, placeholder=_("Type 'help' to get started."))
+with st.sidebar:
+    memorized_selectbox("lang", "uni_lang", LANGUAGES, 0)
 
-html(
-    f"""<script>
-    var input = window.parent.document.querySelectorAll("input[type=text]");
-    for (var i = 0; i < input.length; ++i) {{
-        input[i].focus();
-    }}
-</script>
-""",
-    height=0,
-)
+if "awa" in st.session_state:
+    with st.spinner(_("preparing for the next command...")):
+        time.sleep(1.5)
 
-if y:
-    st.text(y)
+    if "delete_line" not in st.session_state:
+        st.session_state["delete_line"] = True
+    if "counter" not in st.session_state:
+        st.session_state["counter"] = 0
+    if st.session_state["delete_line"]:
+        st.session_state["input"] = ""
+        st.session_state["delete_line"] = False
+
+    y = st.text_input("> ", key="input", on_change=submit, placeholder=_("Type 'help' to get started."))
+
+    html(
+        f"""<script>
+        var input = window.parent.document.querySelectorAll("input[type=text]");
+        for (var i = 0; i < input.length; ++i) {{
+            input[i].focus();
+        }}
+    </script>
+    """,
+        height=0,
+    )
+
+    if y:
+        st.text(y)
+
+else:
+    if "code" in st.query_params:
+        try:
+            st.session_state.awa = register_awa(st.query_params.code)
+        except requests.exceptions.HTTPError:
+            st.error(_("invalid code"))
+            st.session_state.awa = register_awa()
+        else:
+            st.success(_("Welcome!"))
+            init_logger()
+            register_commands({"simple": True})
+    else:
+        st.session_state.awa = register_awa()
+    st.rerun()
 
 st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)

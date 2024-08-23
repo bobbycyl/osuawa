@@ -6,28 +6,29 @@ import streamlit as st
 from clayutil.futil import compress_as_zip
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import LANGUAGES, OsuPlaylist, Osuawa
-from osuawa.utils import memorized_selectbox
+from osuawa import OsuPlaylist, Osuawa
 
 st.set_page_config(page_title=_("Playlist generator") + " - osuawa")
-with st.sidebar:
-    memorized_selectbox("lang", "uni_lang", LANGUAGES, 0)
 
 if not os.path.exists("./static/uploaded"):
     os.makedirs("./static/uploaded")
 
-st.write(_("1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/account/edit))"))
-client_id = st.text_input(_("Client ID"), key="gen_client_id")
-if not client_id.isdigit():
-    st.error(_("Client ID must be an integer"))
-client_secret = st.text_input(_("Client Secret"), key="gen_client_secret")
-st.divider()
-st.write(_("2. **Upload a playlist source file.**"))
-uploaded_file = st.file_uploader(_("Choose a file"), type=["properties"])
+
+@st.cache_data
+def convert_df(df: pd.DataFrame, filename: str):
+    df.to_csv(filename, encoding="utf-8")
+
+
+@st.cache_data
+def generate_playlist(playlist_filename: str):
+    st.session_state.awa: Osuawa
+    playlist = OsuPlaylist(st.session_state.awa.client, playlist_filename)
+    return playlist.generate()
+
+
+uploaded_file = st.file_uploader(_("Choose a file"), type=["properties"], key="gen_uploaded_file")
 if uploaded_file is None:
     st.error(_("Please upload a file first."))
-elif not client_id or not client_secret:
-    st.error(_("Please enter your client ID and secret first."))
 else:
     playlist_name = os.path.splitext(uploaded_file.name)[0]
     uid = UUID(get_script_run_ctx().session_id).hex
@@ -37,23 +38,48 @@ else:
     playlist_filename = "./static/uploaded/%s/%s.properties" % (uid, playlist_name)
     html_filename = "./static/uploaded/%s/%s.html" % (uid, playlist_name)
     covers_dir = "./static/uploaded/%s/%s.covers" % (uid, playlist_name)
+    csv_filename = "./static/uploaded/%s/%s.csv" % (uid, playlist_name)
+    css_filename = "./static/uploaded/%s/%s.css" % (uid, playlist_name)
     zip_filename = "./static/uploaded/%s.zip" % uid
-    st.write(_("using filename: %s") % playlist_filename)
+    st.write(_("using filename: %s") % playlist_filename.replace("./static/", "app/static/"))
     content = uploaded_file.getvalue()
 
     table = pd.DataFrame()
     with open(playlist_filename, "wb") as fo:
         fo.write(content)
-    client = Osuawa.create_client_credential_grant_client(int(client_id), client_secret)
     try:
-        table = OsuPlaylist(client, playlist_filename).generate()
+        table = generate_playlist(playlist_filename)
     except Exception as e:
         st.error(e)
     else:
         st.divider()
-        st.write(_("3. **Preview and download the generated resources.**"))
         for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
             st.image(os.path.join(covers_dir, pic), caption=pic, use_column_width=True)
+        convert_df(table, csv_filename)
+        with open(css_filename, "w") as fo:
+            fo.write(
+                """body {
+  background-color: #1f1f1f;
+}
+
+.pd {
+  border-collapse: collapse;
+  border: #1c1c1c;
+  color: white;
+  font-family: monospace;
+}
+
+.pd td,
+th {
+  padding: 5px;
+}
+
+.pd tr:hover {
+  background: #303030;
+  /* font-weight: bold; */
+}
+                """
+            )
         st.dataframe(table, hide_index=True)
         compress_as_zip(session_path, zip_filename)
         with open(zip_filename, "rb") as zipfi:

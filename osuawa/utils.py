@@ -61,7 +61,7 @@ def get_username(client, user: int) -> str:
 def get_beatmap_dict(client: Client, bids: Sequence[int]) -> dict[int, Beatmap]:
     beatmaps_dict = {}
     for i in range(0, len(bids), 50):
-        bs_current = client.get_beatmaps(bids[i: i + 50])
+        bs_current = client.get_beatmaps(bids[i : i + 50])
         for b_current in bs_current:
             beatmaps_dict[b_current.id] = b_current
     return beatmaps_dict
@@ -229,7 +229,6 @@ def calc_difficulty_and_performance(osu_tools_path: str, beatmap: int, mods: lis
         # use osu-tools cli to cache the .osu file
         subprocess.run(
             "dotnet run -- difficulty %d" % beatmap,
-            shell=True,
             cwd=perf_calc_path,
             capture_output=True,
             encoding="utf-8",
