@@ -4,8 +4,6 @@
 
 我用到的和 osu! 相关的工具（支持 Lazer 数据！）
 
-（bot 们什么时候才支持 v2 API 呢？）
-
 ## 软件要求
 
 Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)

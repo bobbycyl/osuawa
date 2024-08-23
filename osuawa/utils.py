@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
-import pandas as pd
 import rosu_pp_py as rosu
 import streamlit as st
 from osu import Client
@@ -21,8 +20,8 @@ def save_value(key: str) -> None:
     st.session_state["_%s_value" % key] = st.session_state[key]
 
 
-def save_index(data: pd.DataFrame, key: str) -> None:
-    st.session_state["_%s_value" % key] = pd.Index.get_loc(data.columns, st.session_state[key])
+def save_index(options, key: str) -> None:
+    st.session_state["_%s_value" % key] = list(options).index(st.session_state[key])
 
 
 def load_value(key: str, default_value: Any) -> Any:
@@ -31,12 +30,12 @@ def load_value(key: str, default_value: Any) -> Any:
     return st.session_state["_%s_value" % key]
 
 
-def memorized_multiselect(label: str, key: str, data: pd.DataFrame, default_value: Any) -> None:
-    st.multiselect(label, data.columns, default=load_value(key, default_value), key=key, on_change=save_value, args=[key])
+def memorized_multiselect(label: str, key: str, options, default_value: Any) -> None:
+    st.multiselect(label, options, default=load_value(key, default_value), key=key, on_change=save_value, args=[key])
 
 
-def memorized_selectbox(label: str, key: str, data: pd.DataFrame, default_value: Any) -> None:
-    st.selectbox(label, data.columns, index=load_value(key, default_value), key=key, on_change=save_index, args=[data, key])
+def memorized_selectbox(label: str, key: str, options, default_value: Any) -> None:
+    st.selectbox(label, options, index=load_value(key, default_value), key=key, on_change=save_index, args=[options, key])
 
 
 def user_to_dict(user: UserCompact) -> dict[str, Any]:

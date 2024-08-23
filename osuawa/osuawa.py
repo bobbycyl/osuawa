@@ -1,5 +1,7 @@
+import ctypes
 import os
 import os.path
+import platform
 import re
 import zipfile
 from enum import Enum, unique
@@ -11,13 +13,27 @@ import orjson
 import pandas as pd
 import rosu_pp_py as rosu
 import streamlit as st
+
+if platform.system() == "Windows":
+    fribidi = ctypes.CDLL("./osuawa/fribidi-0.dll")
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
 from clayutil.futil import Downloader, Properties, compress_as_zip, filelock
 from clayutil.validator import OneOf
 from fontfallback import writing
 from osu import AuthHandler, Client, GameModeStr, Scope
 
-from .utils import Beatmap, OsuDifficultyAttribute, calc_beatmap_attributes, calc_star_rating_color, get_beatmap_dict, get_username, score_info_list, user_to_dict
+from .utils import (
+    Beatmap,
+    OsuDifficultyAttribute,
+    calc_beatmap_attributes,
+    calc_star_rating_color,
+    get_beatmap_dict,
+    get_username,
+    score_info_list,
+    user_to_dict,
+)
+
+LANGUAGES = ["en_US", "zh_CN"]
 
 
 @unique
@@ -156,7 +172,7 @@ class Osuawa(object):
             # concatenate
             len_local = 0
             if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
-                with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")) as fi:
+                with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"), encoding="utf-8") as fi:
                     recent_scores_compact_old = orjson.loads(fi.read())
                 len_local = len(recent_scores_compact_old)
                 recent_scores_compact = {
@@ -215,6 +231,9 @@ class BeatmapCover(object):
         self.block_color = block_color
         self.stars1 = stars1
         self.stars2 = stars2
+        self.stars = "󰓎 %.2f" % self.stars1
+        if self.stars2 is not None:
+            self.stars = "%s (%.2f)" % (self.stars, self.stars2)
         self.cs = cs
         self.ar = ar
         self.od = od
@@ -285,22 +304,16 @@ class BeatmapCover(object):
         draw.text((264, 290), b.beatmapset.creator, font=ImageFont.truetype(font=self.font_mono_regular, size=36), fill=(180, 235, 250))
 
         # 在右上角绘制星数
-        stars = "󰓎 %.2f" % self.stars1
-        if self.stars2 is not None:
-            stars = "%s (%.2f)" % (stars, self.stars2)
         text_pos = 408
         padding = 28
-        text_len = draw.textlength(stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
+        text_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
         draw.rounded_rectangle([len_set + text_pos - text_len - padding, 22, len_set + text_pos + padding, 96], 72, fill="#1f1f1f")
         draw.rounded_rectangle([len_set + text_pos - text_len - padding, 20, len_set + text_pos + padding, 94], 72, fill=calc_star_rating_color(self.stars1))
 
-        # draw.text((len_set + 50, 18), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#1f1f1f")
         if self.stars1 > 6.5:  # white text
-            draw.text((len_set + text_pos, 27), stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#f0dd55")
-            # draw.text((len_set + text_pos + 1, 17), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#f0dd55")
+            draw.text((len_set + text_pos, 27), self.stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#f0dd55")
         else:  # black text
-            draw.text((len_set + text_pos, 27), stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#000000")
-            # draw.text((len_set + text_pos + 1, 17), stars, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="#000000")
+            draw.text((len_set + text_pos, 27), self.stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#000000")
 
         # 在右侧从下到上依次绘制CS AR OD 󰟚 󱑓 󰺕
         draw_list1: list[tuple[str, str]] = [("OD", self.od), ("AR", self.ar), ("CS", self.cs)]
@@ -335,6 +348,7 @@ class OsuPlaylist(object):
         self.playlist_filename = playlist_filename
         self.suffix = suffix
         self.footer = p.pop("footer") if "footer" in p else ""
+        self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
         parsed_beatmap_list = []
 
         # pop p from end until empty
@@ -345,7 +359,11 @@ class OsuPlaylist(object):
                 current_parsed_beatmap["notes"] += v.lstrip("#").lstrip(" ")
             else:
                 current_parsed_beatmap["bid"] = int(k)
-                current_parsed_beatmap["mods"] = str(v)
+                if self.custom_columns:
+                    for column in self.custom_columns:
+                        current_parsed_beatmap[column] = str(v)
+                else:
+                    current_parsed_beatmap["mods"] = str(v)
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
@@ -396,8 +414,8 @@ class OsuPlaylist(object):
                 beatmapset_dir = os.path.join(self.tmp_dir, str(b.beatmapset_id))
                 with zipfile.ZipFile(beatmapset_filename, "r") as zipf:
                     zipf.extractall(beatmapset_dir)
-                if os.path.exists(os.path.join(beatmapset_dir, "%s/" % self.osz_type)):
-                    beatmapset_dir = os.path.join(beatmapset_dir, "%s/" % self.osz_type)
+                if os.path.exists(os.path.join(beatmapset_dir, "%s" % self.osz_type)):
+                    beatmapset_dir = os.path.join(beatmapset_dir, "%s" % self.osz_type)
                 if os.path.exists(os.path.join(beatmapset_dir, str(b.beatmapset_id))):
                     beatmapset_dir = os.path.join(beatmapset_dir, str(b.beatmapset_id))
                 found_beatmap_filename = ""
@@ -405,7 +423,7 @@ class OsuPlaylist(object):
                     found_beatmap_filename = "%s - %s (%s) [%s].osu" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version)
                 for beatmap_filename in os.listdir(beatmapset_dir):
                     try:
-                        with open(os.path.join(beatmapset_dir, beatmap_filename)) as osuf:
+                        with open(os.path.join(beatmapset_dir, beatmap_filename), encoding="utf-8") as osuf:
                             for line in osuf:
                                 if line[:9] == "BeatmapID":
                                     if line.lstrip("BeatmapID:").rstrip("\n") == str(bid):
@@ -448,24 +466,48 @@ class OsuPlaylist(object):
                 # 保存数据
                 img_src = "./" + (os.path.relpath(cover_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")
                 img_link = "https://osu.ppy.sh/b/%d" % b.id
-                playlist.append(
-                    {
-                        "#": i,
-                        "BID": b.id,
-                        # "SID": b.beatmapset_id,
-                        "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>' % (img_link, img_src, b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
-                        "Mods": "; ".join(mods_ready),
-                        "Notes": notes,
-                    }
-                )
+                cur_b = {
+                    "#": i,
+                    "BID": b.id,
+                    "SID": b.beatmapset_id,
+                    "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>' % (img_link, img_src, b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
+                    "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
+                    "Stars": cover.stars,
+                    "BPM": cover.bpm,
+                    "Hit Length": cover.hit_length,
+                    "Max Combo": cover.max_combo,
+                    "CS": cover.cs,
+                    "AR": cover.ar,
+                    "OD": cover.od,
+                    "Mods": "; ".join(mods_ready),
+                    "Notes": notes,
+                }
+                for column in self.custom_columns:
+                    if column == "mods":
+                        continue
+                    else:
+                        cur_b[column] = element[column]
+                playlist.append(cur_b)
                 b_writer.text(_("%16d: finished") % bid)
 
                 sleep(0.5)
                 rmtree(beatmapset_dir)
-            df = pd.DataFrame(playlist)
+            df_columns = ["#", "BID", "Beatmap Info", "Mods"]
+            df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "Stars", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
+            for column in self.custom_columns:
+                if column == "mods":
+                    continue
+                else:
+                    df_columns.append(column)
+                    df_standalone_columns.append(column)
+            df_columns.append("Notes")
+            df_standalone_columns.append("Notes")
+            df = pd.DataFrame(playlist, columns=df_columns)
+            df_standalone = pd.DataFrame(playlist, columns=df_standalone_columns)
             df.sort_values(by=["#"], inplace=True)
+            df_standalone.sort_values(by=["#"], inplace=True)
             pd.set_option("colheader_justify", "center")
-            html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body style="background-color:#1f1f1f">{table}<footer>%s</footer></body></html>' % (
+            html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body>{table}<footer>%s</footer></body></html>' % (
                 self.playlist_name,
                 self.suffix,
                 self.footer,
@@ -477,14 +519,14 @@ class OsuPlaylist(object):
                 # 生成课题压缩包
                 if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
                     os.mkdir(Path.OUTPUT_DIRECTORY.value)
-                df.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
+                df_standalone.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
                 compress_as_zip(self.tmp_dir, "./output/%s.zip" % self.playlist_name)
 
             # 清理临时文件夹
             rmtree(self.tmp_dir)
 
             status.update(label=_("generated %s") % self.playlist_name, state="complete", expanded=False)
-        return df
+        return df_standalone
 
     @staticmethod
     def convert_legacy(legacy_playlist_filename: str):

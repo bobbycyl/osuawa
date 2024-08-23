@@ -6,13 +6,15 @@ import streamlit as st
 from clayutil.futil import compress_as_zip
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import OsuPlaylist, Osuawa
+from osuawa import LANGUAGES, OsuPlaylist, Osuawa
+from osuawa.utils import memorized_selectbox
 
 st.set_page_config(page_title=_("Playlist generator") + " - osuawa")
+with st.sidebar:
+    memorized_selectbox("lang", "uni_lang", LANGUAGES, 0)
+
 if not os.path.exists("./static/uploaded"):
     os.makedirs("./static/uploaded")
-if "content" not in st.session_state:
-    st.session_state.content = b""
 
 st.write(_("1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/account/edit))"))
 client_id = st.text_input(_("Client ID"), key="gen_client_id")
@@ -39,22 +41,20 @@ else:
     st.write(_("using filename: %s") % playlist_filename)
     content = uploaded_file.getvalue()
 
-    if st.session_state.content != content:
-        st.session_state.content = content
-        with open(playlist_filename, "wb") as fo:
-            fo.write(st.session_state.content)
-        client = Osuawa.create_client_credential_grant_client(int(client_id), client_secret)
-        try:
-            st.session_state.table = OsuPlaylist(client, playlist_filename).generate()
-        except Exception as e:
-            st.error(e)
-            st.session_state.table = pd.DataFrame()
-            st.stop()
-    st.divider()
-    st.write(_("3. **Preview and download the generated resources.**"))
-    for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
-        st.image(os.path.join(covers_dir, pic), caption=pic, use_column_width=True)
-    st.dataframe(st.session_state.table, hide_index=True)
-    compress_as_zip(session_path, zip_filename)
-    with open(zip_filename, "rb") as zipfi:
-        st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zipfi)
+    table = pd.DataFrame()
+    with open(playlist_filename, "wb") as fo:
+        fo.write(content)
+    client = Osuawa.create_client_credential_grant_client(int(client_id), client_secret)
+    try:
+        table = OsuPlaylist(client, playlist_filename).generate()
+    except Exception as e:
+        st.error(e)
+    else:
+        st.divider()
+        st.write(_("3. **Preview and download the generated resources.**"))
+        for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
+            st.image(os.path.join(covers_dir, pic), caption=pic, use_column_width=True)
+        st.dataframe(table, hide_index=True)
+        compress_as_zip(session_path, zip_filename)
+        with open(zip_filename, "rb") as zipfi:
+            st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zipfi)
