@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from osuawa import LANGUAGES, Path
+from osuawa import Path
 from osuawa.utils import memorized_multiselect, memorized_selectbox
 
 if "wide_layout" in st.session_state:
@@ -11,7 +11,6 @@ if "wide_layout" in st.session_state:
 else:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
 with st.sidebar:
-    memorized_selectbox("lang", "lang", LANGUAGES, 0)
     st.toggle(_("wide page layout"), key="wide_layout", value=False)
 user = st.selectbox(_("user"), [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
 

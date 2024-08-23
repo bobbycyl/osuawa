@@ -7,8 +7,6 @@ import streamlit as st
 
 from osuawa import LANGUAGES, Path
 
-DEBUG_MODE = False  # switch to False when deploying
-
 
 def gettext_getfunc(lang):
     def translate(text):
@@ -39,7 +37,9 @@ pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
 pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist generator"))
 pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
-pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder])
+if "awa" in st.session_state:
+    pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder])
+else:
+    pg = st.navigation([pg_homepage, pg_score_visualizer])
 
-st.session_state.DEBUG_MODE = DEBUG_MODE
 pg.run()

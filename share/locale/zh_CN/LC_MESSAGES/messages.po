@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-08-06 14:58+0800\n"
-"PO-Revision-Date: 2024-08-06 14:58+0800\n"
+"POT-Creation-Date: 2024-08-23 17:46+0800\n"
+"PO-Revision-Date: 2024-08-23 16:28+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -17,9 +17,9 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.14.0\n"
-"X-Generator: Poedit 3.4.2\n"
+"X-Generator: Poedit 3.4.4\n"
 
-#: Home.py:31 app.py:37
+#: Home.py:31 app.py:36
 msgid "Homepage"
 msgstr "主页"
 
@@ -28,238 +28,202 @@ msgstr "主页"
 msgid "uncaught exception: %s"
 msgstr "未捕获异常：%s"
 
-#: Home.py:62
+#: Home.py:58
 msgid "registering a client..."
 msgstr "正在注册客户端……"
 
-#: Home.py:70
+#: Home.py:66
 msgid "register command parser"
 msgstr "注册命令解析器"
 
-#: Home.py:77
+#: Home.py:73
 msgid "get user info"
 msgstr "获取用户信息"
 
-#: Home.py:84
+#: Home.py:80
 msgid "save user recent scores"
 msgstr "保存用户最近分数"
 
-#: Home.py:91
+#: Home.py:87
 msgid "update user recent scores"
 msgstr "更新用户最近分数"
 
-#: Home.py:101
+#: Home.py:97
 msgid "get and show score"
 msgstr "展示分数"
 
-#: Home.py:104
+#: Home.py:100
 msgid "get and show user scores of a beatmap"
 msgstr "展示用户谱面分数"
 
-#: Home.py:111
+#: Home.py:107
 msgid "generate local playlists"
 msgstr "生成本地课题"
 
-#: Home.py:116
-msgid "select language"
-msgstr "选择语言"
-
-#: Home.py:117
+#: Home.py:112
 msgid "show user recent scores"
 msgstr "展示用户最近分数"
 
-#: Home.py:128
+#: Home.py:123
 msgid ""
 "Use `reg {\"token\": \"<token>\"}` to pass the token, or `reg {\"refresh\": "
 "\"true\"}` to refresh the client."
 msgstr ""
-"使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌，或使用 `reg "
-"{\"refresh\": \"true\"}` 以刷新客户端。"
+"使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌，或使用 `reg {\"refresh"
+"\": \"true\"}` 以刷新客户端。"
 
-#: Home.py:132
+#: Home.py:127
 msgid "token matched"
 msgstr "令牌验证通过"
 
-#: Home.py:134
+#: Home.py:129
 msgid "token mismatched"
 msgstr "令牌验证失败"
 
-#: Home.py:138
+#: Home.py:133
 msgid "token generated"
 msgstr "令牌已生成"
 
-#: Home.py:139
+#: Home.py:134
 msgid ""
 "You need to ask the web admin for the session token to unlock the full "
 "features."
 msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。"
 
-#: Home.py:142
+#: Home.py:137
 msgid "client refreshed"
 msgstr "客户端已刷新"
 
-#: Home.py:146
-msgid "**WARNING: DEBUG MODE ON**"
-msgstr "**警告：调试模式已开启**"
-
-#: Home.py:176
+#: Home.py:170
 #, python-format
 msgid "user %d not found"
 msgstr "用户 %d 不存在"
 
-#: Home.py:192
+#: Home.py:197
 msgid "preparing for the next command..."
 msgstr "请稍候……"
 
-#: Home.py:199
-msgid "invalid code"
-msgstr "无效授权码"
-
-#: Home.py:222
+#: Home.py:208
 msgid "Type 'help' to get started."
 msgstr "键入“help”以开始。"
 
-#: Home.py:238
+#: Home.py:229
+msgid "invalid code"
+msgstr "无效授权码"
+
+#: Home.py:232
+msgid "Welcome!"
+msgstr "欢迎使用！"
+
+#: Home.py:239
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:38 tools/Score_visualizer.py:10 tools/Score_visualizer.py:12
+#: app.py:37 tools/Score_visualizer.py:10 tools/Score_visualizer.py:12
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:39 tools/Playlist_generator.py:11
+#: app.py:38 tools/Playlist_generator.py:11
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:40
+#: app.py:39
 msgid "Recorder"
 msgstr "看记录"
 
-#: osuawa/osuawa.py:40
+#: osuawa/osuawa.py:57
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: osuawa/osuawa.py:41
+#: osuawa/osuawa.py:58
 msgid "OAuth2 url"
 msgstr "授权链接"
 
-#: osuawa/osuawa.py:133
+#: osuawa/osuawa.py:150
 #, python-format
 msgid "saving recent scores of %d"
 msgstr "正在保存 %d 的最近分数"
 
-#: osuawa/osuawa.py:134
+#: osuawa/osuawa.py:151
 msgid "getting scores..."
 msgstr "获取分数……"
 
-#: osuawa/osuawa.py:155
+#: osuawa/osuawa.py:172
 msgid "merging scores..."
 msgstr "合并分数……"
 
-#: osuawa/osuawa.py:168
+#: osuawa/osuawa.py:185
 msgid "calculating difficulty attributes..."
 msgstr "计算难度……"
 
-#: osuawa/osuawa.py:176
+#: osuawa/osuawa.py:193
 #, python-format
 msgid "calculating difficulty attributes... %d/%d (%d unique)"
 msgstr "计算难度…… %d/%d（%d 唯一项）"
 
-#: osuawa/osuawa.py:193
+#: osuawa/osuawa.py:210
 #, python-format
 msgid "recent scores of %d saved"
 msgstr "已保存 %d 的最近分数"
 
-#: osuawa/osuawa.py:369
+#: osuawa/osuawa.py:388
 #, python-format
 msgid "generating %s"
 msgstr "正在生成 %s"
 
-#: osuawa/osuawa.py:394
+#: osuawa/osuawa.py:413
 #, python-format
 msgid "%16d: downloading the beatmapset..."
 msgstr "%16d：下载谱面……"
 
-#: osuawa/osuawa.py:419
+#: osuawa/osuawa.py:438
 #, python-format
 msgid "beatmap %s not found"
 msgstr "谱面难度 %s 不存在"
 
-#: osuawa/osuawa.py:421
+#: osuawa/osuawa.py:440
 #, python-format
 msgid "%16d: calculating difficulty..."
 msgstr "%16d：计算难度……"
 
-#: osuawa/osuawa.py:444
+#: osuawa/osuawa.py:463
 #, python-format
 msgid "%16d: drawing the cover..."
 msgstr "%16d：绘制封面……"
 
-#: osuawa/osuawa.py:461
+#: osuawa/osuawa.py:494
 #, python-format
 msgid "%16d: finished"
 msgstr "%16d：完成"
 
-#: osuawa/osuawa.py:486
+#: osuawa/osuawa.py:531
 #, python-format
 msgid "generated %s"
 msgstr "已生成 %s"
 
-#: tools/Playlist_generator.py:17
-msgid ""
-"1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/"
-"account/edit))"
-msgstr ""
-"1. **输入您的开放授权客户端凭据** ([前往获取](https://osu.ppy.sh/home/"
-"account/edit))"
-
-#: tools/Playlist_generator.py:18
-msgid "Client ID"
-msgstr "客户端 ID"
-
-#: tools/Playlist_generator.py:20
-msgid "Client ID must be an integer"
-msgstr "客户端 ID 须为整型"
-
-#: tools/Playlist_generator.py:21
-msgid "Client Secret"
-msgstr "客户端密钥"
-
-#: tools/Playlist_generator.py:23
-msgid "2. **Upload a playlist source file.**"
-msgstr "2. **上传一个谱面源文件**"
-
-#: tools/Playlist_generator.py:24
+#: tools/Playlist_generator.py:29
 msgid "Choose a file"
 msgstr "选择文件"
 
-#: tools/Playlist_generator.py:26
+#: tools/Playlist_generator.py:31
 msgid "Please upload a file first."
 msgstr "请先上传文件。"
 
-#: tools/Playlist_generator.py:28
-msgid "Please enter your client ID and secret first."
-msgstr "请先填写您的客户端 ID 和密钥。"
-
-#: tools/Playlist_generator.py:39
+#: tools/Playlist_generator.py:44
 #, python-format
 msgid "using filename: %s"
 msgstr "使用文件名：%s"
 
-#: tools/Playlist_generator.py:54
-msgid "3. **Preview and download the generated resources.**"
-msgstr "3. **预览和下载生成的资源**"
-
-#: tools/Playlist_generator.py:60
+#: tools/Playlist_generator.py:86
 msgid "Download the resources"
 msgstr "下载资源"
 
-#: tools/Recorder.py:9
+#: tools/Recorder.py:8
 msgid "Ruleset"
 msgstr "游戏模式"
 
-#: tools/Recorder.py:10
+#: tools/Recorder.py:9
 msgid "Limit"
 msgstr "数量限制"
 
@@ -267,10 +231,6 @@ msgstr "数量限制"
 #, python-format
 msgid "Next update in %d seconds"
 msgstr "%d秒后更新"
-
-#: tools/Recorder.py:30
-msgid "Permission denied"
-msgstr "无权限"
 
 #: tools/Score_visualizer.py:14
 msgid "wide page layout"
@@ -320,27 +280,56 @@ msgstr "设置点的大小"
 msgid "## filtered data"
 msgstr "## 目前筛选数据"
 
-#: venv/lib/python3.12/site-packages/nuitka/build/inline_copy/lib/scons-3.1.2/SCons/Script/SConsOptions.py:307
-#, python-format
-msgid "%s option requires an argument"
-msgstr "%s 选项需要一个参数"
+#~ msgid "select language"
+#~ msgstr "选择语言"
 
-#: venv/lib/python3.12/site-packages/nuitka/build/inline_copy/lib/scons-3.1.2/SCons/Script/SConsOptions.py:309
-#, python-format
-msgid "%s option requires an argument "
-msgstr "%s 选项需要一个参数"
+#~ msgid "**WARNING: DEBUG MODE ON**"
+#~ msgstr "**警告：调试模式已开启**"
 
-#: venv/lib/python3.12/site-packages/nuitka/build/inline_copy/lib/scons-3.1.2/SCons/Script/SConsOptions.py:311
-#, python-format
-msgid "(choose from %s), "
-msgstr "（从 %s 中选择），"
+#~ msgid ""
+#~ "1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/"
+#~ "account/edit))"
+#~ msgstr ""
+#~ "1. **输入您的开放授权客户端凭据** ([前往获取](https://osu.ppy.sh/home/"
+#~ "account/edit))"
 
-#: venv/lib/python3.12/site-packages/nuitka/build/inline_copy/lib/scons-3.1.2/SCons/Script/SConsOptions.py:314
-#, python-format
-msgid "%s option requires %d arguments"
-msgstr "%s 选项需要 %d 个参数"
+#~ msgid "Client ID"
+#~ msgstr "客户端 ID"
 
-#: venv/lib/python3.12/site-packages/nuitka/build/inline_copy/lib/scons-3.1.2/SCons/Script/SConsOptions.py:323
+#~ msgid "Client ID must be an integer"
+#~ msgstr "客户端 ID 须为整型"
+
+#~ msgid "Client Secret"
+#~ msgstr "客户端密钥"
+
+#~ msgid "2. **Upload a playlist source file.**"
+#~ msgstr "2. **上传一个谱面源文件**"
+
+#~ msgid "Please enter your client ID and secret first."
+#~ msgstr "请先填写您的客户端 ID 和密钥。"
+
+#~ msgid "3. **Preview and download the generated resources.**"
+#~ msgstr "3. **预览和下载生成的资源**"
+
+#~ msgid "Permission denied"
+#~ msgstr "无权限"
+
 #, python-format
-msgid "%s option does not take a value"
-msgstr "%s 选项未接受到值"
+#~ msgid "%s option requires an argument"
+#~ msgstr "%s 选项需要一个参数"
+
+#, python-format
+#~ msgid "%s option requires an argument "
+#~ msgstr "%s 选项需要一个参数"
+
+#, python-format
+#~ msgid "(choose from %s), "
+#~ msgstr "（从 %s 中选择），"
+
+#, python-format
+#~ msgid "%s option requires %d arguments"
+#~ msgstr "%s 选项需要 %d 个参数"
+
+#, python-format
+#~ msgid "%s option does not take a value"
+#~ msgstr "%s 选项未接受到值"
