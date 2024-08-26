@@ -4,6 +4,8 @@
 
 我用到的和 osu! 相关的工具（支持 Lazer 数据！）
 
+现已上线工具：查成分、做课题和看记录
+
 ## 软件要求
 
 Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
