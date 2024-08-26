@@ -6,6 +6,8 @@
 
 just some useful tools for osu! (Lazer data supported!)
 
+current tools: Score Visualizer, Playlist Generator and Recorder
+
 ## Requirements
 
 Python 3.12, Rust (for [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
