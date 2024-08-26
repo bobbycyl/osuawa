@@ -196,31 +196,6 @@ with st.sidebar:
 if "awa" in st.session_state:
     with st.spinner(_("preparing for the next command...")):
         time.sleep(1.5)
-
-    if "delete_line" not in st.session_state:
-        st.session_state["delete_line"] = True
-    if "counter" not in st.session_state:
-        st.session_state["counter"] = 0
-    if st.session_state["delete_line"]:
-        st.session_state["input"] = ""
-        st.session_state["delete_line"] = False
-
-    y = st.text_input("> ", key="input", on_change=submit, placeholder=_("Type 'help' to get started."))
-
-    html(
-        f"""<script>
-        var input = window.parent.document.querySelectorAll("input[type=text]");
-        for (var i = 0; i < input.length; ++i) {{
-            input[i].focus();
-        }}
-    </script>
-    """,
-        height=0,
-    )
-
-    if y:
-        st.text(y)
-
 else:
     if "code" in st.query_params:
         try:
@@ -230,10 +205,35 @@ else:
             st.session_state.awa = register_awa()
         else:
             st.success(_("Welcome!"))
-            init_logger()
-            register_commands({"simple": True})
     else:
         st.session_state.awa = register_awa()
     st.rerun()
+
+init_logger()
+register_commands({"simple": True})
+
+if "delete_line" not in st.session_state:
+    st.session_state["delete_line"] = True
+if "counter" not in st.session_state:
+    st.session_state["counter"] = 0
+if st.session_state["delete_line"]:
+    st.session_state["input"] = ""
+    st.session_state["delete_line"] = False
+
+y = st.text_input("> ", key="input", on_change=submit, placeholder=_("Type 'help' to get started."))
+
+html(
+    f"""<script>
+    var input = window.parent.document.querySelectorAll("input[type=text]");
+    for (var i = 0; i < input.length; ++i) {{
+        input[i].focus();
+    }}
+</script>
+""",
+    height=0,
+)
+
+if y:
+    st.text(y)
 
 st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)
