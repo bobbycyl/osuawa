@@ -370,7 +370,7 @@ class OsuPlaylist(object):
 
         beatmap_dict = get_beatmap_dict(self.client, [int(x["bid"]) for x in parsed_beatmap_list])
         for element in parsed_beatmap_list:
-            element["notes"] = element["notes"].rstrip("\n")
+            element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br>")
             element["beatmap"] = beatmap_dict[element["bid"]]
         self.beatmap_list = parsed_beatmap_list
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
@@ -422,13 +422,15 @@ class OsuPlaylist(object):
                 found_beatmap_filename = ""
                 if "%s - %s (%s) [%s].osu" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version) in os.listdir(beatmapset_dir):
                     found_beatmap_filename = "%s - %s (%s) [%s].osu" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version)
-                for beatmap_filename in os.listdir(beatmapset_dir):
+                for j in os.listdir(beatmapset_dir):
+                    if os.path.isdir(os.path.join(beatmapset_dir, j)):
+                        continue
                     try:
-                        with open(os.path.join(beatmapset_dir, beatmap_filename), encoding="utf-8") as osuf:
+                        with open(os.path.join(beatmapset_dir, j), encoding="utf-8") as osuf:
                             for line in osuf:
                                 if line[:9] == "BeatmapID":
                                     if line.lstrip("BeatmapID:").rstrip("\n") == str(bid):
-                                        found_beatmap_filename = beatmap_filename
+                                        found_beatmap_filename = j
                                         break
                     except UnicodeDecodeError:
                         continue
