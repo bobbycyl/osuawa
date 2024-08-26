@@ -14,12 +14,12 @@ if not os.path.exists("./static/uploaded"):
     os.makedirs("./static/uploaded")
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def convert_df(df: pd.DataFrame, filename: str):
     df.to_csv(filename, encoding="utf-8")
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def generate_playlist(playlist_filename: str):
     st.session_state.awa: Osuawa
     playlist = OsuPlaylist(st.session_state.awa.client, playlist_filename)
