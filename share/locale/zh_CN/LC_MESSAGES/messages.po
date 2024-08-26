@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-08-23 17:46+0800\n"
+"POT-Creation-Date: 2024-08-27 01:10+0800\n"
 "PO-Revision-Date: 2024-08-23 16:28+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -103,24 +103,24 @@ msgstr "用户 %d 不存在"
 msgid "preparing for the next command..."
 msgstr "请稍候……"
 
-#: Home.py:208
-msgid "Type 'help' to get started."
-msgstr "键入“help”以开始。"
-
-#: Home.py:229
+#: Home.py:204
 msgid "invalid code"
 msgstr "无效授权码"
 
-#: Home.py:232
+#: Home.py:207
 msgid "Welcome!"
 msgstr "欢迎使用！"
+
+#: Home.py:223
+msgid "Type 'help' to get started."
+msgstr "键入“help”以开始。"
 
 #: Home.py:239
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:37 tools/Score_visualizer.py:10 tools/Score_visualizer.py:12
+#: app.py:37 tools/Score_visualizer.py:11 tools/Score_visualizer.py:13
 msgid "Score visualizer"
 msgstr "查成分"
 
@@ -177,27 +177,27 @@ msgstr "正在生成 %s"
 msgid "%16d: downloading the beatmapset..."
 msgstr "%16d：下载谱面……"
 
-#: osuawa/osuawa.py:438
+#: osuawa/osuawa.py:440
 #, python-format
 msgid "beatmap %s not found"
 msgstr "谱面难度 %s 不存在"
 
-#: osuawa/osuawa.py:440
+#: osuawa/osuawa.py:442
 #, python-format
 msgid "%16d: calculating difficulty..."
 msgstr "%16d：计算难度……"
 
-#: osuawa/osuawa.py:463
+#: osuawa/osuawa.py:465
 #, python-format
 msgid "%16d: drawing the cover..."
 msgstr "%16d：绘制封面……"
 
-#: osuawa/osuawa.py:494
+#: osuawa/osuawa.py:496
 #, python-format
 msgid "%16d: finished"
 msgstr "%16d：完成"
 
-#: osuawa/osuawa.py:531
+#: osuawa/osuawa.py:533
 #, python-format
 msgid "generated %s"
 msgstr "已生成 %s"
@@ -232,51 +232,51 @@ msgstr "数量限制"
 msgid "Next update in %d seconds"
 msgstr "%d秒后更新"
 
-#: tools/Score_visualizer.py:14
+#: tools/Score_visualizer.py:15
 msgid "wide page layout"
 msgstr "宽页布局"
 
-#: tools/Score_visualizer.py:15
+#: tools/Score_visualizer.py:16
 msgid "user"
 msgstr "用户"
 
-#: tools/Score_visualizer.py:20
+#: tools/Score_visualizer.py:50
 msgid "user not found"
 msgstr "用户不存在"
 
-#: tools/Score_visualizer.py:24
+#: tools/Score_visualizer.py:54
 msgid "no scores found"
 msgstr "暂无本地分数"
 
-#: tools/Score_visualizer.py:27
+#: tools/Score_visualizer.py:57
 msgid "user profile"
 msgstr "用户主页"
 
-#: tools/Score_visualizer.py:29
+#: tools/Score_visualizer.py:59
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: tools/Score_visualizer.py:47
+#: tools/Score_visualizer.py:77
 msgid "## Scatter Plot"
 msgstr "## 散点图"
 
-#: tools/Score_visualizer.py:48
+#: tools/Score_visualizer.py:78
 msgid "date range"
 msgstr "日期范围"
 
-#: tools/Score_visualizer.py:50
+#: tools/Score_visualizer.py:80
 msgid "star rating"
 msgstr "难度星数"
 
-#: tools/Score_visualizer.py:52
+#: tools/Score_visualizer.py:82
 msgid "advanced filter"
 msgstr "高级筛选"
 
-#: tools/Score_visualizer.py:57
+#: tools/Score_visualizer.py:87
 msgid "enable scatter plot size parameter"
 msgstr "设置点的大小"
 
-#: tools/Score_visualizer.py:82
+#: tools/Score_visualizer.py:112
 msgid "## filtered data"
 msgstr "## 目前筛选数据"
 
