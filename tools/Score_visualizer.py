@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -13,6 +14,35 @@ else:
 with st.sidebar:
     st.toggle(_("wide page layout"), key="wide_layout", value=False)
 user = st.selectbox(_("user"), [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
+
+
+def calc_pp_overall_main(df: pd.DataFrame, tag: Optional[str] = None) -> str:
+    if tag is None:
+        df_tag = df
+    else:
+        df_tag = df[df[tag]]
+    return "%.2f (%.2f%%)" % (df_tag["pp"].sum(), df_tag["pp"].sum() / df["pp"].sum() * 100)
+
+
+def calc_pp_overall_if(df: pd.DataFrame, tag: Optional[str] = None) -> str:
+    if tag is None:
+        df_tag = df
+    else:
+        df_tag = df[df[tag]]
+    got_pp = df_tag["pp"].sum()
+    pp_100if = df_tag["b_pp_100if"].sum()
+    pp_95if = df_tag["b_pp_95if"].sum()
+    pp_80hif = df_tag["b_pp_80hif"].sum()
+    pp_80lif = df_tag["b_pp_80lif"].sum()
+    return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (got_pp / pp_100if * 100, got_pp / pp_95if * 100, got_pp / pp_80hif * 100, got_pp / pp_80lif * 100)
+
+
+def calc_pp_overall_count(df: pd.DataFrame, tag: Optional[str] = None) -> str:
+    if tag is None:
+        df_tag = df
+    else:
+        df_tag = df[df[tag]]
+    return "%d (%.2f%%)" % (len(df_tag), len(df_tag) / len(df) * 100)
 
 
 def main():
@@ -32,14 +62,15 @@ def main():
 
 got/100/95/80h/80l {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_95if"].sum():.2f}/{dfp["b_pp_80hif"].sum():.2f}/{dfp["b_pp_80lif"].sum():.2f}pp
 
-| Tag         | pp%                                                              | count%                                              |
-| ----------- | ---------------------------------------------------------------- | --------------------------------------------------- |
-| HD          |{df[df["is_hd"]]["pp"].sum() / df["pp"].sum() * 100:.2f}          | {len(df[df["is_hd"]]) / len(df) * 100:.2f}          |
-| High_AR     |{df[df["is_high_ar"]]["pp"].sum() / df["pp"].sum() * 100:.2f}     | {len(df[df["is_high_ar"]]) / len(df) * 100:.2f}     |
-| Low_AR      |{df[df["is_low_ar"]]["pp"].sum() / df["pp"].sum() * 100:.2f}      | {len(df[df["is_low_ar"]]) / len(df) * 100:.2f}      |
-| Very_Low_AR |{df[df["is_very_low_ar"]]["pp"].sum() / df["pp"].sum() * 100:.2f} | {len(df[df["is_very_low_ar"]]) / len(df) * 100:.2f} |
-| Speed_Up    |{df[df["is_speed_up"]]["pp"].sum() / df["pp"].sum() * 100:.2f}    | {len(df[df["is_speed_up"]]) / len(df) * 100:.2f}    |
-| Speed_Down  |{df[df["is_speed_down"]]["pp"].sum() / df["pp"].sum() * 100:.2f}  | {len(df[df["is_speed_down"]]) / len(df) * 100:.2f}  |
+| tag         | got                                          | if                                          | count                                         |
+| ----------- | -------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
+| HD          | {calc_pp_overall_main(df, "is_hd")}          | {calc_pp_overall_if(dfp, "is_hd")}          | {calc_pp_overall_count(df, "is_hd")}          |
+| High_AR     | {calc_pp_overall_main(df, "is_high_ar")}     | {calc_pp_overall_if(dfp, "is_high_ar")}     | {calc_pp_overall_count(df, "is_high_ar")}     |
+| Low_AR      | {calc_pp_overall_main(df, "is_low_ar")}      | {calc_pp_overall_if(dfp, "is_low_ar")}      | {calc_pp_overall_count(df, "is_low_ar")}      |
+| Very_Low_AR | {calc_pp_overall_main(df, "is_very_low_ar")} | {calc_pp_overall_if(dfp, "is_very_low_ar")} | {calc_pp_overall_count(df, "is_very_low_ar")} |
+| Speed_Up    | {calc_pp_overall_main(df, "is_speed_up")}    | {calc_pp_overall_if(dfp, "is_speed_up")}    | {calc_pp_overall_count(df, "is_speed_up")}    |
+| Speed_Down  | {calc_pp_overall_main(df, "is_speed_down")}  | {calc_pp_overall_if(dfp, "is_speed_down")}  | {calc_pp_overall_count(df, "is_speed_down")}  |
+| Total       | {calc_pp_overall_main(df)}                   | {calc_pp_overall_if(dfp)}                   | {calc_pp_overall_count(df)}                   |
 
 """
         )
