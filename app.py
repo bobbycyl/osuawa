@@ -1,7 +1,9 @@
 import builtins
+import ctypes
 import gettext
 import locale
 import os.path
+import platform
 
 import streamlit as st
 
@@ -27,6 +29,9 @@ if "translate" not in st.session_state:
         os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RAW_RECENT_SCORES.value))
         os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RECENT_SCORES.value))
     lang = locale.getlocale()[0]
+    if platform.system() == "Windows":
+        lang = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
+    st.session_state._uni_lang_value = LANGUAGES.index(lang)
 else:
     lang = LANGUAGES[st.session_state._uni_lang_value]
 

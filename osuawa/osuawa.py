@@ -50,17 +50,16 @@ class Osuawa(object):
     tz = "Asia/Shanghai"
 
     def __init__(self, oauth_filename: str, osu_tools_path: str, output_dir: str, code: str = None):
+        auth_url = None
         p = Properties(oauth_filename)
         p.load()
         auth = AuthHandler(p["client_id"], p["client_secret"], p["redirect_url"], Scope("public", "identify", "friends.read"))
         if code is None:
-            st.info(_("Please click the button below to authorize the app."))
-            st.link_button(_("OAuth2 url"), auth.get_auth_url())
-            exit(0)
+            auth_url = auth.get_auth_url()
         else:
             auth.get_auth_token(code)
+        self.auth_url = auth_url
         self.client = Client(auth)
-        st.session_state.user = self.client.get_own_data().username
         self.osu_tools_path = osu_tools_path
         if not os.path.exists(os.path.join(osu_tools_path, "PerformanceCalculator", "cache")):
             os.mkdir(os.path.join(osu_tools_path, "PerformanceCalculator", "cache"))
@@ -147,6 +146,7 @@ class Osuawa(object):
 
     @filelock(1)
     def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
+        # todo: 多线程
         with st.status(_("saving recent scores of %d") % user, expanded=True) as status:
             st.text(_("getting scores..."))
             # get
@@ -384,6 +384,7 @@ class OsuPlaylist(object):
             self.osz_type = "full"
 
     def generate(self) -> pd.DataFrame:
+        # todo: 异步
         playlist: list[dict] = []
         with st.status(_("generating %s") % self.playlist_name, expanded=True) as status:
             for i, element in enumerate(self.beatmap_list, start=1):
