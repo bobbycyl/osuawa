@@ -27,15 +27,17 @@ def save_index(options, key: str) -> None:
 def load_value(key: str, default_value: Any) -> Any:
     if "_%s_value" % key not in st.session_state:
         st.session_state["_%s_value" % key] = default_value
-    return st.session_state["_%s_value" % key]
+    st.session_state["key"] = st.session_state["_%s_value" % key]
 
 
 def memorized_multiselect(label: str, key: str, options, default_value: Any) -> None:
-    st.multiselect(label, options, default=load_value(key, default_value), key=key, on_change=save_value, args=[key])
+    load_value(key, default_value)
+    st.multiselect(label, options, default=st.session_state["_%s_value" % key], key=key, on_change=save_value, args=[key])
 
 
 def memorized_selectbox(label: str, key: str, options, default_value: Any) -> None:
-    st.selectbox(label, options, index=load_value(key, default_value), key=key, on_change=save_index, args=[options, key])
+    load_value(key, default_value)
+    st.selectbox(label, options, key=key, on_change=save_index, args=[options, key])
 
 
 def user_to_dict(user: UserCompact) -> dict[str, Any]:

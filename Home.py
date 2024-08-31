@@ -31,6 +31,11 @@ from osuawa.utils import memorized_selectbox
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
 
+def set_sidebar():
+    with st.sidebar:
+        memorized_selectbox("lang", "uni_lang", LANGUAGES, None)
+
+
 def run(g):
     while True:
         try:
@@ -38,9 +43,6 @@ def run(g):
         except CommandError as e:
             st.error(e)
             break  # use continue if you want to continue running the generator
-        except ValueError as e:
-            st.error(e)
-            break
         except StopIteration as e:
             st.success("%s done" % e.value)
             break
@@ -190,8 +192,8 @@ def submit():
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
-with st.sidebar:
-    memorized_selectbox("lang", "uni_lang", LANGUAGES, 0)
+
+set_sidebar()
 
 if "awa" in st.session_state:
     with st.spinner(_("preparing for the next command...")):
@@ -199,15 +201,19 @@ if "awa" in st.session_state:
 else:
     if "code" in st.query_params:
         try:
-            st.session_state.awa = register_awa(st.query_params.code)
+            awa = register_awa(st.query_params.code)
         except requests.exceptions.HTTPError:
             st.error(_("invalid code"))
-            st.session_state.awa = register_awa()
+            st.stop()
         else:
+            st.session_state.awa = awa
+            st.session_state.user = st.session_state.awa.client.get_own_data().username
             st.success(_("Welcome!"))
+            st.rerun()
     else:
-        st.session_state.awa = register_awa()
-    st.rerun()
+        st.info(_("Please click the button below to authorize the app."))
+        st.link_button(_("OAuth2 url"), register_awa().auth_url)
+        st.stop()
 
 init_logger()
 register_commands({"simple": True})
@@ -220,7 +226,7 @@ if st.session_state["delete_line"]:
     st.session_state["input"] = ""
     st.session_state["delete_line"] = False
 
-y = st.text_input("> ", key="input", on_change=submit, placeholder=_("Type 'help' to get started."))
+y = st.text_input("> ", key="input", on_change=submit, placeholder=_('Type "help" to get started.'))
 
 html(
     f"""<script>
