@@ -7,7 +7,7 @@ import platform
 
 import streamlit as st
 
-from osuawa import LANGUAGES, Path
+from osuawa import Path
 
 
 def gettext_getfunc(lang):
@@ -28,12 +28,18 @@ if "translate" not in st.session_state:
         os.mkdir(Path.OUTPUT_DIRECTORY.value)
         os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RAW_RECENT_SCORES.value))
         os.mkdir(os.path.join(Path.OUTPUT_DIRECTORY.value, Path.RECENT_SCORES.value))
+    if not os.path.exists(Path.STATIC_DIRECTORY.value):
+        os.mkdir(Path.STATIC_DIRECTORY.value)
+    if not os.path.exists(Path.UPLOADED_DIRECTORY.value):
+        os.mkdir(Path.UPLOADED_DIRECTORY.value)
+    if not os.path.exists(Path.BEATMAPS_CACHE_DIRECTORY.value):
+        os.mkdir(Path.BEATMAPS_CACHE_DIRECTORY.value)
     lang = locale.getlocale()[0]
     if platform.system() == "Windows":
         lang = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
-    st.session_state._uni_lang_value = LANGUAGES.index(lang)
+    st.session_state._uni_lang_value = lang
 else:
-    lang = LANGUAGES[st.session_state._uni_lang_value]
+    lang = st.session_state._uni_lang_value
 
 builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(lang)

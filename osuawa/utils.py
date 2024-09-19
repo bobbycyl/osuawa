@@ -1,43 +1,63 @@
+import asyncio
 import os
-import subprocess
 from collections.abc import Sequence
+from enum import Enum, unique
+from threading import BoundedSemaphore
+from time import sleep
 from typing import Any
 
 import numpy as np
 import rosu_pp_py as rosu
 import streamlit as st
-from osu import Client
+from clayutil.futil import Downloader
+from osu import AsynchronousClient
 from osu.objects import Beatmap, LegacyScore, Mod, SoloScore, UserCompact, UserStatistics
 
-# https://github.com/ppy/osu/blob/master/osu.Game/Graphics/OsuColour.cs
-XP = [0.1, 1.25, 2.0, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9.0]
-YP_R = [66, 79, 79, 124, 246, 255, 255, 198, 101, 24, 0]
-YP_G = [144, 192, 255, 255, 240, 128, 78, 69, 99, 21, 0]
-YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
+headers = {
+    "Referer": "https://bobbycyl.github.io/playlists/",
+    "User-Agent": "osuawa",
+}
+
+
+@unique
+class Path(Enum):
+    LOGS: str = "./logs"
+    LOCALE: str = "./share/locale"
+    OUTPUT_DIRECTORY: str = "./output"
+    STATIC_DIRECTORY: str = "./static"
+    UPLOADED_DIRECTORY: str = "./static/uploaded"
+    BEATMAPS_CACHE_DIRECTORY: str = "./static/beatmaps"
+    RAW_RECENT_SCORES: str = "raw_recent_scores"
+    RECENT_SCORES: str = "recent_scores"
+
+
+@unique
+class ColorBar(Enum):
+    # https://github.com/ppy/osu/blob/master/osu.Game/Graphics/OsuColour.cs
+    XP = [0.1, 1.25, 2.0, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9.0]
+    YP_R = [66, 79, 79, 124, 246, 255, 255, 198, 101, 24, 0]
+    YP_G = [144, 192, 255, 255, 240, 128, 78, 69, 99, 21, 0]
+    YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
 
 def save_value(key: str) -> None:
     st.session_state["_%s_value" % key] = st.session_state[key]
 
 
-def save_index(options, key: str) -> None:
-    st.session_state["_%s_value" % key] = list(options).index(st.session_state[key])
-
-
 def load_value(key: str, default_value: Any) -> Any:
     if "_%s_value" % key not in st.session_state:
         st.session_state["_%s_value" % key] = default_value
-    st.session_state["key"] = st.session_state["_%s_value" % key]
+    st.session_state[key] = st.session_state["_%s_value" % key]
 
 
 def memorized_multiselect(label: str, key: str, options, default_value: Any) -> None:
     load_value(key, default_value)
-    st.multiselect(label, options, default=st.session_state["_%s_value" % key], key=key, on_change=save_value, args=[key])
+    st.multiselect(label, options, key=key, on_change=save_value, args=[key])
 
 
 def memorized_selectbox(label: str, key: str, options, default_value: Any) -> None:
     load_value(key, default_value)
-    st.selectbox(label, options, key=key, on_change=save_index, args=[options, key])
+    st.selectbox(label, options, key=key, on_change=save_value, args=[key])
 
 
 def user_to_dict(user: UserCompact) -> dict[str, Any]:
@@ -52,20 +72,31 @@ def user_to_dict(user: UserCompact) -> dict[str, Any]:
     return attr_dict
 
 
-def get_user_info(client: Client, username: str) -> dict[str, Any]:
-    return user_to_dict(client.get_user(username, key="username"))
+def get_user_info(client: AsynchronousClient, username: str) -> dict[str, Any]:
+    return user_to_dict(asyncio.run(client.get_user(username, key="username")))
 
 
-def get_username(client, user: int) -> str:
-    return client.get_user(user, key="id").username
+def get_username(client: AsynchronousClient, user: int) -> str:
+    return asyncio.run(client.get_user(user, key="id")).username
 
 
-def get_beatmap_dict(client: Client, bids: Sequence[int]) -> dict[int, Beatmap]:
-    beatmaps_dict = {}
+async def _get_beatmaps(client: AsynchronousClient, cut_bids: Sequence[Sequence[int]]) -> list[list[Beatmap]]:
+    tasks = []
+    async with asyncio.TaskGroup() as tg:
+        for bids in cut_bids:
+            tasks.append(tg.create_task(client.get_beatmaps(bids)))
+    return [task.result() for task in tasks]
+
+
+def get_beatmap_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[int, Beatmap]:
+    cut_bids = []
     for i in range(0, len(bids), 50):
-        bs_current = client.get_beatmaps(bids[i : i + 50])
-        for b_current in bs_current:
-            beatmaps_dict[b_current.id] = b_current
+        cut_bids.append(bids[i: i + 50])
+    results = asyncio.run(_get_beatmaps(client, cut_bids))
+    beatmaps_dict = {}
+    for bs in results:
+        for b in bs:
+            beatmaps_dict[b.id] = b
     return beatmaps_dict
 
 
@@ -220,27 +251,16 @@ def rosu_calc(beatmap_file: str, mods: list) -> tuple:
     )
 
 
-def calc_difficulty_and_performance(osu_tools_path: str, beatmap: int, mods: list) -> tuple:
-    perf_calc_path = os.path.join(osu_tools_path, "PerformanceCalculator")
-    beatmaps_cache_path = os.path.join(perf_calc_path, "cache")
-    for osu_filename in os.listdir(beatmaps_cache_path):
-        if "%d.osu" % beatmap == osu_filename:
-            rosu_res = rosu_calc(os.path.join(beatmaps_cache_path, osu_filename), mods)
-            break
-    else:
-        # use osu-tools cli to cache the .osu file
-        subprocess.run(
-            "dotnet run -- difficulty %d" % beatmap,
-            cwd=perf_calc_path,
-            capture_output=True,
-            encoding="utf-8",
-            text=True,
-        )
-        return calc_difficulty_and_performance(osu_tools_path, beatmap, mods)
-    return rosu_res
+def calc_difficulty_and_performance(beatmap: int, mods: list) -> tuple:
+    if not "%d.osu" % beatmap in os.listdir(Path.BEATMAPS_CACHE_DIRECTORY.value):
+        with BoundedSemaphore():
+            sleep(1)
+            Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % beatmap, "%d.osu" % beatmap, headers)
+            sleep(1)
+    return rosu_calc(os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap), mods)
 
 
-def calc_beatmap_attributes(osu_tools_path: str, beatmap: Beatmap, mods: list) -> list:
+def calc_beatmap_attributes(beatmap: Beatmap, mods: list) -> list:
     osu_diff_attr = OsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
     osu_diff_attr.set_mods(mods)
     attr = [
@@ -265,7 +285,7 @@ def calc_beatmap_attributes(osu_tools_path: str, beatmap: Beatmap, mods: list) -
         ),
         beatmap.difficulty_rating,
     ]
-    attr.extend(calc_difficulty_and_performance(osu_tools_path, beatmap.id, mods))
+    attr.extend(calc_difficulty_and_performance(beatmap.id, mods))
     return attr
 
 
@@ -275,7 +295,7 @@ def calc_star_rating_color(stars: float) -> str:
     elif stars > 9.0:
         return "#000000"
     else:
-        interp_r = np.interp(stars, XP, YP_R)
-        interp_g = np.interp(stars, XP, YP_G)
-        interp_b = np.interp(stars, XP, YP_B)
+        interp_r = np.interp(stars, ColorBar.XP.value, ColorBar.YP_R.value)
+        interp_g = np.interp(stars, ColorBar.XP.value, ColorBar.YP_G.value)
+        interp_b = np.interp(stars, ColorBar.XP.value, ColorBar.YP_B.value)
         return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))

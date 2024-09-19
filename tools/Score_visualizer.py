@@ -90,9 +90,9 @@ got/100/95/80h/80l {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_p
         if enable_size:
             col1, col2 = st.columns(2)
             with col1:
-                memorized_selectbox("x", "cat_x2", df.columns, 25)
+                memorized_selectbox("x", "cat_x2", df.columns, "b_aim_difficulty")
             with col2:
-                memorized_selectbox("s", "cat_s", df.columns, 23)
+                memorized_selectbox("s", "cat_s", df.columns, "b_star_rating")
             memorized_multiselect("y", "cat_y2", df.columns, ["score_nf"])
             st.scatter_chart(
                 df3,
@@ -101,7 +101,7 @@ got/100/95/80h/80l {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_p
                 size=st.session_state.cat_s,
             )
         else:
-            memorized_selectbox("x", "cat_x", df.columns, 23)
+            memorized_selectbox("x", "cat_x", df.columns, "b_star_rating")
             memorized_multiselect("y", "cat_y", df.columns, ["score_nf"])
             st.scatter_chart(
                 df3,
