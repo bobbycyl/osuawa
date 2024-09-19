@@ -11,15 +11,12 @@ current tools: Score Visualizer, Playlist Generator and Recorder
 ## Requirements
 
 Python 3.12, Rust (for [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
-and .NET 8.0 SDK (for [osu-tools](https://github.com/ppy/osu-tools))
 
 ## Getting Started
 
-1. Get osu-tools. `git clone https://github.com/ppy/osu-tools.git`
+1. Clone the repository. `git clone https://github.com/bobbycyl/osuawa.git`
 
-2. Clone the repository. `git clone https://github.com/bobbycyl/osuawa.git`
-
-3. Create and activate a virtual environment.
+2. Create and activate a virtual environment.
 
    ```shell
    cd osuawa
@@ -27,7 +24,7 @@ and .NET 8.0 SDK (for [osu-tools](https://github.com/ppy/osu-tools))
    source ./venv/bin/activate  # replace with .\venv\Scripts\activate on Windows
    ```
 
-4. Install dependencies.
+3. Install dependencies.
 
    ```shell
    # use pip to install most of the dependencies
@@ -38,7 +35,7 @@ and .NET 8.0 SDK (for [osu-tools](https://github.com/ppy/osu-tools))
    rm -r PillowFontFallback
    ```
 
-5. Configure the settings.
+4. Configure the settings.
 
    1. Acquire your osu! OAuth client from [here](https://osu.ppy.sh/home/account/edit).
       The port should match which set in `./.streamlit/config.toml`.
@@ -55,4 +52,4 @@ and .NET 8.0 SDK (for [osu-tools](https://github.com/ppy/osu-tools))
 
    4. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
 
-6. Run the app. `python run.py`
+5. Run the app. `python run.py`

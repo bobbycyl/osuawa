@@ -9,15 +9,12 @@
 ## 软件要求
 
 Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
-以及 .NET 8.0 SDK ([osu-tools](https://github.com/ppy/osu-tools) 需要)
 
 ## 快速开始
 
-1. 获取 osu-tools。 `git clone https://github.com/ppy/osu-tools.git`
+1. 克隆本仓库。 `git clone https://github.com/bobbycyl/osuawa.git`
 
-2. 克隆本仓库。 `git clone https://github.com/bobbycyl/osuawa.git`
-
-3. 创建并激活虚拟环境。
+2. 创建并激活虚拟环境。
 
    ```shell
    cd osuawa
@@ -25,7 +22,7 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
    source ./venv/bin/activate  # Windows平台须使用 .\venv\Scripts\activate
    ```
 
-4. 安装依赖。
+3. 安装依赖。
 
    ```shell
    # 使用 pip 可以安装绝大多数依赖
@@ -36,7 +33,7 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
    rm -r PillowFontFallback
    ```
 
-5. 配置。
+4. 配置。
 
    1. 从[这里](https://osu.ppy.sh/home/account/edit)获取你的开放授权客户端。
       端口号须和 `./.streamlit/config.toml` 中的 `server.port` 一致。
@@ -53,4 +50,4 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
 
    4. 如果不需要HTTPS，删除 `./.streamlit/config.toml` 中的SSL相关设置。
 
-6. 运行程序。 `python run.py`
+5. 运行程序。 `python run.py`

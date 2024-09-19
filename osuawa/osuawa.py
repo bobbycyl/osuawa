@@ -1,27 +1,26 @@
+import asyncio
 import ctypes
 import html
 import os
 import os.path
 import platform
 import re
-import zipfile
-from enum import Enum, unique
+from functools import cached_property
 from shutil import rmtree
+from threading import BoundedSemaphore
 from time import sleep
 from typing import Any, Optional
 
 import orjson
 import pandas as pd
 import rosu_pp_py as rosu
-import streamlit as st
 
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL("./osuawa/fribidi-0.dll")
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
-from clayutil.futil import Downloader, Properties, compress_as_zip, filelock
-from clayutil.validator import OneOf
+from clayutil.futil import Downloader, Properties, filelock
 from fontfallback import writing
-from osu import AuthHandler, Client, GameModeStr, Scope
+from osu import AsynchronousAuthHandler, Client, GameModeStr, Scope, AsynchronousClient
 
 from .utils import (
     Beatmap,
@@ -32,38 +31,40 @@ from .utils import (
     get_username,
     score_info_list,
     user_to_dict,
+    Path,
+    headers,
 )
 
 LANGUAGES = ["en_US", "zh_CN"]
 
 
-@unique
-class Path(Enum):
-    LOGS: str = "./logs"
-    LOCALE: str = "./share/locale"
-    OUTPUT_DIRECTORY: str = "./output"
-    RAW_RECENT_SCORES: str = "raw_recent_scores"
-    RECENT_SCORES: str = "recent_scores"
+def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict[int, Beatmap]) -> dict[str, list]:
+    for score_id in scores_compact:
+        if len(scores_compact[score_id]) == 9:
+            scores_compact[score_id].extend(calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id][0]], scores_compact[score_id][7]))
+    return scores_compact
 
 
 class Osuawa(object):
     tz = "Asia/Shanghai"
 
-    def __init__(self, oauth_filename: str, osu_tools_path: str, output_dir: str, code: str = None):
+    def __init__(self, oauth_filename: str, output_dir: str, code: str = None):
         auth_url = None
         p = Properties(oauth_filename)
         p.load()
-        auth = AuthHandler(p["client_id"], p["client_secret"], p["redirect_url"], Scope("public", "identify", "friends.read"))
+        auth = AsynchronousAuthHandler(p["client_id"], p["client_secret"], p["redirect_url"], Scope("public", "identify", "friends.read"))
         if code is None:
             auth_url = auth.get_auth_url()
         else:
-            auth.get_auth_token(code)
+            asyncio.run(auth.get_auth_token(code))
         self.auth_url = auth_url
-        self.client = Client(auth)
-        self.osu_tools_path = osu_tools_path
-        if not os.path.exists(os.path.join(osu_tools_path, "PerformanceCalculator", "cache")):
-            os.mkdir(os.path.join(osu_tools_path, "PerformanceCalculator", "cache"))
+        self.client = AsynchronousClient(auth)
         self.output_dir = output_dir
+
+    @cached_property
+    def user(self) -> tuple[int, str]:
+        own_data = asyncio.run(self.client.get_own_data())
+        return own_data.id, own_data.username
 
     def create_scores_dataframe(self, scores: dict[str, list]) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
@@ -114,46 +115,44 @@ class Osuawa(object):
         df["pp_85lpct"] = df["pp"] / df["b_pp_80lif"]
         df["combo_pct"] = df["max_combo"] / df["b_max_combo"]
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
+        df["mods"] = df["mods"].apply(lambda x: orjson.dumps(x).decode())
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
-        return user_to_dict(self.client.get_user(username, key="username"))
+        return user_to_dict(asyncio.run(self.client.get_user(username, key="username")))
 
-    def get_score(self, score_id: int) -> pd.DataFrame:
-        score = self.client.get_score_by_id_only(score_id)
+    async def _get_score(self, score_id: int) -> list:
+        score = await self.client.get_score_by_id_only(score_id)
         score_compact = score_info_list(score)
         score_compact.extend(
             calc_beatmap_attributes(
-                self.osu_tools_path,
-                self.client.get_beatmap(score.beatmap_id),
-                score_compact[6],
+                await self.client.get_beatmap(score.beatmap_id),
+                score_compact[7],
             )
         )
-        return self.create_scores_dataframe({str(score.id): score_compact})
+        return score_compact
 
-    def get_user_beatmap_scores(self, beatmap: int, user: int) -> pd.DataFrame:
-        user_scores = self.client.get_user_beatmap_scores(beatmap, user)
+    def get_score(self, score_id: int) -> pd.DataFrame:
+        return self.create_scores_dataframe({str(score_id): asyncio.run(self._get_score(score_id))}).T
+
+    async def get_user_beatmap_scores_main(self, beatmap: int, user: int) -> dict[str, list]:
+        user_scores = await self.client.get_user_beatmap_scores(beatmap, user)
         scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
-        for score_id in scores_compact:
-            scores_compact[score_id].extend(
-                calc_beatmap_attributes(
-                    self.osu_tools_path,
-                    self.client.get_beatmap(beatmap),
-                    scores_compact[score_id][6],
-                )
-            )
-        return self.create_scores_dataframe(scores_compact)
+        return complete_scores_compact(scores_compact, {beatmap: await self.client.get_beatmap(beatmap)})
+
+    def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
+        if user is None:
+            user = self.user[0]
+        return self.create_scores_dataframe(asyncio.run(self.get_user_beatmap_scores_main(beatmap, user)))
 
     @filelock(1)
     def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
-        # todo: 多线程
-        with st.status(_("saving recent scores of %d") % user, expanded=True) as status:
-            st.text(_("getting scores..."))
-            # get
-            user_scores = []
-            offset = 0
-            while True:
-                user_scores_current = self.client.get_user_scores(
+        # get
+        user_scores = []
+        offset = 0
+        while True:
+            user_scores_current = asyncio.run(
+                self.client.get_user_scores(
                     user=user,
                     type="recent",
                     mode=GameModeStr.STANDARD,
@@ -161,53 +160,40 @@ class Osuawa(object):
                     limit=50,
                     offset=offset,
                 )
-                if len(user_scores_current) == 0:
-                    break
-                user_scores.extend(user_scores_current)
-                offset += 50
+            )
+            if len(user_scores_current) == 0:
+                break
+            user_scores.extend(user_scores_current)
+            offset += 50
 
-            recent_scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
-            len_got = len(recent_scores_compact)
+        recent_scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
+        len_got = len(recent_scores_compact)
 
-            st.text(_("merging scores..."))
-            # concatenate
-            len_local = 0
-            if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
-                with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"), encoding="utf-8") as fi:
-                    recent_scores_compact_old = orjson.loads(fi.read())
-                len_local = len(recent_scores_compact_old)
-                recent_scores_compact = {
-                    **recent_scores_compact,
-                    **recent_scores_compact_old,
-                }
-            len_diff = len(recent_scores_compact) - len_local
+        # concatenate
+        len_local = 0
+        if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
+            with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"), encoding="utf-8") as fi:
+                recent_scores_compact_old = orjson.loads(fi.read())
+            len_local = len(recent_scores_compact_old)
+            recent_scores_compact = {
+                **recent_scores_compact,
+                **recent_scores_compact_old,
+            }
+        len_diff = len(recent_scores_compact) - len_local
 
-            writer = st.text(_("calculating difficulty attributes..."))
-            # calculate difficulty attributes
-            bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
-            beatmaps_dict = get_beatmap_dict(self.client, tuple(bids_not_calculated))
-            current = 0
-            for score_id in recent_scores_compact:
-                if len(recent_scores_compact[score_id]) == 9:
-                    current += 1
-                    writer.text(_("calculating difficulty attributes... %d/%d (%d unique)") % (current, len(recent_scores_compact), len(bids_not_calculated)))
-                    recent_scores_compact[score_id].extend(
-                        calc_beatmap_attributes(
-                            self.osu_tools_path,
-                            beatmaps_dict[recent_scores_compact[score_id][0]],
-                            recent_scores_compact[score_id][7],
-                        )
-                    )
+        # calculate difficulty attributes
+        bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
+        beatmaps_dict = get_beatmap_dict(self.client, tuple(bids_not_calculated))
+        recent_scores_compact = complete_scores_compact(recent_scores_compact, beatmaps_dict)
 
-            # save
-            with open(
-                os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"),
-                "w",
-            ) as fo:
-                fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
-            df = self.create_scores_dataframe(recent_scores_compact)
-            df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
-            status.update(label=_("recent scores of %d saved") % user, state="complete", expanded=False)
+        # save
+        with open(
+            os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"),
+            "w",
+        ) as fo:
+            fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
+        df = self.create_scores_dataframe(recent_scores_compact)
+        df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
         return "%s: len local/got/diff = %d/%d/%d" % (
             get_username(self.client, user),
             len_local,
@@ -243,16 +229,16 @@ class BeatmapCover(object):
         self.max_combo = max_combo
 
     # noinspection PyTypeChecker
-    def draw(self, d: Downloader, filename: str) -> str:
+    async def draw(self, d: Downloader, filename: str) -> str:
         b = self.beatmap
 
         # 下载cover原图，若无cover则使用默认图片
-        cover_filename = d.start(b.beatmapset.covers.slimcover, filename)
+        cover_filename = await d.async_start(b.beatmapset.covers.slimcover, filename, headers)
         try:
             im = Image.open(cover_filename)
         except UnidentifiedImageError:
             try:
-                im = Image.open(d.start(b.beatmapset.covers.cover, filename))
+                im = Image.open(await d.async_start(b.beatmapset.covers.cover, filename, headers))
             except UnidentifiedImageError:
                 im = Image.open("./osuawa/bg1.jpg")
                 im = im.filter(ImageFilter.BLUR)
@@ -335,15 +321,12 @@ class BeatmapCover(object):
 
 
 class OsuPlaylist(object):
-    headers = {
-        "Referer": "https://bobbycyl.github.io/playlists/",
-        "User-Agent": "osuawa",
-    }
     mod_color = {"NM": "#1050eb", "HD": "#ebb910", "HR": "#eb4040", "EZ": "#40b940", "DT": "#b910eb", "FM": "#40507f", "TB": "#7f4050"}
-    osz_type = OneOf("full", "novideo", "mini")
 
-    def __init__(self, client: Client, playlist_filename: str, suffix: str = "", osz_type: str = "mini", output_zip: bool = False):
-        self.client = client
+    # osz_type = OneOf("full", "novideo", "mini")
+
+    def __init__(self, awa: Osuawa, playlist_filename: str, suffix: str = ""):
+        self.awa = awa
         p = Properties(playlist_filename)
         p.load()
         self.playlist_filename = playlist_filename
@@ -368,170 +351,146 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmap_dict = get_beatmap_dict(self.client, [int(x["bid"]) for x in parsed_beatmap_list])
+        beatmaps_dict = get_beatmap_dict(self.awa.client, [int(x["bid"]) for x in parsed_beatmap_list])
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br>")
-            element["beatmap"] = beatmap_dict[element["bid"]]
+            element["beatmap"] = beatmaps_dict[element["bid"]]
         self.beatmap_list = parsed_beatmap_list
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
         self.tmp_dir = os.path.splitext(playlist_filename)[0] + ".tmp"
         self.d = Downloader(self.covers_dir)
         self.tmp_d = Downloader(self.tmp_dir)
         self.playlist_name = os.path.splitext(os.path.basename(playlist_filename))[0]
-        self.osz_type = osz_type
-        self.output_zip = output_zip
-        if self.output_zip:
-            self.osz_type = "full"
+        # self.osz_type = osz_type
+        # self.output_zip = output_zip
+        # if self.output_zip:
+        #     self.osz_type = "full"
+
+    async def beatmap_task(self, index_and_beatmap: tuple[int, dict]) -> dict:
+        i, element = index_and_beatmap
+        bid: int = element["bid"]
+        b: Beatmap = element["beatmap"]
+        raw_mods: list[dict[str, Any]] = orjson.loads(element["mods"])
+        mods_ready: list[str] = []
+        notes: str = element["notes"]
+
+        # 处理NM, FM, TB
+        color_mod = raw_mods[0]["acronym"]
+        is_fm = False
+        mods = raw_mods
+        for j in range(len(raw_mods)):
+            if raw_mods[j]["acronym"] == "NM" or raw_mods[j]["acronym"] == "TB":
+                mods = []
+            if raw_mods[j]["acronym"] == "FM":
+                is_fm = True
+                mods = []
+            if "settings" in raw_mods[j]:
+                mods_ready.append("%s(%s)" % (raw_mods[j]["acronym"], ",".join(["%s=%s" % it for it in raw_mods[j]["settings"].items()])))
+            else:
+                mods_ready.append(raw_mods[j]["acronym"])
+
+        # 下载谱面与计算难度（与 utils.calc_difficulty_and_performance 类似，但是省略了许多不必要的计算）
+        if not "%d.osu" % bid in os.listdir(Path.BEATMAPS_CACHE_DIRECTORY.value):
+            with BoundedSemaphore():
+                sleep(1)
+                Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % bid, "%d.osu" % bid, headers)
+                sleep(1)
+        my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
+        if mods:
+            my_attr.set_mods(mods)
+        rosu_map = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid))
+        rosu_diff = rosu.Difficulty(mods=mods)
+        rosu_attr = rosu_diff.calculate(rosu_map)
+        stars1 = rosu_attr.stars
+        stars2 = None
+        if is_fm:
+            rosu_diff_fm = rosu.Difficulty(mods=[{"acronym": "HR"}])
+            rosu_attr_fm = rosu_diff_fm.calculate(rosu_map)
+            stars2 = rosu_attr_fm.stars
+        cs = "%s" % round(float(my_attr.cs), 2)
+        ar = "%s" % round(rosu_attr.ar, 2)
+        od = "%s" % round(rosu_attr.od, 2)
+        bpm = "%s" % round(my_attr.bpm, 2)
+        song_len_in_sec = my_attr.hit_length
+        song_len_m, song_len_s = divmod(song_len_in_sec, 60)
+        hit_length = "%d:%02d" % (song_len_m, song_len_s)
+        max_combo = "%d" % rosu_attr.max_combo
+
+        # 绘制cover
+        cover = BeatmapCover(b, self.mod_color.get(color_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
+        cover_filename = await cover.draw(self.d, "%d-%d.jpg" % (i, bid))
+
+        # 保存数据
+        img_src = "./" + (os.path.relpath(cover_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")
+        img_link = "https://osu.ppy.sh/b/%d" % b.id
+        completed_beatmap = {
+            "#": i,
+            "BID": b.id,
+            "SID": b.beatmapset_id,
+            "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>'
+                            % (img_link, img_src, html.escape(b.beatmapset.artist), html.escape(b.beatmapset.title), html.escape(b.beatmapset.creator), html.escape(b.version)),
+            "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
+            "Stars": cover.stars,
+            "SR": cover.stars.replace("󰓎", "★"),
+            "BPM": cover.bpm,
+            "Hit Length": cover.hit_length,
+            "Max Combo": cover.max_combo,
+            "CS": cover.cs,
+            "AR": cover.ar,
+            "OD": cover.od,
+            "Mods": "; ".join(mods_ready),
+            "Notes": notes,
+        }
+        for column in self.custom_columns:
+            if column == "mods":
+                continue
+            else:
+                completed_beatmap[column] = element[column]
+        return completed_beatmap
+
+    async def playlist_task(self) -> list[dict]:
+        tasks = []
+        async with asyncio.TaskGroup() as tg:
+            for index_and_beatmap in enumerate(self.beatmap_list, start=1):
+                tasks.append(tg.create_task(self.beatmap_task(index_and_beatmap)))
+        return [task.result() for task in tasks]
 
     def generate(self) -> pd.DataFrame:
-        # todo: 异步
-        playlist: list[dict] = []
-        with st.status(_("generating %s") % self.playlist_name, expanded=True) as status:
-            for i, element in enumerate(self.beatmap_list, start=1):
-                bid: int = element["bid"]
-                b_writer = st.text("%16d" % bid)
-                b: Beatmap = element["beatmap"]
-                raw_mods: list[dict[str, Any]] = orjson.loads(element["mods"])
-                mods_ready: list[str] = []
-                notes: str = element["notes"]
+        playlist = asyncio.run(self.playlist_task())
+        df_columns = ["#", "BID", "Beatmap Info", "Mods"]
+        df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
+        for column in self.custom_columns:
+            if column == "mods":
+                continue
+            else:
+                df_columns.append(column)
+                df_standalone_columns.append(column)
+        df_columns.append("Notes")
+        df_standalone_columns.append("Notes")
+        df = pd.DataFrame(playlist, columns=df_columns)
+        df_standalone = pd.DataFrame(playlist, columns=df_standalone_columns)
+        df.sort_values(by=["#"], inplace=True)
+        df_standalone.sort_values(by=["#"], inplace=True)
+        pd.set_option("colheader_justify", "center")
+        html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body>{table}<footer>%s</footer></body></html>' % (
+            self.playlist_name,
+            self.suffix,
+            self.footer,
+        )
+        with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fi:
+            fi.write(html_string.format(table=df.to_html(index=False, escape=False, classes="pd")))
 
-                # 处理NM, FM, TB
-                color_mod = raw_mods[0]["acronym"]
-                is_fm = False
-                mods = raw_mods
-                for j in range(len(raw_mods)):
-                    if raw_mods[j]["acronym"] == "NM" or raw_mods[j]["acronym"] == "TB":
-                        mods = []
-                    if raw_mods[j]["acronym"] == "FM":
-                        is_fm = True
-                        mods = []
-                    if "settings" in raw_mods[j]:
-                        mods_ready.append("%s(%s)" % (raw_mods[j]["acronym"], ",".join(["%s=%s" % it for it in raw_mods[j]["settings"].items()])))
-                    else:
-                        mods_ready.append(raw_mods[j]["acronym"])
+        # 功能暂不可用
+        # if self.output_zip:
+        #     # 生成课题压缩包
+        #     if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
+        #         os.mkdir(Path.OUTPUT_DIRECTORY.value)
+        #     df_standalone.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
+        #     compress_as_zip(self.tmp_dir, "./output/%s.zip" % self.playlist_name)
 
-                # 下载谱面
-                b_writer.text(_("%16d: downloading the beatmapset...") % bid)
-                beatmapset_filename = self.tmp_d.start("https://dl.sayobot.cn/beatmaps/download/%s/%s" % (self.osz_type, b.beatmapset_id))
-                beatmapset_dir = os.path.join(self.tmp_dir, str(b.beatmapset_id))
-                with zipfile.ZipFile(beatmapset_filename, "r") as zipf:
-                    zipf.extractall(beatmapset_dir)
-                if os.path.exists(os.path.join(beatmapset_dir, "%s" % self.osz_type)):
-                    beatmapset_dir = os.path.join(beatmapset_dir, "%s" % self.osz_type)
-                if os.path.exists(os.path.join(beatmapset_dir, str(b.beatmapset_id))):
-                    beatmapset_dir = os.path.join(beatmapset_dir, str(b.beatmapset_id))
-                found_beatmap_filename = ""
-                if "%s - %s (%s) [%s].osu" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version) in os.listdir(beatmapset_dir):
-                    found_beatmap_filename = "%s - %s (%s) [%s].osu" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version)
-                for j in os.listdir(beatmapset_dir):
-                    if os.path.isdir(os.path.join(beatmapset_dir, j)):
-                        continue
-                    try:
-                        with open(os.path.join(beatmapset_dir, j), encoding="utf-8") as osuf:
-                            for line in osuf:
-                                if line[:9] == "BeatmapID":
-                                    if line.lstrip("BeatmapID:").rstrip("\n") == str(bid):
-                                        found_beatmap_filename = j
-                                        break
-                    except UnicodeDecodeError:
-                        continue
-                    except IsADirectoryError:
-                        continue
-                if found_beatmap_filename == "":
-                    raise ValueError(_("beatmap %s not found") % bid)
+        # 清理临时文件夹
+        rmtree(self.tmp_dir)
 
-                b_writer.text(_("%16d: calculating difficulty...") % bid)
-                my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
-                if mods:
-                    my_attr.set_mods(mods)
-                rosu_map = rosu.Beatmap(path=os.path.join(beatmapset_dir, found_beatmap_filename))
-                rosu_diff = rosu.Difficulty(mods=mods)
-                rosu_attr = rosu_diff.calculate(rosu_map)
-                stars1 = rosu_attr.stars
-                stars2 = None
-                if is_fm:
-                    rosu_diff_fm = rosu.Difficulty(mods=[{"acronym": "HR"}])
-                    rosu_attr_fm = rosu_diff_fm.calculate(rosu_map)
-                    stars2 = rosu_attr_fm.stars
-                cs = "%s" % round(float(my_attr.cs), 2)
-                ar = "%s" % round(rosu_attr.ar, 2)
-                od = "%s" % round(rosu_attr.od, 2)
-                bpm = "%s" % round(my_attr.bpm, 2)
-                song_len_in_sec = my_attr.hit_length
-                song_len_m, song_len_s = divmod(song_len_in_sec, 60)
-                hit_length = "%d:%02d" % (song_len_m, song_len_s)
-                max_combo = "%d" % rosu_attr.max_combo
-
-                # 绘制cover
-                b_writer.text(_("%16d: drawing the cover...") % bid)
-                cover = BeatmapCover(b, self.mod_color.get(color_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
-                cover_filename = cover.draw(self.d, "%d-%d.jpg" % (i, bid))
-
-                # 保存数据
-                img_src = "./" + (os.path.relpath(cover_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")
-                img_link = "https://osu.ppy.sh/b/%d" % b.id
-                cur_b = {
-                    "#": i,
-                    "BID": b.id,
-                    "SID": b.beatmapset_id,
-                    "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>'
-                    % (img_link, img_src, html.escape(b.beatmapset.artist), html.escape(b.beatmapset.title), html.escape(b.beatmapset.creator), html.escape(b.version)),
-                    "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
-                    "Stars": cover.stars,
-                    "SR": cover.stars.replace("󰓎", "★"),
-                    "BPM": cover.bpm,
-                    "Hit Length": cover.hit_length,
-                    "Max Combo": cover.max_combo,
-                    "CS": cover.cs,
-                    "AR": cover.ar,
-                    "OD": cover.od,
-                    "Mods": "; ".join(mods_ready),
-                    "Notes": notes,
-                }
-                for column in self.custom_columns:
-                    if column == "mods":
-                        continue
-                    else:
-                        cur_b[column] = element[column]
-                playlist.append(cur_b)
-                b_writer.text(_("%16d: finished") % bid)
-
-                sleep(0.5)
-                rmtree(beatmapset_dir)
-            df_columns = ["#", "BID", "Beatmap Info", "Mods"]
-            df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
-            for column in self.custom_columns:
-                if column == "mods":
-                    continue
-                else:
-                    df_columns.append(column)
-                    df_standalone_columns.append(column)
-            df_columns.append("Notes")
-            df_standalone_columns.append("Notes")
-            df = pd.DataFrame(playlist, columns=df_columns)
-            df_standalone = pd.DataFrame(playlist, columns=df_standalone_columns)
-            df.sort_values(by=["#"], inplace=True)
-            df_standalone.sort_values(by=["#"], inplace=True)
-            pd.set_option("colheader_justify", "center")
-            html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body>{table}<footer>%s</footer></body></html>' % (
-                self.playlist_name,
-                self.suffix,
-                self.footer,
-            )
-            with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fi:
-                fi.write(html_string.format(table=df.to_html(index=False, escape=False, classes="pd")))
-
-            if self.output_zip:
-                # 生成课题压缩包
-                if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
-                    os.mkdir(Path.OUTPUT_DIRECTORY.value)
-                df_standalone.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
-                compress_as_zip(self.tmp_dir, "./output/%s.zip" % self.playlist_name)
-
-            # 清理临时文件夹
-            rmtree(self.tmp_dir)
-
-            status.update(label=_("generated %s") % self.playlist_name, state="complete", expanded=False)
         return df_standalone
 
     @staticmethod

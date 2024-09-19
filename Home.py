@@ -8,8 +8,8 @@ from typing import Optional
 from uuid import UUID
 
 import pandas as pd
-import requests.exceptions
 import streamlit as st
+from aiohttp import ClientError
 from clayutil.cmdparse import (
     BoolField as Bool,
     CollectionField as Coll,
@@ -27,6 +27,8 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import LANGUAGES, OsuPlaylist, Osuawa, Path
 from osuawa.utils import memorized_selectbox
+
+permitted_ids = [30826405]
 
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
@@ -58,7 +60,7 @@ def run(g):
 
 def register_awa(code: str = None):
     with st.spinner(_("registering a client...")):
-        return Osuawa(st.secrets.args.oauth_filename, st.secrets.args.osu_tools_path, Path.OUTPUT_DIRECTORY.value, code)
+        return Osuawa(st.secrets.args.oauth_filename, Path.OUTPUT_DIRECTORY.value, code)
 
 
 def commands():
@@ -100,7 +102,7 @@ def commands():
         Command(
             "s",
             _("get and show user scores of a beatmap"),
-            [Int("beatmap"), Int("user")],
+            [Int("beatmap"), Int("user", True)],
             0,
             st.session_state.awa.get_user_beatmap_scores,
         ),
@@ -122,7 +124,6 @@ def register_commands(obj: Optional[dict] = None):
     if "perm" not in st.session_state:
         st.session_state.perm = 0
     if not obj.get("simple", False):
-        st.info(_('Use `reg {"token": "<token>"}` to pass the token, or `reg {"refresh": "true"}` to refresh the client.'))
         if "token" in st.session_state and "token" in obj:
             if obj["token"] == st.session_state.token:
                 st.session_state.perm = 1
@@ -130,6 +131,7 @@ def register_commands(obj: Optional[dict] = None):
             else:
                 ret = _("token mismatched")
         else:
+            st.info(_('Use `reg {"token": "<token>"}` to pass the token, or `reg {"refresh": "true"}` to refresh the client.'))
             st.session_state.token = token_hex(16)
             logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
             ret = _("token generated")
@@ -179,11 +181,11 @@ def init_logger():
     fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
     fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
     logger.get_logger("streamlit").addHandler(fh)
-    logger.get_logger(st.session_state.user).addHandler(fh)
+    logger.get_logger(st.session_state.username).addHandler(fh)
 
 
 def submit():
-    logger.get_logger(st.session_state.user).info(st.session_state["input"])
+    logger.get_logger(st.session_state.username).info(st.session_state["input"])
     run(st.session_state.cmdparser.parse_command(st.session_state["input"]))
     st.session_state["delete_line"] = True
     st.session_state["counter"] += 1
@@ -191,7 +193,6 @@ def submit():
 
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
-
 
 set_sidebar()
 
@@ -202,12 +203,15 @@ else:
     if "code" in st.query_params:
         try:
             awa = register_awa(st.query_params.code)
-        except requests.exceptions.HTTPError:
+        except ClientError:
             st.error(_("invalid code"))
             st.stop()
         else:
             st.session_state.awa = awa
-            st.session_state.user = st.session_state.awa.client.get_own_data().username
+            st.session_state.user_id, st.session_state.username = st.session_state.awa.user
+            if st.session_state.user_id in permitted_ids:
+                st.session_state.token = ""
+                register_commands({"token": ""})
             st.success(_("Welcome!"))
             st.rerun()
     else:
