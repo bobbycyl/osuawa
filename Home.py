@@ -216,7 +216,6 @@ else:
             if st.session_state.user_id in permitted_ids:
                 st.session_state.token = ""
                 register_commands({"token": ""})
-            st.success(_("Welcome!"))
             st.rerun()
     else:
         st.info(_("Please click the button below to authorize the app."))
@@ -229,6 +228,7 @@ register_commands({"simple": True})
 if "delete_line" not in st.session_state:
     st.session_state["delete_line"] = True
 if "counter" not in st.session_state:
+    st.success(_("Welcome!"))
     st.session_state["counter"] = 0
 if st.session_state["delete_line"]:
     st.session_state["input"] = ""
