@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections.abc import Sequence
+from datetime import datetime
 from enum import Enum, unique
 from threading import BoundedSemaphore
 from time import sleep
@@ -207,7 +208,7 @@ def get_acronym(mod: Mod | str) -> str:
         return mod
 
 
-def score_info_list(score: SoloScore | LegacyScore) -> list:
+def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool | list[dict[str, str | dict] | dict[str, str]] | datetime]:
     # bid, user, score, accuracy, max_combo, passed, pp, mods, ts
     return [
         score.beatmap_id,
@@ -256,7 +257,7 @@ def calc_difficulty_and_performance(beatmap: int, mods: list) -> tuple:
         with BoundedSemaphore():
             sleep(1)
             Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % beatmap, "%d.osu" % beatmap, headers)
-            sleep(1)
+            sleep(0.5)
     return rosu_calc(os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap), mods)
 
 
