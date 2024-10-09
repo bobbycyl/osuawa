@@ -135,7 +135,7 @@ class Osuawa(object):
     def get_score(self, score_id: int) -> pd.DataFrame:
         return self.create_scores_dataframe({str(score_id): asyncio.run(self._get_score(score_id))}).T
 
-    async def get_user_beatmap_scores_main(self, beatmap: int, user: int) -> dict[str, list]:
+    async def _get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, list]:
         user_scores = await self.client.get_user_beatmap_scores(beatmap, user)
         scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
         return complete_scores_compact(scores_compact, {beatmap: await self.client.get_beatmap(beatmap)})
@@ -143,7 +143,7 @@ class Osuawa(object):
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
             user = self.user[0]
-        return self.create_scores_dataframe(asyncio.run(self.get_user_beatmap_scores_main(beatmap, user)))
+        return self.create_scores_dataframe(asyncio.run(self._get_user_beatmap_scores(beatmap, user)))
 
     @filelock(1)
     def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
@@ -209,9 +209,9 @@ class Osuawa(object):
 class BeatmapCover(object):
     font_sans = "./osuawa/ResourceHanRoundedSC-Regular.ttf"
     font_sans_fallback = "./osuawa/DejaVuSansCondensed.ttf"
-    font_mono_regular = "./osuawa/MapleMono-NF-CN-Regular-V7.0-Beta22.ttf"
-    font_mono_italic = "./osuawa/MapleMono-NF-CN-Italic-V7.0-Beta22.ttf"
-    font_mono_semibold = "./osuawa/MapleMono-NF-CN-SemiBold-V7.0-Beta22.ttf"
+    font_mono_regular = "./osuawa/MapleMono-NF-CN-Regular.ttf"
+    font_mono_italic = "./osuawa/MapleMono-NF-CN-Italic.ttf"
+    font_mono_semibold = "./osuawa/MapleMono-NF-CN-SemiBold.ttf"
 
     def __init__(self, beatmap: Beatmap, block_color, stars1: float, cs: str, ar: str, od: str, bpm: str, hit_length: str, max_combo: str, stars2: Optional[float] = None):
         self.beatmap = beatmap

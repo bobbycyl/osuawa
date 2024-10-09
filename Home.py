@@ -164,7 +164,11 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
             continue
         try:
             copyfile("./playlists/raw/%s" % m.group(0), "./playlists/%s.properties" % m.group(1))
-            OsuPlaylist(st.session_state.awa.client, "./playlists/%s.properties" % m.group(1), suffix=suffix, output_zip=output_zip).generate()
+            OsuPlaylist(st.session_state.awa, "./playlists/%s.properties" % m.group(1), suffix=suffix).generate()
+        except Exception as e:
+            raise RuntimeError(_("could not generate %s") % m.group(1)) from e
+        else:
+            st.write(_("generated %s") % m.group(1))
         finally:
             os.remove("./playlists/%s.properties" % m.group(1))
 

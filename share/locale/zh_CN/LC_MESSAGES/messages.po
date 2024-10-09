@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-09-19 21:49+0800\n"
-"PO-Revision-Date: 2024-08-23 16:28+0800\n"
+"POT-Creation-Date: 2024-10-09 15:06+0800\n"
+"PO-Revision-Date: 2024-10-09 15:07+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -17,7 +17,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.14.0\n"
-"X-Generator: Poedit 3.4.4\n"
+"X-Generator: Poedit 3.5\n"
 
 #: Home.py:33 app.py:47
 msgid "Homepage"
@@ -77,8 +77,8 @@ msgid ""
 "Use `reg {\"token\": \"<token>\"}` to pass the token, or `reg {\"refresh\": "
 "\"true\"}` to refresh the client."
 msgstr ""
-"使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌，或使用 `reg {\"refresh"
-"\": \"true\"}` 以刷新客户端。"
+"使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌，或使用 `reg "
+"{\"refresh\": \"true\"}` 以刷新客户端。"
 
 #: Home.py:137
 msgid "token generated"
@@ -94,36 +94,46 @@ msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。
 msgid "client refreshed"
 msgstr "客户端已刷新"
 
-#: Home.py:174
+#: Home.py:169
+#, python-format
+msgid "could not generate %s"
+msgstr "生成 %s 失败"
+
+#: Home.py:171
+#, python-format
+msgid "generated %s"
+msgstr "已生成 %s"
+
+#: Home.py:178
 #, python-format
 msgid "user %d not found"
 msgstr "用户 %d 不存在"
 
-#: Home.py:200
+#: Home.py:204
 msgid "preparing for the next command..."
 msgstr "请稍候……"
 
-#: Home.py:207
+#: Home.py:211
 msgid "invalid code"
 msgstr "无效授权码"
 
-#: Home.py:215
+#: Home.py:219
 msgid "Welcome!"
 msgstr "欢迎使用！"
 
-#: Home.py:218
+#: Home.py:222
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: Home.py:219
+#: Home.py:223
 msgid "OAuth2 url"
 msgstr "授权链接"
 
-#: Home.py:233
+#: Home.py:237
 msgid "Type \"help\" to get started."
 msgstr "键入“help”以开始。"
 
-#: Home.py:249
+#: Home.py:253
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
@@ -257,10 +267,6 @@ msgstr "## 目前筛选数据"
 #, python-format
 #~ msgid "%16d: finished"
 #~ msgstr "%16d：完成"
-
-#, python-format
-#~ msgid "generated %s"
-#~ msgstr "已生成 %s"
 
 #, python-format
 #~ msgid "using filename: %s"
