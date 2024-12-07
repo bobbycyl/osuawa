@@ -51,7 +51,31 @@ else:
             """.footer {
   border-top: 3px solid transparent;
   border-width: 3px 0px 0px;
-  border-image: linear-gradient(90deg, rgb(66, 144, 251) 7%, rgb(79, 192, 255) 7%, rgb(79, 192, 255) 19.5%, rgb(79, 255, 213) 19.5%, rgb(79, 255, 213) 28%, rgb(124, 255, 79) 28%, rgb(124, 255, 79) 34%, rgb(246, 240, 92) 34%, rgb(246, 240, 92) 43%, rgb(255, 128, 104) 43%, rgb(255, 128, 104) 53%, rgb(255, 78, 111) 53%, rgb(255, 78, 111) 61%, rgb(198, 69, 184) 61%, rgb(198, 69, 184) 71%, rgb(101, 99, 222) 71%, rgb(101, 99, 222) 82%, rgb(24, 21, 142) 82%, rgb(24, 21, 142) 92%, rgb(0, 0, 0) 92%, rgb(0, 0, 0) 100%) 1 / 1 / 0 stretch;
+  border-image: linear-gradient(
+      90deg,
+      rgb(66, 144, 251) 7%,
+      rgb(79, 192, 255) 7%,
+      rgb(79, 192, 255) 19.5%,
+      rgb(79, 255, 213) 19.5%,
+      rgb(79, 255, 213) 28%,
+      rgb(124, 255, 79) 28%,
+      rgb(124, 255, 79) 34%,
+      rgb(246, 240, 92) 34%,
+      rgb(246, 240, 92) 43%,
+      rgb(255, 128, 104) 43%,
+      rgb(255, 128, 104) 53%,
+      rgb(255, 78, 111) 53%,
+      rgb(255, 78, 111) 61%,
+      rgb(198, 69, 184) 61%,
+      rgb(198, 69, 184) 71%,
+      rgb(101, 99, 222) 71%,
+      rgb(101, 99, 222) 82%,
+      rgb(24, 21, 142) 82%,
+      rgb(24, 21, 142) 92%,
+      rgb(0, 0, 0) 92%,
+      rgb(0, 0, 0) 100%
+    )
+    1 / 1 / 0 stretch;
   position: fixed;
   bottom: 0;
   width: 100%;
@@ -60,6 +84,23 @@ else:
   padding: 10px;
 }
 
+.pd {
+  text-align: center;
+  border-collapse: collapse;
+}
+
+.pd th {
+  padding: 5px;
+}
+
+.pd td {
+  padding: 1px 5px 1px;
+}
+
+/* .pd tr:hover {
+  font-weight: bold;
+} */
+
 @media (prefers-color-scheme: dark) {
   body {
     color: white;
@@ -67,35 +108,34 @@ else:
   }
 
   .pd {
-    border-collapse: collapse;
     border: 1px solid #1c1c1c;
   }
 
-  .pd td,
-  th {
-    padding: 5px;
-  }
-
-  .pd tr:hover {
+  .pd tbody tr:hover {
     background: #303030;
-    /* font-weight: bold; */
   }
 }
 
 @media (prefers-color-scheme: light) {
+  body {
+    color: rgb(16, 40, 40);
+    background-color: rgb(245, 255, 255);
+  }
+
   .pd {
-    border: 1px solid darkgray;
-    border-collapse: collapse;
+    border: 1px solid rgb(185, 200, 200);
   }
 
-  .pd td,
-  th {
-    padding: 5px;
+  .pd thead {
+    background-color: rgb(127, 185, 185);
   }
 
-  .pd tr:hover {
-    background: #ebebeb;
-    /* font-weight: bold; */
+  .pd tbody {
+    background-color: rgb(235, 250, 250);
+  }
+
+  .pd tbody tr:hover {
+    background: rgb(160, 200, 200);
   }
 }
             """
