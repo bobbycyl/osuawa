@@ -76,7 +76,6 @@ else:
       rgb(0, 0, 0) 100%
     )
     1 / 1 / 0 stretch;
-  position: fixed;
   bottom: 0;
   width: 100%;
   height: 50px;
