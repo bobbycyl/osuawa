@@ -330,7 +330,7 @@ class BeatmapCover(object):
 
 
 class OsuPlaylist(object):
-    mod_color = {"NM": "#1040eb", "HD": "#ebb910", "HR": "#eb4040", "EZ": "#40b940", "DT": "#b910eb", "FM": "#40507f", "TB": "#7f4050"}
+    mod_color = {"NM": "#40a0eb", "HD": "#ebeb40", "HR": "#eb4040", "EZ": "#40eb40", "DT": "#a040eb", "HT": "#a0a0a0", "FM": "#40507f", "TB": "#7f4050"}
 
     # osz_type = OneOf("full", "novideo", "mini")
 
