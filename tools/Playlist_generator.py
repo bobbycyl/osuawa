@@ -44,33 +44,63 @@ else:
     table = generate_playlist(playlist_filename)
     st.divider()
     for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
-        st.image(os.path.join(covers_dir, pic), caption=pic, use_column_width=True)
+        st.image(os.path.join(covers_dir, pic), caption=pic, use_container_width=True)
     convert_df(table, csv_filename)
     with open(css_filename, "w") as fo:
         fo.write(
-            """body {
-background-color: #1f1f1f;
+            """.footer {
+  border-top: 3px solid transparent;
+  border-width: 3px 0px 0px;
+  border-image: linear-gradient(90deg, rgb(66, 144, 251) 7%, rgb(79, 192, 255) 7%, rgb(79, 192, 255) 19.5%, rgb(79, 255, 213) 19.5%, rgb(79, 255, 213) 28%, rgb(124, 255, 79) 28%, rgb(124, 255, 79) 34%, rgb(246, 240, 92) 34%, rgb(246, 240, 92) 43%, rgb(255, 128, 104) 43%, rgb(255, 128, 104) 53%, rgb(255, 78, 111) 53%, rgb(255, 78, 111) 61%, rgb(198, 69, 184) 61%, rgb(198, 69, 184) 71%, rgb(101, 99, 222) 71%, rgb(101, 99, 222) 82%, rgb(24, 21, 142) 82%, rgb(24, 21, 142) 92%, rgb(0, 0, 0) 92%, rgb(0, 0, 0) 100%) 1 / 1 / 0 stretch;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  height: 50px;
+  text-align: center;
+  padding: 10px;
 }
 
-.pd {
-border-collapse: collapse;
-border: #1c1c1c;
-color: white;
-font-family: monospace;
+@media (prefers-color-scheme: dark) {
+  body {
+    color: white;
+    background-color: #1f1f1f;
+  }
+
+  .pd {
+    border-collapse: collapse;
+    border: 1px solid #1c1c1c;
+  }
+
+  .pd td,
+  th {
+    padding: 5px;
+  }
+
+  .pd tr:hover {
+    background: #303030;
+    /* font-weight: bold; */
+  }
 }
 
-.pd td,
-th {
-padding: 5px;
-}
+@media (prefers-color-scheme: light) {
+  .pd {
+    border: 1px solid darkgray;
+    border-collapse: collapse;
+  }
 
-.pd tr:hover {
-background: #303030;
-/* font-weight: bold; */
+  .pd td,
+  th {
+    padding: 5px;
+  }
+
+  .pd tr:hover {
+    background: #ebebeb;
+    /* font-weight: bold; */
+  }
 }
             """
         )
-        st.dataframe(table, hide_index=True)
-        compress_as_zip(session_path, zip_filename)
-        with open(zip_filename, "rb") as zipfi:
-            st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zipfi)
+    st.dataframe(table, hide_index=True)
+    compress_as_zip(session_path, zip_filename)
+    with open(zip_filename, "rb") as zipfi:
+        st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zipfi)

@@ -32,9 +32,9 @@ def calc_pp_overall_if(df: pd.DataFrame, tag: Optional[str] = None) -> str:
     got_pp = df_tag["pp"].sum()
     pp_100if = df_tag["b_pp_100if"].sum()
     pp_95if = df_tag["b_pp_95if"].sum()
-    pp_80hif = df_tag["b_pp_80hif"].sum()
-    pp_80lif = df_tag["b_pp_80lif"].sum()
-    return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (got_pp / pp_100if * 100, got_pp / pp_95if * 100, got_pp / pp_80hif * 100, got_pp / pp_80lif * 100)
+    pp_90if = df_tag["b_pp_90if"].sum()
+    pp_80if = df_tag["b_pp_80if"].sum()
+    return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (got_pp / pp_100if * 100, got_pp / pp_95if * 100, got_pp / pp_90if * 100, got_pp / pp_80if * 100)
 
 
 def calc_pp_overall_count(df: pd.DataFrame, tag: Optional[str] = None) -> str:
@@ -60,7 +60,7 @@ def main():
         st.markdown(
             f"""based on {len(df)} ({len(dfp)} passed) score(s)
 
-got/100/95/80h/80l {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_95if"].sum():.2f}/{dfp["b_pp_80hif"].sum():.2f}/{dfp["b_pp_80lif"].sum():.2f}pp
+got/100/95/90/80 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_95if"].sum():.2f}/{dfp["b_pp_90if"].sum():.2f}/{dfp["b_pp_80if"].sum():.2f}pp
 
 | tag         | got                                          | if                                          | count                                         |
 | ----------- | -------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
