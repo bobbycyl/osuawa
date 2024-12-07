@@ -81,7 +81,7 @@ def get_username(client: AsynchronousClient, user: int) -> str:
     return asyncio.run(client.get_user(user, key="id")).username
 
 
-async def _get_beatmaps(client: AsynchronousClient, cut_bids: Sequence[Sequence[int]]) -> list[list[Beatmap]]:
+async def _get_beatmaps_dict(client: AsynchronousClient, cut_bids: Sequence[Sequence[int]]) -> list[list[Beatmap]]:
     tasks = []
     async with asyncio.TaskGroup() as tg:
         for bids in cut_bids:
@@ -89,11 +89,11 @@ async def _get_beatmaps(client: AsynchronousClient, cut_bids: Sequence[Sequence[
     return [task.result() for task in tasks]
 
 
-def get_beatmap_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[int, Beatmap]:
+def get_beatmaps_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[int, Beatmap]:
     cut_bids = []
     for i in range(0, len(bids), 50):
         cut_bids.append(bids[i: i + 50])
-    results = asyncio.run(_get_beatmaps(client, cut_bids))
+    results = asyncio.run(_get_beatmaps_dict(client, cut_bids))
     beatmaps_dict = {}
     for bs in results:
         for b in bs:
@@ -145,7 +145,7 @@ class OsuDifficultyAttribute(object):
         self.is_speed_down = False
 
     def set_mods(self, mods: list):
-        mods_dict = {mod["acronym"]: (mod["settings"] if mod.get("settings", None) is not None else {}) for mod in mods}
+        mods_dict = {mod["acronym"]: (mod["settings"] if mod.get("settings", None) else {}) for mod in mods}
         if Mod.NoFail.value in mods_dict:
             self.is_nf = True
         if Mod.Hidden.value in mods_dict:
@@ -176,13 +176,11 @@ class OsuDifficultyAttribute(object):
         elif Mod.Daycore.value in mods_dict:
             magnitude = mods_dict[Mod.Daycore.value].get("speed_change", 0.75)
         elif Mod.WindUp.value in mods_dict:
-            # harmonic mean
             _settings = mods_dict[Mod.WindUp.value]
-            magnitude = 2 / (1 / _settings.get("initial_rate", 1.0) + 1 / _settings.get("final_rate", 1.5))
+            magnitude = 2 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 1.5))
         elif Mod.WindDown.value in mods_dict:
-            # harmonic mean
             _settings = mods_dict[Mod.WindDown.value]
-            magnitude = 2 / (1 / _settings.get("initial_rate", 1.0) + 1 / _settings.get("final_rate", 0.75))
+            magnitude = 2 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 0.75))
         if magnitude > 1:
             self.is_speed_up = True
         elif magnitude < 1:
@@ -209,7 +207,13 @@ def get_acronym(mod: Mod | str) -> str:
 
 
 def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool | list[dict[str, str | dict] | dict[str, str]] | datetime]:
-    # bid, user, score, accuracy, max_combo, passed, pp, mods, ts
+    """
+
+    Create compact score info list from a score.
+
+    :param score: score object
+    :return: [bid, user, score, accuracy, max_combo, passed, pp, mods, ts]
+    """
     return [
         score.beatmap_id,
         score.user_id,
@@ -228,14 +232,14 @@ def rosu_calc(beatmap_file: str, mods: list) -> tuple:
     diff = rosu.Difficulty(mods=mods)
     diff_attr = diff.calculate(beatmap)
     note_count = diff_attr.n_circles
-    perf100 = rosu.Performance(accuracy=100, misses=0, hitresult_priority=rosu.HitResultPriority.BestCase)
-    perf95 = rosu.Performance(accuracy=95, misses=min(5, note_count), hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf80h = rosu.Performance(accuracy=80, misses=int(note_count * 0.035), hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf80l = rosu.Performance(accuracy=80, misses=int(note_count * 0.07), hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf100 = rosu.Performance(accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
+    perf95 = rosu.Performance(accuracy=95, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf90 = rosu.Performance(accuracy=90, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf80 = rosu.Performance(accuracy=80, hitresult_priority=rosu.HitResultPriority.WorstCase)
     pp100 = perf100.calculate(diff_attr).pp
     pp95 = perf95.calculate(diff_attr).pp
-    pp80h = perf80h.calculate(diff_attr).pp
-    pp80l = perf80l.calculate(diff_attr).pp
+    pp90 = perf90.calculate(diff_attr).pp
+    pp80 = perf80.calculate(diff_attr).pp
     return (
         diff_attr.stars,
         diff_attr.max_combo,
@@ -247,8 +251,8 @@ def rosu_calc(beatmap_file: str, mods: list) -> tuple:
         diff_attr.od,
         pp100,
         pp95,
-        pp80h,
-        pp80l,
+        pp90,
+        pp80,
     )
 
 

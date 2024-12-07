@@ -27,7 +27,7 @@ from .utils import (
     OsuDifficultyAttribute,
     calc_beatmap_attributes,
     calc_star_rating_color,
-    get_beatmap_dict,
+    get_beatmaps_dict,
     get_username,
     score_info_list,
     user_to_dict,
@@ -40,7 +40,7 @@ LANGUAGES = ["en_US", "zh_CN"]
 
 def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict[int, Beatmap]) -> dict[str, list]:
     for score_id in scores_compact:
-        if len(scores_compact[score_id]) == 9:
+        if len(scores_compact[score_id]) == 9:  # DO NOT CHANGE! the length of what score_info_list returns
             scores_compact[score_id].extend(calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id][0]], scores_compact[score_id][7]))
     return scores_compact
 
@@ -104,15 +104,15 @@ class Osuawa(object):
                 "b_overall_difficulty",
                 "b_pp_100if",
                 "b_pp_95if",
-                "b_pp_80hif",
-                "b_pp_80lif",
+                "b_pp_90if",
+                "b_pp_80if",
             ],
         )
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["pp_pct"] = df["pp"] / df["b_pp_100if"]
         df["pp_95pct"] = df["pp"] / df["b_pp_95if"]
-        df["pp_85hpct"] = df["pp"] / df["b_pp_80hif"]
-        df["pp_85lpct"] = df["pp"] / df["b_pp_80lif"]
+        df["pp_90pct"] = df["pp"] / df["b_pp_90if"]
+        df["pp_80pct"] = df["pp"] / df["b_pp_80if"]
         df["combo_pct"] = df["max_combo"] / df["b_max_combo"]
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
         df["mods"] = df["mods"].apply(lambda x: orjson.dumps(x).decode())
@@ -183,7 +183,7 @@ class Osuawa(object):
 
         # calculate difficulty attributes
         bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
-        beatmaps_dict = get_beatmap_dict(self.client, tuple(bids_not_calculated))
+        beatmaps_dict = get_beatmaps_dict(self.client, tuple(bids_not_calculated))
         recent_scores_compact = complete_scores_compact(recent_scores_compact, beatmaps_dict)
 
         # save
@@ -194,7 +194,7 @@ class Osuawa(object):
             fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
         df = self.create_scores_dataframe(recent_scores_compact)
         df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
-        return "%s: len local/got/diff = %d/%d/%d" % (
+        return "%s: local/got/diff: %d/%d/%d" % (
             get_username(self.client, user),
             len_local,
             len_got,
@@ -209,6 +209,7 @@ class Osuawa(object):
 class BeatmapCover(object):
     font_sans = "./osuawa/ResourceHanRoundedSC-Regular.ttf"
     font_sans_fallback = "./osuawa/DejaVuSansCondensed.ttf"
+    font_sans_medium = "./osuawa/ResourceHanRoundedSC-Medium.ttf"
     font_mono_regular = "./osuawa/MapleMono-NF-CN-Regular.ttf"
     font_mono_italic = "./osuawa/MapleMono-NF-CN-Italic.ttf"
     font_mono_semibold = "./osuawa/MapleMono-NF-CN-SemiBold.ttf"
@@ -217,6 +218,10 @@ class BeatmapCover(object):
         self.beatmap = beatmap
         self.block_color = block_color
         self.stars1 = stars1
+        if self.stars1 > 6.5:
+            self.stars_text_color = "#f0dd55"
+        else:
+            self.stars_text_color = "#000000"
         self.stars2 = stars2
         self.stars = "󰓎 %.2f" % self.stars1
         if self.stars2 is not None:
@@ -228,130 +233,136 @@ class BeatmapCover(object):
         self.hit_length = hit_length
         self.max_combo = max_combo
 
-    # noinspection PyTypeChecker
-    async def draw(self, d: Downloader, filename: str) -> str:
-        b = self.beatmap
-
-        # 下载cover原图，若无cover则使用默认图片
-        cover_filename = await d.async_start(b.beatmapset.covers.slimcover, filename, headers)
+    async def download(self, d: Downloader, filename: str) -> str:
+        # 下载 cover 原图，若无 cover 则使用默认图片
+        cover_filename = await d.async_start(self.beatmap.beatmapset.covers.cover_2x, filename, headers)
         try:
             im = Image.open(cover_filename)
         except UnidentifiedImageError:
             try:
-                im = Image.open(await d.async_start(b.beatmapset.covers.cover, filename, headers))
+                im = Image.open(await d.async_start(self.beatmap.beatmapset.covers.slimcover_2x, filename, headers))
             except UnidentifiedImageError:
                 im = Image.open("./osuawa/bg1.jpg")
                 im = im.filter(ImageFilter.BLUR)
-            im = im.resize((1920, int(im.height * 1920 / im.width)), Image.Resampling.LANCZOS)  # 缩放到宽为1920
-            im = im.crop((im.width // 2 - 960, 0, im.width // 2 + 960, 360))  # 从中间裁剪到1920x360
+        im = im.resize((1296, int(im.height * 1296 / im.width)), Image.Resampling.LANCZOS)  # 缩放到宽为 1296
+        im = im.crop((im.width // 2 - 648, 0, im.width // 2 + 648, 360))  # 从中间裁剪到 1296 x 360
 
         # 调整亮度
         be = ImageEnhance.Brightness(im)
         im = be.enhance(0.33)
+        im.save(cover_filename)
+
+        return cover_filename
+
+    def cut_text(self, draw: ImageDraw.Draw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
+        text_len_dry_run = draw.textlength(text, font=font)
+        if text_len_dry_run > length_limit:
+            cut_length = -1
+            while True:
+                text_cut = "%s..." % text[:cut_length] if use_dots else text[:cut_length]
+                text_len_dry_run = draw.textlength(text_cut, font=font)
+                if text_len_dry_run <= length_limit:
+                    break
+                cut_length -= 1
+            return text_cut
+        else:
+            return -1
+
+    async def draw(self, cover_filename) -> str:
+        im = Image.open(cover_filename)
         draw = ImageDraw.Draw(im)
 
         # 测试长度
-        len_set = 1400
-        title_u = b.beatmapset.title_unicode
-        title_len_dry_run = draw.textlength(title_u, font=ImageFont.truetype(font=self.font_sans, size=72))
-        if title_len_dry_run > len_set - 16:
-            cut_length = -1
-            while True:
-                t1_cut = "%s..." % title_u[:cut_length]
-                title_len_dry_run = draw.textlength(t1_cut, font=ImageFont.truetype(font=self.font_sans, size=72))
-                if title_len_dry_run <= len_set - 16:
-                    break
-                cut_length -= 1
-            title_u = t1_cut
+        len_set = 1188
+        text_pos = 16
+        padding = 28
+        mod_theme_len = 50
+        stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
+        title_u = self.beatmap.beatmapset.title_unicode
+        t1_cut = self.cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u, len_set - stars_len - text_pos - padding - mod_theme_len, False)
+        if t1_cut != -1:
+            title_u2 = title_u.lstrip(t1_cut)
+            title_u = "%s\n%s" % (t1_cut, title_u2)
+            t2_cut = self.cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u2, len_set - padding - mod_theme_len, True)
+            if t2_cut != -1:
+                title_u = "%s\n%s" % (t1_cut, t2_cut)
 
         # 绘制左侧文字
         fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
-        draw.text((42, 29), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#1f1f1f")
-        draw.text((40, 26), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="white")
-        # draw.text((41, 16), b.version, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="white")
-        draw.text((40, 27), b.version, font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="white")
-        # draw.text((41, 17), b.version, font=ImageFont.truetype(font=self.font_mono_regular, size=48), fill="white")
-        writing.draw_text_v2(draw, (42, 192), title_u, "#1f1f1f", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (42, 191), title_u, "#1f1f1f", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (42, 193), title_u, (40, 40, 40), fonts, 72, "ls")
-        writing.draw_text_v2(draw, (41, 193), title_u, (40, 40, 40), fonts, 72, "ls")
-        writing.draw_text_v2(draw, (41, 192), title_u, (40, 40, 40), fonts, 72, "ls")
-        writing.draw_text_v2(draw, (40, 189), title_u, "white", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (41, 189), title_u, "white", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (40, 190), title_u, "white", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (41, 190), title_u, "white", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (41, 260), b.beatmapset.artist_unicode, "#1f1f1f", fonts, 44, "ls")
-        writing.draw_text_v2(draw, (40, 260), b.beatmapset.artist_unicode, (40, 40, 40), fonts, 44, "ls")
-        writing.draw_text_v2(draw, (40, 258), b.beatmapset.artist_unicode, "white", fonts, 44, "ls")
-        draw.text((41, 292), "mapped by", font=ImageFont.truetype(font=self.font_mono_italic, size=36), fill="#1f1f1f")
-        draw.text((40, 292), "mapped by", font=ImageFont.truetype(font=self.font_mono_italic, size=36), fill=(40, 40, 40))
-        draw.text((40, 290), "mapped by", font=ImageFont.truetype(font=self.font_mono_italic, size=36), fill="white")
-        draw.text((266, 292), b.beatmapset.creator, font=ImageFont.truetype(font=self.font_mono_regular, size=36), fill="#1f1f2a")
-        draw.text((265, 290), b.beatmapset.creator, font=ImageFont.truetype(font=self.font_mono_regular, size=36), fill=(180, 235, 250))
-        draw.text((264, 290), b.beatmapset.creator, font=ImageFont.truetype(font=self.font_mono_regular, size=36), fill=(180, 235, 250))
+        version = self.beatmap.version
+        ver_cut = self.cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
+        if ver_cut != -1:
+            version = ver_cut
+        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 192 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset.artist_unicode, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset.artist_unicode, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset.artist_unicode, "white", fonts, 48, "ls")
+        draw.text((42 + 1188, 326), self.beatmap.beatmapset.creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
+        draw.text((41 + 1188, 324), self.beatmap.beatmapset.creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
+        draw.text((40 + 1188, 324), self.beatmap.beatmapset.creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
 
         # 在右上角绘制星数
-        text_pos = 408
-        padding = 28
-        text_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
-        draw.rounded_rectangle([len_set + text_pos - text_len - padding, 22, len_set + text_pos + padding, 96], 72, fill="#1f1f1f")
-        draw.rounded_rectangle([len_set + text_pos - text_len - padding, 20, len_set + text_pos + padding, 94], 72, fill=calc_star_rating_color(self.stars1))
+        draw.rounded_rectangle([len_set + text_pos - stars_len - padding, 32, len_set + text_pos + padding, 106], 72, fill="#1f1f1f")
+        draw.rounded_rectangle([len_set + text_pos - stars_len - padding, 30, len_set + text_pos + padding, 104], 72, fill=calc_star_rating_color(self.stars1))
 
         if self.stars1 > 6.5:  # white text
-            draw.text((len_set + text_pos, 27), self.stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#f0dd55")
+            draw.text((len_set + text_pos, 37), self.stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#f0dd55")
         else:  # black text
-            draw.text((len_set + text_pos, 27), self.stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#000000")
-
-        # 在右侧从下到上依次绘制CS AR OD 󰟚 󱑓 󰺕
-        draw_list1: list[tuple[str, str]] = [("OD", self.od), ("AR", self.ar), ("CS", self.cs)]
-        draw_list2: list[tuple[str, str]] = [("󰺕", self.max_combo), ("󱑓", self.hit_length), ("󰟚", self.bpm)]
-        for i in range(len(draw_list1)):
-            draw.text((len_set + 32, 291 - 74 * i), "%s %s" % draw_list1[i], font=ImageFont.truetype(font=self.font_mono_semibold, size=36), fill="#1f1f1f")
-            draw.text((len_set + 31, 290 - 74 * i), "%s %s" % draw_list1[i], font=ImageFont.truetype(font=self.font_mono_semibold, size=36), fill="#f0dd55")
-        for i in range(len(draw_list2)):
-            draw.text((len_set + 258, 291 - 74 * i), "%s %s" % draw_list2[i], font=ImageFont.truetype(font=self.font_mono_semibold, size=36), fill="#1f1f1f")
-            draw.text((len_set + 257, 290 - 74 * i), "%s %s" % draw_list2[i], font=ImageFont.truetype(font=self.font_mono_semibold, size=36), fill="#f0dd55")
+            draw.text((len_set + text_pos, 37), self.stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill="#000000")
 
         # 绘制mod主题色
-        draw.rectangle((len_set + 470, 0, 1920, 1080), fill=(40, 40, 40))
-        draw.rectangle((len_set + 476, 0, 1920, 1080), fill=self.block_color)
+        draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=(40, 40, 40))
+        draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=self.block_color)
 
         im.save(cover_filename)
         return cover_filename
 
 
 class OsuPlaylist(object):
-    mod_color = {"NM": "#1050eb", "HD": "#ebb910", "HR": "#eb4040", "EZ": "#40b940", "DT": "#b910eb", "FM": "#40507f", "TB": "#7f4050"}
+    mod_color = {"NM": "#1040eb", "HD": "#ebb910", "HR": "#eb4040", "EZ": "#40b940", "DT": "#b910eb", "FM": "#40507f", "TB": "#7f4050"}
 
     # osz_type = OneOf("full", "novideo", "mini")
 
-    def __init__(self, awa: Osuawa, playlist_filename: str, suffix: str = ""):
+    def __init__(self, awa: Osuawa, playlist_filename: str, suffix: str = "", use_css_cover: bool = False):
         self.awa = awa
         p = Properties(playlist_filename)
         p.load()
         self.playlist_filename = playlist_filename
         self.suffix = suffix
+        self.use_css_cover = use_css_cover
         self.footer = p.pop("footer") if "footer" in p else ""
         self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
         parsed_beatmap_list = []
 
         # pop p from end until empty
-        current_parsed_beatmap: dict[str, str | int | Beatmap | None] = {"notes": ""}
+        current_parsed_beatmap: dict[str, int | list[dict[str, Any]]| Beatmap | None] = {"notes": ""}
         while p:
             k, v = p.popitem()
             if k[0] == "#":  # notes
                 current_parsed_beatmap["notes"] += v.lstrip("#").lstrip(" ")
             else:
                 current_parsed_beatmap["bid"] = int(k)
+                obj_v = orjson.loads(v)
                 if self.custom_columns:
                     for column in self.custom_columns:
-                        current_parsed_beatmap[column] = str(v)
+                        current_parsed_beatmap[column] = obj_v.get(column)
                 else:
-                    current_parsed_beatmap["mods"] = str(v)
+                    current_parsed_beatmap["mods"] = obj_v
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = get_beatmap_dict(self.awa.client, [int(x["bid"]) for x in parsed_beatmap_list])
+        beatmaps_dict = get_beatmaps_dict(self.awa.client, [int(x["bid"]) for x in parsed_beatmap_list])
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br>")
             element["beatmap"] = beatmaps_dict[element["bid"]]
@@ -370,7 +381,7 @@ class OsuPlaylist(object):
         i, element = index_and_beatmap
         bid: int = element["bid"]
         b: Beatmap = element["beatmap"]
-        raw_mods: list[dict[str, Any]] = orjson.loads(element["mods"])
+        raw_mods: list[dict[str, Any]] = element["mods"]
         mods_ready: list[str] = []
         notes: str = element["notes"]
 
@@ -394,7 +405,7 @@ class OsuPlaylist(object):
             with BoundedSemaphore():
                 sleep(1)
                 Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % bid, "%d.osu" % bid, headers)
-                sleep(1)
+                sleep(0.5)
         my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
         if mods:
             my_attr.set_mods(mods)
@@ -418,17 +429,36 @@ class OsuPlaylist(object):
 
         # 绘制cover
         cover = BeatmapCover(b, self.mod_color.get(color_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
-        cover_filename = await cover.draw(self.d, "%d-%d.jpg" % (i, bid))
-
-        # 保存数据
+        cover_filename = await cover.download(self.d, "%d-%d.jpg" % (i, bid))
         img_src = "./" + (os.path.relpath(cover_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")
         img_link = "https://osu.ppy.sh/b/%d" % b.id
+        beatmap_info = '<a href="%s"><img class="beatmap-info-image" src="%s" alt="%s - %s (%s) [%s]" height="90"/></a>' \
+                       % (img_link, img_src, html.escape(b.beatmapset.artist), html.escape(b.beatmapset.title), html.escape(b.beatmapset.creator), html.escape(b.version))
+        if self.use_css_cover:
+            beatmap_info = '<div class="beatmap-info %s" style="--bg: %s; --fg: %s">%s<div class="beatmap-info-text">'\
+                        '<p class="beatmap-info-text-artist">%s</p>'\
+                        '<p class="beatmap-info-text-title">%s</p>'\
+                        '<p class="beatmap-info-text-creator">%s</p>'\
+                        '<p class="beatmap-info-text-version>%s</p>'\
+                        '<p class="beatmap-info-text-stars">%s</p>'\
+                        '<p class="beatmap-info-text-cs">%s</p>'\
+                        '<p class="beatmap-info-text-ar">%s</p>'\
+                        '<p class="beatmap-info-text-od">%s</p>'\
+                        '<p class="beatmap-info-text-bpm">%s</p>'\
+                        '<p class="beatmap-info-text-hit-length">%s</p>'\
+                        '<p class="beatmap-info-text-max-combo">%s</p>'\
+                        '</div></div>' \
+            % (color_mod, cover.stars_text_color, calc_star_rating_color(cover.stars1), beatmap_info, html.escape(b.beatmapset.artist), html.escape(b.beatmapset.title), html.escape(b.beatmapset.creator), html.escape(b.version), cover.stars, cs, ar, od, bpm, hit_length, max_combo)
+        else:
+            await cover.draw(cover_filename)
+
+        # 保存数据
+
         completed_beatmap = {
             "#": i,
             "BID": b.id,
             "SID": b.beatmapset_id,
-            "Beatmap Info": '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="135"/></a>'
-                            % (img_link, img_src, html.escape(b.beatmapset.artist), html.escape(b.beatmapset.title), html.escape(b.beatmapset.creator), html.escape(b.version)),
+            "Beatmap Info": beatmap_info,
             "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
             "Stars": cover.stars,
             "SR": cover.stars.replace("󰓎", "★"),
@@ -457,14 +487,14 @@ class OsuPlaylist(object):
 
     def generate(self) -> pd.DataFrame:
         playlist = asyncio.run(self.playlist_task())
-        df_columns = ["#", "BID", "Beatmap Info", "Mods"]
+        df_columns = ["#", "BID", "Beatmap Info", "Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD"]
         df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
         for column in self.custom_columns:
             if column == "mods":
                 continue
             else:
-                df_columns.append(column)
-                df_standalone_columns.append(column)
+                df_columns.insert(3, column)
+                df_standalone_columns.insert(4, column)
         df_columns.append("Notes")
         df_standalone_columns.append("Notes")
         df = pd.DataFrame(playlist, columns=df_columns)
@@ -472,11 +502,17 @@ class OsuPlaylist(object):
         df.sort_values(by=["#"], inplace=True)
         df_standalone.sort_values(by=["#"], inplace=True)
         pd.set_option("colheader_justify", "center")
-        html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body>{table}<footer>%s</footer></body></html>' % (
-            self.playlist_name,
-            self.suffix,
-            self.footer,
-        )
+        if self.footer != "":
+            html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body>{table}<footer class="footer">%s</footer></body></html>' % (
+                self.playlist_name,
+                self.suffix,
+                self.footer,
+            )
+        else:
+            html_string = '<html><head><meta charset="utf-8"><title>%s%s</title></head><link rel="stylesheet" type="text/css" href="style.css"/><body>{table}</body></html>' % (
+                self.playlist_name,
+                self.suffix,
+            )
         with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fi:
             fi.write(html_string.format(table=df.to_html(index=False, escape=False, classes="pd")))
 
