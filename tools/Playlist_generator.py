@@ -84,6 +84,7 @@ else:
 }
 
 .pd {
+  font-size: small;
   text-align: center;
   border-collapse: collapse;
 }
