@@ -206,6 +206,21 @@ class Osuawa(object):
         return Client.from_credentials(client_id=client_id, client_secret=client_secret, redirect_url=None)
 
 
+def cut_text(draw: ImageDraw.Draw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
+    text_len_dry_run = draw.textlength(text, font=font)
+    if text_len_dry_run > length_limit:
+        cut_length = -1
+        while True:
+            text_cut = "%s..." % text[:cut_length] if use_dots else text[:cut_length]
+            text_len_dry_run = draw.textlength(text_cut, font=font)
+            if text_len_dry_run <= length_limit:
+                break
+            cut_length -= 1
+        return text_cut
+    else:
+        return -1
+
+
 class BeatmapCover(object):
     font_sans = "./osuawa/ResourceHanRoundedSC-Regular.ttf"
     font_sans_fallback = "./osuawa/DejaVuSansCondensed.ttf"
@@ -254,20 +269,6 @@ class BeatmapCover(object):
 
         return cover_filename
 
-    def cut_text(self, draw: ImageDraw.Draw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
-        text_len_dry_run = draw.textlength(text, font=font)
-        if text_len_dry_run > length_limit:
-            cut_length = -1
-            while True:
-                text_cut = "%s..." % text[:cut_length] if use_dots else text[:cut_length]
-                text_len_dry_run = draw.textlength(text_cut, font=font)
-                if text_len_dry_run <= length_limit:
-                    break
-                cut_length -= 1
-            return text_cut
-        else:
-            return -1
-
     async def draw(self, cover_filename) -> str:
         im = Image.open(cover_filename)
         draw = ImageDraw.Draw(im)
@@ -279,18 +280,18 @@ class BeatmapCover(object):
         mod_theme_len = 50
         stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
         title_u = self.beatmap.beatmapset.title_unicode
-        t1_cut = self.cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u, len_set - stars_len - text_pos - padding - mod_theme_len, False)
+        t1_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u, len_set - stars_len - text_pos - padding - mod_theme_len, False)
         if t1_cut != -1:
             title_u2 = title_u.lstrip(t1_cut)
             title_u = "%s\n%s" % (t1_cut, title_u2)
-            t2_cut = self.cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u2, len_set - padding - mod_theme_len, True)
+            t2_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u2, len_set - padding - mod_theme_len, True)
             if t2_cut != -1:
                 title_u = "%s\n%s" % (t1_cut, t2_cut)
 
         # 绘制左侧文字
         fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
         version = self.beatmap.version
-        ver_cut = self.cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
+        ver_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
         if ver_cut != -1:
             version = ver_cut
         writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
@@ -330,7 +331,7 @@ class BeatmapCover(object):
 
 
 class OsuPlaylist(object):
-    mod_color = {"NM": "#40a0eb", "HD": "#ebeb40", "HR": "#eb4040", "EZ": "#40eb40", "DT": "#a040eb", "HT": "#a0a0a0", "FM": "#40507f", "TB": "#7f4050"}
+    mod_color = {"NM": "#40a0eb", "HD": "#ebeb40", "HR": "#eb4040", "EZ": "#40eb40", "DT": "#a040eb", "NC": "#eb40eb", "HT": "#a0a0a0", "FM": "#40507f", "TB": "#7f4050", "F+": "#507f40"}
 
     # osz_type = OneOf("full", "novideo", "mini")
 
@@ -407,8 +408,7 @@ class OsuPlaylist(object):
                 Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % bid, "%d.osu" % bid, headers)
                 sleep(0.5)
         my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
-        if mods:
-            my_attr.set_mods(mods)
+        my_attr.set_mods(mods)
         rosu_map = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid))
         rosu_diff = rosu.Difficulty(mods=mods)
         rosu_attr = rosu_diff.calculate(rosu_map)

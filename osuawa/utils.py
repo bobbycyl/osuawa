@@ -128,7 +128,7 @@ def calc_ar(preempt: float) -> float:
 
 class OsuDifficultyAttribute(object):
 
-    def __init__(self, cs, accuracy, ar, bpm, hit_length):
+    def __init__(self, cs: float, accuracy: float, ar: float, bpm: float, hit_length: int):
         self.cs = cs
         self.accuracy = accuracy
         self.hit_window = calc_hit_window(self.accuracy)
