@@ -1,4 +1,5 @@
 import os.path
+from typing import Optional
 from uuid import UUID
 
 import pandas as pd
@@ -9,6 +10,8 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 from osuawa import OsuPlaylist, Path
 
 st.set_page_config(page_title=_("Playlist generator") + " - osuawa")
+with st.sidebar:
+    st.toggle(_("new style"), key="new_style", value=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -17,8 +20,8 @@ def convert_df(df: pd.DataFrame, filename: str):
 
 
 @st.cache_data(show_spinner=False)
-def generate_playlist(playlist_filename: str):
-    playlist = OsuPlaylist(st.session_state.awa, playlist_filename)
+def generate_playlist(playlist_filename: str, css_style: Optional[int] = None):
+    playlist = OsuPlaylist(st.session_state.awa, playlist_filename, css_style=css_style)
     return playlist.generate()
 
 
@@ -41,7 +44,10 @@ else:
 
     with open(playlist_filename, "wb") as fo:
         fo.write(content)
-    table = generate_playlist(playlist_filename)
+    if st.session_state["new_style"]:
+        table = generate_playlist(playlist_filename, 1)
+    else:
+        table = generate_playlist(playlist_filename)
     st.divider()
     for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
         st.image(os.path.join(covers_dir, pic), caption=pic, use_container_width=True)
@@ -101,6 +107,10 @@ else:
   font-weight: bold;
 } */
 
+.card-main {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     color: white;
@@ -113,6 +123,11 @@ else:
 
   .pd tbody tr:hover {
     background: #303030;
+  }
+
+  .notes {
+    color: white;
+    background-color: #1c1c1c;
   }
 }
 
@@ -137,8 +152,13 @@ else:
   .pd tbody tr:hover {
     background: rgb(160, 200, 200);
   }
+
+  .notes {
+    color: rgb(16, 40, 40);
+    background-color: rgb(235, 250, 250);
+  }
 }
-            """
+"""
         )
     st.dataframe(table, hide_index=True)
     compress_as_zip(session_path, zip_filename)
