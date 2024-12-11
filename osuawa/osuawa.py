@@ -39,8 +39,7 @@ from .utils import (
 
 LANGUAGES = ["en_US", "zh_CN"]
 
-html_body_suffix = """
-    </div>
+html_body_suffix = """    </div>
   </div>
 """
 
@@ -352,6 +351,13 @@ class OsuPlaylist(object):
         self.suffix = suffix
         self.css_style = css_style
         self.footer = p.pop("footer") if "footer" in p else ""
+        self.banner = ""
+        if "banner" in p:
+            banner_img_src = p.pop("banner")
+            self.banner = """
+    <div class="relative w-full h-[300px] overflow-hidden"><img src="%s" class="w-full h-full object-cover"><div class="absolute inset-0 banner-mask"></div>
+    </div>
+""" % banner_img_src
         self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
         parsed_beatmap_list = []
 
@@ -380,9 +386,7 @@ class OsuPlaylist(object):
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
         self.tmp_dir = os.path.splitext(playlist_filename)[0] + ".tmp"
         self.bg_dir = os.path.join(os.path.split(playlist_filename)[0], "darkened-backgrounds")
-        self.covers_d = Downloader(self.covers_dir)
         self.tmp_d = Downloader(self.tmp_dir)
-        self.bg_d = Downloader(self.bg_dir)
         if not os.path.exists(os.path.join(os.path.split(playlist_filename)[0], "images")):
             os.mkdir(os.path.join(os.path.split(playlist_filename)[0], "images"))
             with open(os.path.join(os.path.split(playlist_filename)[0], "images", "total_length.svg"), "w") as fo:
@@ -460,22 +464,11 @@ class OsuPlaylist(object):
 
         # 绘制cover
         cover = BeatmapCover(b, self.mod_color.get(color_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
-        cover_filename = await cover.download(self.covers_d, "%d-%d.jpg" % (i, bid))
-        img_src = "./" + (os.path.relpath(cover_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")
-        img_link = "https://osu.ppy.sh/b/%d" % b.id
-        beatmap_info = '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="90"/></a>' % (
-            img_link,
-            img_src,
-            html.escape(b.beatmapset.artist),
-            html.escape(b.beatmapset.title),
-            html.escape(b.beatmapset.creator),
-            html.escape(b.version),
-        )
-        await cover.draw(cover_filename)
         if self.css_style:
             # 将背景图片保存在统一文件夹内以减小占用
             if not os.path.exists(os.path.join(self.bg_dir, "%d.jpg" % bid)):
-                bg_filename = await self.bg_d.async_start(b.beatmapset.background_url, "%d" % bid, headers)
+                bg_d = Downloader(self.bg_dir)
+                bg_filename = await bg_d.async_start(b.beatmapset.background_url, "%d" % bid, headers)
                 try:
                     im = Image.open(bg_filename)
                 except UnidentifiedImageError:
@@ -511,49 +504,58 @@ class OsuPlaylist(object):
               <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden group-hover:line-clamp-2">{html.escape(b.beatmapset.title_unicode)}</h3>
               <p class="font-semibold overflow-ellipsis overflow-hidden whitespace-nowrap">{html.escape(b.beatmapset.artist_unicode)}</p>
               <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300" style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.88; line-height: 1.5;">Mapper: <a class="font-semibold">{html.escape(b.beatmapset.creator)}</a></p>
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.88; line-height: 1.5;">Difficulty: <span class="font-semibold">{html.escape(b.version)}</span></p>
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.88; line-height: 1.5;">Beatmap ID: <span class="font-semibold">{b.id}</span></p>
-                <div class="items-center text-xs w-full grid grid-cols-12 mt-1">
-                  <div class="col-span-3">
-                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><span>CS</span>
-                      <div class="flex items-center flex-1 w-full h-2 bg-gray-600 rounded mx-2">
-                        <div class="h-full rounded" style="background-color: white; width: {cs_pct}%"></div>
+                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Mapper: <a class="font-semibold">{html.escape(b.beatmapset.creator)}</a></p>
+                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Difficulty: <span class="font-semibold">{html.escape(b.version)}</span></p>
+                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Beatmap ID: <span class="font-semibold">{b.id}</span></p>
+                <div class="text-xs w-full grid grid-cols-3 mt-1 gap-6">
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <div class="text-left flex-initial w-6 card-info-lines"><span>CS</span></div>
+                      <div class="flex-1 w-full mr-2">
+                        <div class="w-full h-2 bg-gray-600 rounded">
+                          <div class="h-full rounded" style="background-color: white; width: {cs_pct}%"></div>
+                        </div>
                       </div>
+                      <div class="flex-initial w-8 text-right font-semibold card-info-lines">{cover.cs}</div>
                     </div>
                   </div>
-                  <div class="font-semibold">{cover.cs}</div>
-                  <div class="col-span-3">
-                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><span>AR</span>
-                      <div class="flex items-center flex-1 w-full h-2 bg-gray-600 rounded mx-2">
-                        <div class="h-full rounded" style="background-color: white; width: {ar_pct}%"></div>
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <div class="text-left flex-initial w-6 card-info-lines"><span>AR</span></div>
+                      <div class="flex-1 w-full mr-2">
+                        <div class="w-full h-2 bg-gray-600 rounded">
+                          <div class="h-full rounded" style="background-color: white; width: {ar_pct}%"></div>
+                        </div>
                       </div>
+                      <div class="flex-initial w-8 text-right font-semibold card-info-lines">{cover.ar}</div>
                     </div>
                   </div>
-                  <div class="font-semibold">{cover.ar}</div>
-                  <div class="col-span-3">
-                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><span>OD</span>
-                      <div class="flex items-center flex-1 w-full h-2 bg-gray-600 rounded mx-2">
-                        <div class="h-full rounded" style="background-color: white; width: {od_pct}%"></div>
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <div class="text-left flex-initial w-6 card-info-lines"><span>OD</span></div>
+                      <div class="flex-1 w-full mr-2">
+                        <div class="w-full h-2 bg-gray-600 rounded">
+                          <div class="h-full rounded" style="background-color: white; width: {od_pct}%"></div>
+                        </div>
                       </div>
+                      <div class="flex-initial w-8 text-right font-semibold card-info-lines">{cover.od}</div>
                     </div>
                   </div>
-                  <div class="font-semibold">{cover.od}</div>
                 </div>
-                <div class="text-xs w-full grid grid-cols-3">
+                <div class="text-xs w-full grid grid-cols-3 gap-6">
                   <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><img src="./images/bpm.svg" class="w-4"/>
-                      <div class="flex items-center flex-1 font-semibold ml-2">{cover.bpm}</div>
+                    <div class="flex items-center justify-between card-info-lines"><img src="./images/bpm.svg" class="w-4"/>
+                      <div class="flex-1 font-semibold ml-2">{cover.bpm}</div>
                     </div>
                   </div>
                   <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><img src="./images/total_length.svg" class="w-4"/>
-                      <div class="flex items-center flex-1 font-semibold ml-2">{cover.hit_length}</div>
+                    <div class="flex items-center justify-between card-info-lines"><img src="./images/total_length.svg" class="w-4"/>
+                      <div class="flex-1 font-semibold ml-2">{cover.hit_length}</div>
                     </div>
                   </div>
                   <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><img src="./images/count_circles.svg" class="w-4"/>
-                      <div class="flex items-center flex-1 font-semibold ml-2">{cover.max_combo}</div>
+                    <div class="flex items-center justify-between card-info-lines"><img src="./images/count_circles.svg" class="w-4"/>
+                      <div class="flex-1 font-semibold ml-2">{cover.max_combo}</div>
                     </div>
                   </div>
                 </div>
@@ -564,11 +566,24 @@ class OsuPlaylist(object):
         <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-3 notes">
           <p class="text-xs flex justify-between items-end">
             <span>{notes}{extra_notes}</span><a href="https://osu.ppy.sh/b/{b.id}"
-              class="text-custom hover:text-custom-600"><i class="fas fa-external-link-alt"></i></a>
+              class="text-custom-900 dark:text-custom hover:text-custom-600"><i class="fas fa-external-link-alt"></i></a>
           </p>
         </div>
       </div>
 '''
+        else:
+            cover_filename = await cover.download(Downloader(self.covers_dir), "%d-%d.jpg" % (i, bid))
+            img_src = "./" + (os.path.relpath(cover_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")
+            img_link = "https://osu.ppy.sh/b/%d" % b.id
+            beatmap_info = '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="90"/></a>' % (
+                img_link,
+                img_src,
+                html.escape(b.beatmapset.artist),
+                html.escape(b.beatmapset.title),
+                html.escape(b.beatmapset.creator),
+                html.escape(b.version),
+            )
+            await cover.draw(cover_filename)
 
         # 保存数据
         completed_beatmap = {
@@ -649,15 +664,16 @@ class OsuPlaylist(object):
 """
                 html_body_prefix = (
                     """
-    <div class="min-h-screen p-8">
-    <header class="mb-8">
-      <h1 class="text-2xl font-bold text-center">
-        %s
-      </h1>
-    </header>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+  <header class="mb-2">
+    %s
+    <h1 class="text-2xl font-bold text-center pt-8">
+      %s
+    </h1>
+  </header>
+  <div class="min-h-screen p-4 sm:px-8 lg:px-12 xl:px-20 2xl:px-32">
+    <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
 """
-                    % self.playlist_name
+                    % (self.banner, self.playlist_name)
                 )
                 fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
             else:

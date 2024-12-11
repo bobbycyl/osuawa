@@ -48,9 +48,9 @@ else:
         table = generate_playlist(playlist_filename, 1)
     else:
         table = generate_playlist(playlist_filename)
+        for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
+            st.image(os.path.join(covers_dir, pic), caption=pic, use_container_width=True)
     st.divider()
-    for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
-        st.image(os.path.join(covers_dir, pic), caption=pic, use_container_width=True)
     convert_df(table, csv_filename)
     with open(css_filename, "w") as fo:
         fo.write(
@@ -111,10 +111,19 @@ else:
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
 }
 
+.card-info-lines {
+  line-height: 1.5;
+  opacity: 0.88;
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     color: white;
     background-color: #243030;
+  }
+
+  .banner-mask {
+    background-image: linear-gradient(to bottom, #24303000, rgb(36, 48, 48));
   }
 
   .pd {
@@ -135,6 +144,14 @@ else:
   body {
     color: rgb(16, 40, 40);
     background-color: rgb(245, 255, 255);
+  }
+
+  .banner-mask {
+    background-image: linear-gradient(
+      to bottom,
+      rgba(245, 255, 255, 0),
+      rgb(245, 255, 255)
+    );
   }
 
   .pd {
