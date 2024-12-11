@@ -240,7 +240,9 @@ class BeatmapCover(object):
         self.beatmap = beatmap
         self.block_color = block_color
         self.stars1 = stars1
+        self.is_high_stars = False
         if self.stars1 > 6.5:
+            self.is_high_stars = True
             self.stars_text_color = "#f0dd55"
         else:
             self.stars_text_color = "#000000"
@@ -495,11 +497,11 @@ class OsuPlaylist(object):
         <div
           class="relative h-32 rounded-lg overflow-hidden shadow-lg transition-all duration-300 transform group-hover:rounded-b-none group-hover:h-64 group-hover:-translate-y-3">
           <img src="{"./" + (os.path.relpath(bg_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")}" alt="{html.escape(b.beatmapset.artist)} - {html.escape(b.beatmapset.title)} ({html.escape(b.beatmapset.creator)}) [{html.escape(b.version)}]"
-            class="w-full h-full object-cover brightness-75 blur-0 contrast-100 scale-100 group-hover:brightness-50 group-hover:blur-sm group-hover:contrast-125 group-hover:scale-105 transition-all duration-300" />
+            class="w-full h-full object-cover brightness-90 dark:brightness-50 blur-0 contrast-100 scale-100 group-hover:brightness-50 dark:group-hover:brightness-50 group-hover:blur-sm group-hover:contrast-125 group-hover:scale-105 transition-all duration-300" />
           <div class="absolute inset-0 p-4 flex flex-col justify-between">
             <div class="flex justify-between items-start">
-              <div class="px-3 py-1 rounded-full text-white font-semibold shadow" style="background-color: {calc_star_rating_color(stars1)}; color: {cover.stars_text_color}">
-                <i class="fas fa-star"></i> {cover.stars.replace("󰓎", "")}
+              <div class="px-3 py-1 rounded-full text-white font-semibold shadow" style="background-color: {calc_star_rating_color(stars1)};">
+                <div style="color: {cover.stars_text_color}; opacity: {'1' if cover.is_high_stars else '0.8'}; text-shadow: 0px 0.5px 1.5px rgba(185, 185, 185, 0.5);"><i class="fas fa-star" {'' if cover.is_high_stars else 'style="color: #0f172a;"'}></i> {cover.stars.replace("󰓎", "")}</div>
               </div>
               <div class="flex gap-2 card-main">
                 {"".join([f'<span class="px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}</span>' for mod in raw_mods])}
@@ -509,52 +511,48 @@ class OsuPlaylist(object):
               <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden group-hover:line-clamp-2">{html.escape(b.beatmapset.title_unicode)}</h3>
               <p class="font-semibold overflow-ellipsis overflow-hidden whitespace-nowrap">{html.escape(b.beatmapset.artist_unicode)}</p>
               <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300" style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.96; line-height: 1.5;">Mapper: <a class="font-semibold">{html.escape(b.beatmapset.creator)}</a></p>
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.96; line-height: 1.5;">Difficulty: <a class="font-semibold">{html.escape(b.version)}</a></p>
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.96; line-height: 1.5;">Beatmap ID: <a class="font-semibold">{b.id}</a></p>
-                <p class="text-xs">
-                <div class="text-xs w-full grid grid-cols-3 gap-6">
-                  <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.96; line-height: 1.5;"><span>CS</span>
-                      <div class="flex items-center flex-1 ml-2">
-                        <div class="w-full h-2 bg-gray-800 rounded">
-                          <div class="h-full bg-custom rounded" style="width: {cs_pct}%"></div>
-                        </div><span class="font-semibold ml-2">{cover.cs}</span>
+                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.88; line-height: 1.5;">Mapper: <a class="font-semibold">{html.escape(b.beatmapset.creator)}</a></p>
+                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.88; line-height: 1.5;">Difficulty: <span class="font-semibold">{html.escape(b.version)}</span></p>
+                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap" style="opacity: 0.88; line-height: 1.5;">Beatmap ID: <span class="font-semibold">{b.id}</span></p>
+                <div class="items-center text-xs w-full grid grid-cols-12 mt-1">
+                  <div class="col-span-3">
+                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><span>CS</span>
+                      <div class="flex items-center flex-1 w-full h-2 bg-gray-600 rounded mx-2">
+                        <div class="h-full rounded" style="background-color: white; width: {cs_pct}%"></div>
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.96; line-height: 1.5;"><span>AR</span>
-                      <div class="flex items-center flex-1 ml-2">
-                        <div class="w-full h-2 bg-gray-800 rounded">
-                          <div class="h-full bg-custom rounded" style="width: {ar_pct}%"></div>
-                        </div><span class="font-semibold ml-2">{cover.ar}</span>
+                  <div class="font-semibold">{cover.cs}</div>
+                  <div class="col-span-3">
+                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><span>AR</span>
+                      <div class="flex items-center flex-1 w-full h-2 bg-gray-600 rounded mx-2">
+                        <div class="h-full rounded" style="background-color: white; width: {ar_pct}%"></div>
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.96; line-height: 1.5;"><span>OD</span>
-                      <div class="flex items-center flex-1 ml-2">
-                        <div class="w-full h-2 bg-gray-800 rounded">
-                          <div class="h-full bg-custom rounded" style="width: {od_pct}%"></div>
-                        </div><span class="font-semibold ml-2">{cover.od}</span>
+                  <div class="font-semibold">{cover.ar}</div>
+                  <div class="col-span-3">
+                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><span>OD</span>
+                      <div class="flex items-center flex-1 w-full h-2 bg-gray-600 rounded mx-2">
+                        <div class="h-full rounded" style="background-color: white; width: {od_pct}%"></div>
                       </div>
                     </div>
                   </div>
+                  <div class="font-semibold">{cover.od}</div>
                 </div>
-                <div class="text-xs w-full grid grid-cols-3 gap-6">
+                <div class="text-xs w-full grid grid-cols-3">
                   <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.96; line-height: 1.5;"><img src="./images/bpm.svg" class="w-4"/>
+                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><img src="./images/bpm.svg" class="w-4"/>
                       <div class="flex items-center flex-1 font-semibold ml-2">{cover.bpm}</div>
                     </div>
                   </div>
                   <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.96; line-height: 1.5;"><img src="./images/total_length.svg" class="w-4"/>
+                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><img src="./images/total_length.svg" class="w-4"/>
                       <div class="flex items-center flex-1 font-semibold ml-2">{cover.hit_length}</div>
                     </div>
                   </div>
                   <div>
-                    <div class="flex items-center justify-between" style="opacity: 0.96; line-height: 1.5;"><img src="./images/count_circles.svg" class="w-4"/>
+                    <div class="flex items-center justify-between" style="opacity: 0.88; line-height: 1.5;"><img src="./images/count_circles.svg" class="w-4"/>
                       <div class="flex items-center flex-1 font-semibold ml-2">{cover.max_combo}</div>
                     </div>
                   </div>
