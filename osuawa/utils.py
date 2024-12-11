@@ -92,7 +92,7 @@ async def _get_beatmaps_dict(client: AsynchronousClient, cut_bids: Sequence[Sequ
 def get_beatmaps_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[int, Beatmap]:
     cut_bids = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(bids[i: i + 50])
+        cut_bids.append(bids[i : i + 50])
     results = asyncio.run(_get_beatmaps_dict(client, cut_bids))
     beatmaps_dict = {}
     for bs in results:
@@ -102,7 +102,7 @@ def get_beatmaps_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[i
 
 
 def calc_hit_window(original_accuracy: float, magnitude: float = 1.0) -> float:
-    hit_window = 80 - 6 * original_accuracy
+    hit_window = 80.0 - 6 * original_accuracy
     return hit_window / magnitude
 
 
@@ -112,17 +112,17 @@ def calc_accuracy(hit_window: float) -> float:
 
 def calc_preempt(original_ar: float, magnitude: float = 1.0) -> float:
     if original_ar < 5:
-        preempt = 1200 + 600 * (5 - original_ar) / 5
+        preempt = 1200.0 + 600.0 * (5 - original_ar) / 5
     else:
-        preempt = 1200 - 750 * (original_ar - 5) / 5
+        preempt = 1200.0 - 750 * (original_ar - 5) / 5
     return preempt / magnitude
 
 
 def calc_ar(preempt: float) -> float:
     if preempt > 1200:
-        ar = 5 - (preempt - 1200) / 600 * 5
+        ar = 5.0 - (preempt - 1200) / 600 * 5
     else:
-        ar = 5 + (1200 - preempt) / 750 * 5
+        ar = 5.0 + (1200 - preempt) / 750 * 5
     return ar
 
 
@@ -153,10 +153,10 @@ class OsuDifficultyAttribute(object):
         if Mod.HardRock.value in mods_dict:
             self.cs = self.cs * 1.3
             if self.cs > 10:
-                self.cs = 10
+                self.cs = 10.0
             self.accuracy = self.accuracy * 1.4
             if self.accuracy > 10:
-                self.accuracy = 10
+                self.accuracy = 10.0
             self.ar = self.ar * 1.4
         elif Mod.Easy.value in mods_dict:
             self.cs = self.cs * 0.5
@@ -177,10 +177,10 @@ class OsuDifficultyAttribute(object):
             magnitude = mods_dict[Mod.Daycore.value].get("speed_change", 0.75)
         elif Mod.WindUp.value in mods_dict:
             _settings = mods_dict[Mod.WindUp.value]
-            magnitude = 2 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 1.5))
+            magnitude = 2.0 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 1.5))
         elif Mod.WindDown.value in mods_dict:
             _settings = mods_dict[Mod.WindDown.value]
-            magnitude = 2 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 0.75))
+            magnitude = 2.0 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 0.75))
         if magnitude > 1:
             self.is_speed_up = True
         elif magnitude < 1:
@@ -292,6 +292,15 @@ def calc_beatmap_attributes(beatmap: Beatmap, mods: list) -> list:
     ]
     attr.extend(calc_difficulty_and_performance(beatmap.id, mods))
     return attr
+
+
+def calc_positive_percent(score: int | float, min_score: int | float, max_score: int | float) -> int:
+    score_pct = int((score - min_score) / (max_score - min_score) * 100)
+    if score_pct > 100:
+        score_pct = 100
+    elif score_pct < 0:
+        score_pct = 0
+    return score_pct
 
 
 def calc_star_rating_color(stars: float) -> str:

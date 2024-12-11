@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-12-10 13:37+0800\n"
+"POT-Creation-Date: 2024-12-11 15:44+0800\n"
 "PO-Revision-Date: 2024-10-09 15:07+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -142,7 +142,7 @@ msgstr "当前会话：%s"
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:49 tools/Playlist_generator.py:11
+#: app.py:49 tools/Playlist_generator.py:12
 msgid "Playlist generator"
 msgstr "做课题"
 
@@ -150,15 +150,19 @@ msgstr "做课题"
 msgid "Recorder"
 msgstr "看记录"
 
-#: tools/Playlist_generator.py:25
+#: tools/Playlist_generator.py:14
+msgid "new style"
+msgstr "新样式"
+
+#: tools/Playlist_generator.py:28
 msgid "Choose a file"
 msgstr "选择文件"
 
-#: tools/Playlist_generator.py:27
+#: tools/Playlist_generator.py:30
 msgid "Please upload a file first."
 msgstr "请先上传文件。"
 
-#: tools/Playlist_generator.py:146
+#: tools/Playlist_generator.py:166
 msgid "Download the resources"
 msgstr "下载资源"
 
