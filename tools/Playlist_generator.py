@@ -114,7 +114,7 @@ else:
 @media (prefers-color-scheme: dark) {
   body {
     color: white;
-    background-color: #1f1f1f;
+    background-color: #243030;
   }
 
   .pd {
@@ -127,7 +127,7 @@ else:
 
   .notes {
     color: white;
-    background-color: #1c1c1c;
+    background-color: #1c2020;
   }
 }
 
@@ -138,7 +138,7 @@ else:
   }
 
   .pd {
-    border: 1px solid rgb(185, 200, 200);
+    border: 1px solid rgb(185, 205, 205);
   }
 
   .pd thead {
@@ -155,7 +155,7 @@ else:
 
   .notes {
     color: rgb(16, 40, 40);
-    background-color: rgb(235, 250, 250);
+    background-color: rgb(185, 205, 205);
   }
 }
 """
