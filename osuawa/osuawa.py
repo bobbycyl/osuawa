@@ -506,7 +506,6 @@ class OsuPlaylist(object):
                   <div class="flex-initial rounded text-xs shadow-xl mt-6 px-2 py-1 mx-4 w-auto h-auto break-all notes" style="opacity: 88%;">{"; ".join(mods_ready)}</div>
                 </div>
               </div>
-
             </div>
             <div class="text-white card-main" style="padding-top: 1rem">
               <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden group-hover:line-clamp-2">{html.escape(b.beatmapset.title_unicode)}</h3>
