@@ -212,7 +212,7 @@ class Osuawa(object):
         return Client.from_credentials(client_id=client_id, client_secret=client_secret, redirect_url=None)
 
 
-def cut_text(draw: ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
+def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
     text_len_dry_run = draw.textlength(text, font=font)
     if text_len_dry_run > length_limit:
         cut_length = -1
@@ -355,10 +355,13 @@ class OsuPlaylist(object):
         self.banner = ""
         if "banner" in p:
             banner_img_src = p.pop("banner")
-            self.banner = """
+            self.banner = (
+                """
     <div class="relative w-full h-[135] xl:h-[300] overflow-hidden"><img src="%s" class="w-full h-full object-cover"><div class="absolute inset-0 banner-mask"></div>
     </div>
-""" % banner_img_src
+"""
+                % banner_img_src
+            )
         self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
         parsed_beatmap_list = []
 
@@ -425,7 +428,7 @@ class OsuPlaylist(object):
         mods = raw_mods.copy()
         for j in range(len(raw_mods)):
             # 如果非官方 Mods 缩写在列表中，则处理过后剔除该 Mod
-            if raw_mods[j]["acronym"] in self.custom_mods_acronym :
+            if raw_mods[j]["acronym"] in self.custom_mods_acronym:
                 if raw_mods[j]["acronym"] == "FM" or raw_mods[j]["acronym"] == "F+":
                     is_fm = True
                 mods.pop(j)
@@ -452,8 +455,8 @@ class OsuPlaylist(object):
             rosu_attr_fm = rosu_diff_fm.calculate(rosu_map)
             stars2 = rosu_attr_fm.stars
         cs = "%s" % round(my_attr.cs, 2)
-        ar = "%s" % round(rosu_attr.ar, 2)
-        od = "%s" % round(rosu_attr.od, 2)
+        ar = "0" if rosu_attr.ar is None else "%s" % round(rosu_attr.ar, 2)
+        od = "0" if rosu_attr.od is None else "%s" % round(rosu_attr.od, 2)
         cs_pct = calc_positive_percent(my_attr.cs, 0, 10)
         ar_pct = calc_positive_percent(rosu_attr.ar, 0, 10)
         od_pct = calc_positive_percent(rosu_attr.od, 0, 10)
@@ -495,14 +498,15 @@ class OsuPlaylist(object):
           <div class="absolute inset-0 p-4 flex flex-col justify-between">
             <div class="flex justify-between items-start">
               <div class="px-3 py-1 rounded-full text-white font-semibold shadow" style="background-color: {calc_star_rating_color(stars1)};">
-                <div style="color: {cover.stars_text_color}; opacity: {'1' if cover.is_high_stars else '0.8'}; text-shadow: 0px 0.5px 1.5px rgba(185, 185, 185, 0.5);"><i class="fas fa-star" {'' if cover.is_high_stars else 'style="color: #0f172a;"'}></i> {cover.stars.replace("󰓎", "")}</div>
+                <div style="color: {cover.stars_text_color}; opacity: {'1' if cover.is_high_stars else '0.8'}; text-shadow: 0px 0.5px 1.5px rgba(185, 185, 185, 0.5);"><i class="fas fa-star" {'' if cover.is_high_stars else 'style="color: #0f172a;"'}></i>{cover.stars.replace("󰓎", "")}</div>
               </div>
               <div class="flex gap-2 has-tooltip">
                 {"".join([f'<span class="card-main px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}{"<sup>*</sup>" if mod.get("settings") and mod["acronym"] not in self.custom_mods_acronym else ""}</span>' for mod in raw_mods])}
                 <div class="tooltip flex">
-                  <div class="flex-1 rounded text-xs shadow-xl mt-6 px-2 py-1 ml-3 -mr-1 w-1/2 h-auto break-all notes">{mods_ready}</div>
+                  <div class="flex-initial rounded text-xs shadow-xl mt-6 px-2 py-1 mx-4 w-auto h-auto break-all notes" style="opacity: 88%;">{"; ".join(mods_ready)}</div>
                 </div>
               </div>
+
             </div>
             <div class="text-white card-main" style="padding-top: 1rem">
               <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden group-hover:line-clamp-2">{html.escape(b.beatmapset.title_unicode)}</h3>
@@ -666,8 +670,7 @@ class OsuPlaylist(object):
   <script src="https://ai-public.mastergo.com/gen_page/tailwind-config.min.js" data-color="#A0C8C8"
     data-border-radius="medium"></script>
 """
-                html_body_prefix = (
-                    """
+                html_body_prefix = """
   <header class="mb-2">
     %s
     <h1 class="relative text-2xl font-bold text-center pt-8">
@@ -676,8 +679,9 @@ class OsuPlaylist(object):
   </header>
   <div class="min-h-screen p-4 sm:px-8 lg:px-12 xl:px-20 2xl:px-32">
     <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
-"""
-                    % (self.banner, self.playlist_name)
+""" % (
+                    self.banner,
+                    self.playlist_name,
                 )
                 fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
             else:
