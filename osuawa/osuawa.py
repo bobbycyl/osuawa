@@ -339,6 +339,7 @@ class BeatmapCover(object):
 
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
+    custom_mods_acronym = {"NM", "TB", "FM", "F+"}
     mod_color = {"NM": "#107fb9", "HD": "#b97f10", "HR": "#b91010", "EZ": "#10b97f", "DT": "#7f10b9", "NC": "#b9107f", "HT": "#7f7f7f", "FM": "#40507f", "TB": "#7f4050", "F+": "#507f40"}
 
     # osz_type = OneOf("full", "novideo", "mini")
@@ -421,13 +422,13 @@ class OsuPlaylist(object):
         # 处理NM, FM, TB
         color_mod = raw_mods[0]["acronym"]
         is_fm = False
-        mods = raw_mods
+        mods = raw_mods.copy()
         for j in range(len(raw_mods)):
-            if raw_mods[j]["acronym"] == "NM" or raw_mods[j]["acronym"] == "TB":
-                mods = []
-            if raw_mods[j]["acronym"] == "FM" or raw_mods[j]["acronym"] == "F+":
-                is_fm = True
-                mods = []
+            # 如果非官方 Mods 缩写在列表中，则处理过后剔除该 Mod
+            if raw_mods[j]["acronym"] in self.custom_mods_acronym :
+                if raw_mods[j]["acronym"] == "FM" or raw_mods[j]["acronym"] == "F+":
+                    is_fm = True
+                mods.pop(j)
             if "settings" in raw_mods[j]:
                 mods_ready.append("%s(%s)" % (raw_mods[j]["acronym"], ",".join(["%s=%s" % it for it in raw_mods[j]["settings"].items()])))
             else:
@@ -496,8 +497,11 @@ class OsuPlaylist(object):
               <div class="px-3 py-1 rounded-full text-white font-semibold shadow" style="background-color: {calc_star_rating_color(stars1)};">
                 <div style="color: {cover.stars_text_color}; opacity: {'1' if cover.is_high_stars else '0.8'}; text-shadow: 0px 0.5px 1.5px rgba(185, 185, 185, 0.5);"><i class="fas fa-star" {'' if cover.is_high_stars else 'style="color: #0f172a;"'}></i> {cover.stars.replace("󰓎", "")}</div>
               </div>
-              <div class="flex gap-2 card-main">
-                {"".join([f'<span class="px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}</span>' for mod in raw_mods])}
+              <div class="flex gap-2 has-tooltip">
+                {"".join([f'<span class="card-main px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}{"<sup>*</sup>" if mod.get("settings") and mod["acronym"] not in self.custom_mods_acronym else ""}</span>' for mod in raw_mods])}
+                <div class="tooltip flex">
+                  <div class="flex-1 rounded text-xs shadow-xl mt-6 px-2 py-1 ml-3 -mr-1 w-1/2 h-auto break-all notes">{mods_ready}</div>
+                </div>
               </div>
             </div>
             <div class="text-white card-main" style="padding-top: 1rem">
@@ -666,7 +670,7 @@ class OsuPlaylist(object):
                     """
   <header class="mb-2">
     %s
-    <h1 class="text-2xl font-bold text-center pt-8">
+    <h1 class="relative text-2xl font-bold text-center pt-8">
       %s
     </h1>
   </header>

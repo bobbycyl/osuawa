@@ -1,4 +1,5 @@
 import os.path
+import shutil
 from typing import Optional
 from uuid import UUID
 
@@ -52,131 +53,8 @@ else:
             st.image(os.path.join(covers_dir, pic), caption=pic, use_container_width=True)
     st.divider()
     convert_df(table, csv_filename)
-    with open(css_filename, "w") as fo:
-        fo.write(
-            """.footer {
-  border-top: 3px solid transparent;
-  border-width: 3px 0px 0px;
-  border-image: linear-gradient(
-      90deg,
-      rgb(66, 144, 251) 7%,
-      rgb(79, 192, 255) 7%,
-      rgb(79, 192, 255) 19.5%,
-      rgb(79, 255, 213) 19.5%,
-      rgb(79, 255, 213) 28%,
-      rgb(124, 255, 79) 28%,
-      rgb(124, 255, 79) 34%,
-      rgb(246, 240, 92) 34%,
-      rgb(246, 240, 92) 43%,
-      rgb(255, 128, 104) 43%,
-      rgb(255, 128, 104) 53%,
-      rgb(255, 78, 111) 53%,
-      rgb(255, 78, 111) 61%,
-      rgb(198, 69, 184) 61%,
-      rgb(198, 69, 184) 71%,
-      rgb(101, 99, 222) 71%,
-      rgb(101, 99, 222) 82%,
-      rgb(24, 21, 142) 82%,
-      rgb(24, 21, 142) 92%,
-      rgb(0, 0, 0) 92%,
-      rgb(0, 0, 0) 100%
-    )
-    1 / 1 / 0 stretch;
-  bottom: 0;
-  width: 100%;
-  height: 50px;
-  text-align: center;
-  padding: 10px;
-}
-
-.pd {
-  font-size: small;
-  text-align: center;
-  border-collapse: collapse;
-}
-
-.pd th {
-  padding: 5px;
-}
-
-.pd td {
-  padding: 1px 5px 1px;
-}
-
-/* .pd tr:hover {
-  font-weight: bold;
-} */
-
-.card-main {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
-}
-
-.card-info-lines {
-  line-height: 1.5;
-  opacity: 0.88;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: white;
-    background-color: #243030;
-  }
-
-  .banner-mask {
-    background-image: linear-gradient(to bottom, #24303000 88%, rgb(36, 48, 48));
-  }
-
-  .pd {
-    border: 1px solid #1c1c1c;
-  }
-
-  .pd tbody tr:hover {
-    background: #303030;
-  }
-
-  .notes {
-    color: white;
-    background-color: #1c2020;
-  }
-}
-
-@media (prefers-color-scheme: light) {
-  body {
-    color: rgb(16, 40, 40);
-    background-color: rgb(245, 255, 255);
-  }
-
-  .banner-mask {
-    background-image: linear-gradient(
-      to bottom,
-      rgba(245, 255, 255, 0) 88%,
-      rgb(245, 255, 255)
-    );
-  }
-
-  .pd {
-    border: 1px solid rgb(185, 205, 205);
-  }
-
-  .pd thead {
-    background-color: rgb(127, 185, 185);
-  }
-
-  .pd tbody {
-    background-color: rgb(235, 250, 250);
-  }
-
-  .pd tbody tr:hover {
-    background: rgb(160, 200, 200);
-  }
-
-  .notes {
-    color: rgb(16, 40, 40);
-    background-color: rgb(185, 205, 205);
-  }
-}
-"""
-        )
+    if os.path.exists("./playlists/style.css"):
+        shutil.copy("./playlists/style.css", css_filename)
     st.dataframe(table, hide_index=True)
     compress_as_zip(session_path, zip_filename)
     with open(zip_filename, "rb") as zipfi:
