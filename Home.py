@@ -58,7 +58,7 @@ def run(g):
             break
 
 
-def register_awa(code: str = None):
+def register_awa(code: Optional[str] = None):
     with st.spinner(_("registering a client...")):
         return Osuawa(st.secrets.args.oauth_filename, Path.OUTPUT_DIRECTORY.value, code)
 

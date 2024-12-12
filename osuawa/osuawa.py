@@ -54,7 +54,7 @@ def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict
 class Osuawa(object):
     tz = "Asia/Shanghai"
 
-    def __init__(self, oauth_filename: str, output_dir: str, code: str = None):
+    def __init__(self, oauth_filename: str, output_dir: str, code: Optional[str] = None):
         auth_url = None
         p = Properties(oauth_filename)
         p.load()
@@ -212,7 +212,7 @@ class Osuawa(object):
         return Client.from_credentials(client_id=client_id, client_secret=client_secret, redirect_url=None)
 
 
-def cut_text(draw: ImageDraw.Draw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
+def cut_text(draw: ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
     text_len_dry_run = draw.textlength(text, font=font)
     if text_len_dry_run > length_limit:
         cut_length = -1
@@ -355,7 +355,7 @@ class OsuPlaylist(object):
         if "banner" in p:
             banner_img_src = p.pop("banner")
             self.banner = """
-    <div class="relative w-full h-[300px] overflow-hidden"><img src="%s" class="w-full h-full object-cover"><div class="absolute inset-0 banner-mask"></div>
+    <div class="relative w-full h-[135] xl:h-[300] overflow-hidden"><img src="%s" class="w-full h-full object-cover"><div class="absolute inset-0 banner-mask"></div>
     </div>
 """ % banner_img_src
         self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []

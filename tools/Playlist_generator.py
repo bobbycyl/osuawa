@@ -123,7 +123,7 @@ else:
   }
 
   .banner-mask {
-    background-image: linear-gradient(to bottom, #24303000, rgb(36, 48, 48));
+    background-image: linear-gradient(to bottom, #24303000 88%, rgb(36, 48, 48));
   }
 
   .pd {
@@ -149,7 +149,7 @@ else:
   .banner-mask {
     background-image: linear-gradient(
       to bottom,
-      rgba(245, 255, 255, 0),
+      rgba(245, 255, 255, 0) 88%,
       rgb(245, 255, 255)
     );
   }
