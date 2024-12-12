@@ -214,7 +214,7 @@ def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool |
     :param score: score object
     :return: [bid, user, score, accuracy, max_combo, passed, pp, mods, ts]
     """
-    return (
+    return [
         score.beatmap_id,
         score.user_id,
         score.total_score,
@@ -224,10 +224,10 @@ def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool |
         score.pp,
         [({"acronym": get_acronym(y.mod), "settings": y.settings} if y.settings is not None else {"acronym": get_acronym(y.mod)}) for y in score.mods],
         score.ended_at,
-    )
+    ]
 
 
-def rosu_calc(beatmap_file: str, mods: list) ->  tuple[float, int, float | None, float | None, float | None, float | None, float | None, float | None, float, float, float, float]:
+def rosu_calc(beatmap_file: str, mods: list) -> tuple:
     beatmap = rosu.Beatmap(path=beatmap_file)
     diff = rosu.Difficulty(mods=mods)
     diff_attr = diff.calculate(beatmap)
@@ -264,10 +264,10 @@ def calc_difficulty_and_performance(beatmap: int, mods: list) -> tuple:
     return rosu_calc(os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap), mods)
 
 
-def calc_beatmap_attributes(beatmap: Beatmap, mods: list):
+def calc_beatmap_attributes(beatmap: Beatmap, mods: list) -> list:
     osu_diff_attr = OsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
     osu_diff_attr.set_mods(mods)
-    attr = (
+    attr = [
         osu_diff_attr.cs,
         osu_diff_attr.hit_window,
         osu_diff_attr.preempt,
@@ -288,8 +288,9 @@ def calc_beatmap_attributes(beatmap: Beatmap, mods: list):
             beatmap.version,
         ),
         beatmap.difficulty_rating,
-    )
-    return attr + calc_difficulty_and_performance(beatmap.id, mods)
+    ]
+    attr.extend(calc_difficulty_and_performance(beatmap.id, mods))
+    return attr
 
 
 def calc_positive_percent(score: int | float, min_score: int | float, max_score: int | float) -> int:

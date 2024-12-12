@@ -6,6 +6,7 @@
       <excludeFolder url="file://$MODULE_DIR$/output" />
       <excludeFolder url="file://$MODULE_DIR$/playlists" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
+      <excludeFolder url="file://$MODULE_DIR$/static/beatmaps" />
     </content>
     <orderEntry type="jdk" jdkName="C:\Users\bobbycyl\miniforge3" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
