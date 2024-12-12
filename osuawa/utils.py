@@ -92,7 +92,7 @@ async def _get_beatmaps_dict(client: AsynchronousClient, cut_bids: Sequence[Sequ
 def get_beatmaps_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[int, Beatmap]:
     cut_bids = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(bids[i : i + 50])
+        cut_bids.append(bids[i:i + 50])
     results = asyncio.run(_get_beatmaps_dict(client, cut_bids))
     beatmaps_dict = {}
     for bs in results:
@@ -293,7 +293,9 @@ def calc_beatmap_attributes(beatmap: Beatmap, mods: list) -> list:
     return attr
 
 
-def calc_positive_percent(score: int | float, min_score: int | float, max_score: int | float) -> int:
+def calc_positive_percent(score: int | float | None, min_score: int | float, max_score: int | float) -> int:
+    if score is None:
+        score = 0
     score_pct = int((score - min_score) / (max_score - min_score) * 100)
     if score_pct > 100:
         score_pct = 100
