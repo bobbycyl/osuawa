@@ -53,12 +53,12 @@ def load_value(key: str, default_value: Any) -> Any:
 
 def memorized_multiselect(label: str, key: str, options, default_value: Any) -> None:
     load_value(key, default_value)
-    st.multiselect(label, options, key=key, on_change=save_value, args=[key])
+    st.multiselect(label, options, key=key, on_change=save_value, args=(key,))
 
 
 def memorized_selectbox(label: str, key: str, options, default_value: Any) -> None:
     load_value(key, default_value)
-    st.selectbox(label, options, key=key, on_change=save_value, args=[key])
+    st.selectbox(label, options, key=key, on_change=save_value, args=(key,))
 
 
 def user_to_dict(user: UserCompact) -> dict[str, Any]:
@@ -196,7 +196,7 @@ class OsuDifficultyAttribute(object):
         elif self.preempt >= 1050:
             self.is_very_low_ar = True
         self.bpm *= magnitude
-        self.hit_length /= magnitude
+        self.hit_length = round(self.hit_length / magnitude)
 
 
 def get_acronym(mod: Mod | str) -> str:
@@ -214,7 +214,7 @@ def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool |
     :param score: score object
     :return: [bid, user, score, accuracy, max_combo, passed, pp, mods, ts]
     """
-    return [
+    return (
         score.beatmap_id,
         score.user_id,
         score.total_score,
@@ -224,14 +224,13 @@ def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool |
         score.pp,
         [({"acronym": get_acronym(y.mod), "settings": y.settings} if y.settings is not None else {"acronym": get_acronym(y.mod)}) for y in score.mods],
         score.ended_at,
-    ]
+    )
 
 
-def rosu_calc(beatmap_file: str, mods: list) -> tuple:
+def rosu_calc(beatmap_file: str, mods: list) ->  tuple[float, int, float | None, float | None, float | None, float | None, float | None, float | None, float, float, float, float]:
     beatmap = rosu.Beatmap(path=beatmap_file)
     diff = rosu.Difficulty(mods=mods)
     diff_attr = diff.calculate(beatmap)
-    note_count = diff_attr.n_circles
     perf100 = rosu.Performance(accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
     perf95 = rosu.Performance(accuracy=95, hitresult_priority=rosu.HitResultPriority.WorstCase)
     perf90 = rosu.Performance(accuracy=90, hitresult_priority=rosu.HitResultPriority.WorstCase)
@@ -265,10 +264,10 @@ def calc_difficulty_and_performance(beatmap: int, mods: list) -> tuple:
     return rosu_calc(os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap), mods)
 
 
-def calc_beatmap_attributes(beatmap: Beatmap, mods: list) -> list:
+def calc_beatmap_attributes(beatmap: Beatmap, mods: list):
     osu_diff_attr = OsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
     osu_diff_attr.set_mods(mods)
-    attr = [
+    attr = (
         osu_diff_attr.cs,
         osu_diff_attr.hit_window,
         osu_diff_attr.preempt,
@@ -289,9 +288,8 @@ def calc_beatmap_attributes(beatmap: Beatmap, mods: list) -> list:
             beatmap.version,
         ),
         beatmap.difficulty_rating,
-    ]
-    attr.extend(calc_difficulty_and_performance(beatmap.id, mods))
-    return attr
+    )
+    return attr + calc_difficulty_and_performance(beatmap.id, mods)
 
 
 def calc_positive_percent(score: int | float, min_score: int | float, max_score: int | float) -> int:
