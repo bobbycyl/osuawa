@@ -3,7 +3,7 @@
 /playlists/
 /static/beatmaps/
 /static/uploaded/
-/venv/
+/.venv/
 /playlists
 /.streamlit/private.key
 /.streamlit/full_chain.pem

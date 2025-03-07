@@ -150,6 +150,7 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
     original_playlist_pattern = re.compile(r"O\.(.*)\.properties")
     match_playlist_pattern = re.compile(r"M\.(.*)\.properties")
     community_playlist_pattern = re.compile(r"C\.(.*)\.properties")
+    original_playlist_beatmaps = {}
     for filename in os.listdir("./playlists/raw/"):
         if m := original_playlist_pattern.match(filename):
             suffix = " — original playlist"
@@ -160,17 +161,25 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
         else:
             continue
         if os.path.exists("./playlists/%s.html" % m.group(1)) and fast_gen:
-            st.write("skipped %s" % m.group(1))
+            st.write(_("skipped %s") % m.group(1))
             continue
         try:
             copyfile("./playlists/raw/%s" % m.group(0), "./playlists/%s.properties" % m.group(1))
-            OsuPlaylist(st.session_state.awa, "./playlists/%s.properties" % m.group(1), suffix, 1).generate()
+            o = OsuPlaylist(st.session_state.awa, "./playlists/%s.properties" % m.group(1), suffix, 1)
+            if suffix == " — original playlist":
+                for element in o.beatmap_list:
+                    original_playlist_beatmaps[element["bid"]] = original_playlist_beatmaps.get(element["bid"], 0) + 1
+            df = o.generate()
+            df.to_csv("./playlists/%s.csv" % m.group(1))
         except Exception as e:
-            raise RuntimeError(_("could not generate %s") % m.group(1)) from e
+            raise RuntimeError("%s (%s)" % (_("failed to generate %s") % m.group(1), str(e))) from e
         else:
             st.write(_("generated %s") % m.group(1))
         finally:
             os.remove("./playlists/%s.properties" % m.group(1))
+    # report duplicates
+    st.write(["%s(%s) " % (k, v) for k, v in original_playlist_beatmaps.items() if v > 1])
+
 
 
 def cat(user: int):

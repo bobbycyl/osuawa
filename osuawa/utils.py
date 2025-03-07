@@ -12,7 +12,8 @@ import rosu_pp_py as rosu
 import streamlit as st
 from clayutil.futil import Downloader
 from osu import AsynchronousClient
-from osu.objects import Beatmap, LegacyScore, Mod, SoloScore, UserCompact, UserStatistics
+from osu.objects import Beatmap, LegacyScore, SoloScore, UserCompact, UserStatistics
+from osu.enums import Mod
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",

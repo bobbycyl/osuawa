@@ -34,15 +34,15 @@ if "translate" not in st.session_state:
         os.mkdir(Path.UPLOADED_DIRECTORY.value)
     if not os.path.exists(Path.BEATMAPS_CACHE_DIRECTORY.value):
         os.mkdir(Path.BEATMAPS_CACHE_DIRECTORY.value)
-    lang = locale.getlocale()[0]
+    _lang = locale.getlocale()[0]
     if platform.system() == "Windows":
-        lang = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
-    st.session_state._uni_lang_value = lang
+        _lang = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
+    st.session_state._uni_lang_value = _lang
 else:
-    lang = st.session_state._uni_lang_value
+    _lang = st.session_state._uni_lang_value
 
 builtins.__dict__["_"] = gettext_translate
-st.session_state.translate = gettext_getfunc(lang)
+st.session_state.translate = gettext_getfunc(_lang)
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))

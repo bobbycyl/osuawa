@@ -5,14 +5,10 @@
       <excludeFolder url="file://$MODULE_DIR$/logs" />
       <excludeFolder url="file://$MODULE_DIR$/output" />
       <excludeFolder url="file://$MODULE_DIR$/playlists" />
-      <excludeFolder url="file://$MODULE_DIR$/venv" />
       <excludeFolder url="file://$MODULE_DIR$/static/beatmaps" />
+      <excludeFolder url="file://$MODULE_DIR$/static/uploaded" />
     </content>
-    <orderEntry type="jdk" jdkName="C:\Users\bobbycyl\miniforge3" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.12 virtualenv at C:\Users\bobbycyl\Projects\osuawa\.venv" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
-  </component>
-  <component name="PackageRequirementsSettings">
-    <option name="versionSpecifier" value="Don't specify version" />
-    <option name="keepMatchingSpecifier" value="false" />
   </component>
 </module>

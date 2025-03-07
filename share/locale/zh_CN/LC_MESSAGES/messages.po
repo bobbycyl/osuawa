@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2024-12-12 23:13+0800\n"
-"PO-Revision-Date: 2024-10-09 15:07+0800\n"
+"POT-Creation-Date: 2025-03-07 10:19+0800\n"
+"PO-Revision-Date: 2024-12-17 19:33+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -94,46 +94,51 @@ msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。
 msgid "client refreshed"
 msgstr "客户端已刷新"
 
-#: Home.py:169
+#: Home.py:164
 #, python-format
-msgid "could not generate %s"
+msgid "skipped %s"
+msgstr "已跳过 %s"
+
+#: Home.py:175
+#, python-format
+msgid "failed to generate %s"
 msgstr "生成 %s 失败"
 
-#: Home.py:171
+#: Home.py:177
 #, python-format
 msgid "generated %s"
 msgstr "已生成 %s"
 
-#: Home.py:178
+#: Home.py:187
 #, python-format
 msgid "user %d not found"
 msgstr "用户 %d 不存在"
 
-#: Home.py:204
+#: Home.py:213
 msgid "preparing for the next command..."
 msgstr "请稍候……"
 
-#: Home.py:211
+#: Home.py:220
 msgid "invalid code"
 msgstr "无效授权码"
 
-#: Home.py:221
+#: Home.py:230
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: Home.py:222
+#: Home.py:231
 msgid "OAuth2 url"
 msgstr "授权链接"
 
-#: Home.py:231
+#: Home.py:240
 msgid "Welcome!"
 msgstr "欢迎使用！"
 
-#: Home.py:237
+#: Home.py:246
 msgid "Type \"help\" to get started."
 msgstr "键入“help”以开始。"
 
-#: Home.py:253
+#: Home.py:262
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
