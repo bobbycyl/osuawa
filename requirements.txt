@@ -5,4 +5,5 @@ orjson
 osu.py
 pandas
 pillow
+rosu-pp-py
 streamlit

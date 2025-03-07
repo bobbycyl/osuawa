@@ -44,6 +44,15 @@ html_body_suffix = """    </div>
 """
 
 
+def strip_quotes(text: str) -> str:
+    # 判断是否被引号包裹，若是，则 strip
+    if text.startswith('"') and text.endswith('"'):
+        return text.strip('"')
+    if text.startswith("'") and text.endswith("'"):
+        return text.strip("'")
+    return text
+
+
 def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict[int, Beatmap]) -> dict[str, list]:
     for score_id in scores_compact:
         if len(scores_compact[score_id]) == 9:  # DO NOT CHANGE! the length of what score_info_list returns
@@ -351,13 +360,13 @@ class OsuPlaylist(object):
         self.playlist_filename = playlist_filename
         self.suffix = suffix
         self.css_style = css_style
-        self.footer = p.pop("footer") if "footer" in p else ""
+        self.footer = strip_quotes(p.pop("footer")) if "footer" in p else ""
         self.banner = ""
         if "banner" in p:
-            banner_img_src = p.pop("banner")
+            banner_img_src = strip_quotes(p.pop("banner"))
             self.banner = (
                 """
-    <div class="relative w-full h-[135] xl:h-[300] overflow-hidden"><img src="%s" class="w-full h-full object-cover"><div class="absolute inset-0 banner-mask"></div>
+    <div class="relative w-full h-[90] sm:h-[135] lg:h-[185] hover:h-1/2 bg-cover bg-no-repeat bg-center object-cover transition-all duration-300 transform" style="background-image: url(%s)"><div class="absolute inset-0 banner-mask"></div>
     </div>
 """
                 % banner_img_src
@@ -384,7 +393,7 @@ class OsuPlaylist(object):
 
         beatmaps_dict = get_beatmaps_dict(self.awa.client, [int(x["bid"]) for x in parsed_beatmap_list])
         for element in parsed_beatmap_list:
-            element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br>")
+            element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]
         self.beatmap_list = parsed_beatmap_list
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
@@ -413,6 +422,7 @@ class OsuPlaylist(object):
         # self.output_zip = output_zip
         # if self.output_zip:
         #     self.osz_type = "full"
+        self.last_root_mod = ""
 
     async def beatmap_task(self, index_and_beatmap: tuple[int, dict]) -> dict:
         i, element = index_and_beatmap
@@ -423,7 +433,7 @@ class OsuPlaylist(object):
         notes: str = element["notes"]
 
         # 处理NM, FM, TB
-        color_mod = raw_mods[0]["acronym"]
+        root_mod = raw_mods[0]["acronym"]
         is_fm = False
         mods = raw_mods.copy()
         for j in range(len(raw_mods)):
@@ -467,7 +477,7 @@ class OsuPlaylist(object):
         max_combo = "%d" % rosu_attr.max_combo
 
         # 绘制cover
-        cover = BeatmapCover(b, self.mod_color.get(color_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
+        cover = BeatmapCover(b, self.mod_color.get(root_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
         if self.css_style:
             # 将背景图片保存在统一文件夹内以减小占用
             if not os.path.exists(os.path.join(self.bg_dir, "%d.jpg" % bid)):
@@ -478,7 +488,7 @@ class OsuPlaylist(object):
                 except UnidentifiedImageError:
                     im = Image.open("./osuawa/bg1.jpg")
                     im = im.filter(ImageFilter.BLUR)
-                if im.mode != "RGB":
+                if im.mode != "RGB" and im.mode != "RGBA":
                     im = im.convert("RGB")
                 be = ImageEnhance.Brightness(im)
                 im = be.enhance(0.67)
@@ -490,7 +500,18 @@ class OsuPlaylist(object):
                     continue
                 else:
                     extra_notes += "<br />%s: %s" % (column, element[column])
-            beatmap_info = f'''      <div class="group relative">
+
+            if self.last_root_mod == "":
+                self.last_root_mod = root_mod
+            if root_mod != self.last_root_mod:
+                beatmap_info = '''    </div>
+    <div class="p-4"><br /></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
+'''
+                self.last_root_mod = root_mod
+            else:
+                beatmap_info = ""
+            beatmap_info += f'''      <div class="group relative">
         <div
           class="relative h-32 rounded-lg overflow-hidden shadow-lg transition-all duration-300 transform group-hover:rounded-b-none group-hover:h-64 group-hover:-translate-y-3">
           <img src="{"./" + (os.path.relpath(bg_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")}" alt="{html.escape(b.beatmapset.artist)} - {html.escape(b.beatmapset.title)} ({html.escape(b.beatmapset.creator)}) [{html.escape(b.version)}]"
@@ -698,21 +719,3 @@ class OsuPlaylist(object):
         rmtree(self.tmp_dir)
 
         return df_standalone
-
-    @staticmethod
-    def convert_legacy(legacy_playlist_filename: str):
-        split_pattern = re.compile(r"(.*) \[(.*)] \((.*)\)")
-        legacy_p = Properties(legacy_playlist_filename)
-        legacy_p.load()
-        open(os.path.join(Path.OUTPUT_DIRECTORY.value, os.path.split(legacy_playlist_filename)[1]), "w").close()
-        converted_p = Properties(os.path.join(Path.OUTPUT_DIRECTORY.value, os.path.split(legacy_playlist_filename)[1]))
-        legacy_playlist_raw = [int(x) for x in (legacy_p.keys()) if x[0] != "#"]
-        for bid in legacy_playlist_raw:
-            m = split_pattern.match(str(legacy_p[str(bid)]))  # mods、targets、notes
-            legacy_mods = m.group(1).split(" ")
-            mods = [{"acronym": mod} for mod in legacy_mods]
-            converted_p[str(bid)] = orjson.dumps(mods).decode("utf-8")
-            notes = m.group(3)
-            if notes:
-                converted_p["#%d" % (len(converted_p.keys()) + 1)] = "# %s\n" % notes
-        converted_p.dump()
