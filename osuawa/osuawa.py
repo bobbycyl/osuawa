@@ -4,13 +4,13 @@ import html
 import os
 import os.path
 import platform
-import re
+import threading
 from functools import cached_property
 from shutil import rmtree
-from threading import BoundedSemaphore
-from time import sleep
+from threading import Lock
 from typing import Any, Optional
 
+import numpy as np
 import orjson
 import pandas as pd
 import rosu_pp_py as rosu
@@ -21,27 +21,31 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, Unidenti
 from clayutil.futil import Downloader, Properties, filelock
 from clayutil.validator import Integer
 from fontfallback import writing
-from osu import AsynchronousAuthHandler, Client, GameModeStr, Scope, AsynchronousClient
+from ossapi import Grant, OssapiAsync, Domain, User, GameMode, Beatmap
 
 from .utils import (
-    Beatmap,
+    LANGUAGES,
     OsuDifficultyAttribute,
     calc_beatmap_attributes,
     calc_positive_percent,
     calc_star_rating_color,
+    download_osu,
     get_beatmaps_dict,
     get_username,
-    score_info_list,
-    user_to_dict,
+    score_info,
+    score_info_tuple,
     Path,
     headers,
+    get_user_info,
 )
 
-LANGUAGES = ["en_US", "zh_CN"]
+LANGUAGES = LANGUAGES
 
 html_body_suffix = """    </div>
   </div>
 """
+
+score_info_length = len(score_info)
 
 
 def strip_quotes(text: str) -> str:
@@ -53,32 +57,50 @@ def strip_quotes(text: str) -> str:
     return text
 
 
-def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict[int, Beatmap]) -> dict[str, list]:
+async def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict[int, Beatmap]) -> dict[str, list]:
     for score_id in scores_compact:
-        if len(scores_compact[score_id]) == 9:  # DO NOT CHANGE! the length of what score_info_list returns
-            scores_compact[score_id].extend(calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id][0]], scores_compact[score_id][7]))
+        if len(scores_compact[score_id]) == score_info_length:
+            scores_compact[score_id].extend(await calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id][0]], scores_compact[score_id][7]))
     return scores_compact
+
+
+class Awapi(OssapiAsync):
+    def __init__(
+        self,
+        client_id: int,
+        client_secret: str,
+        redirect_uri: Optional[str] = None,
+        scopes: list[str] = None,
+        *,
+        grant: Optional[Grant | str] = None,
+        strict: bool = False,
+        token_directory: str = "./.streamlit/",
+        token_key: Optional[str] = None,
+        access_token: Optional[str] = None,
+        refresh_token: Optional[str] = None,
+        domain: Domain | str = Domain.OSU,
+        api_version: int | str = 20241024,
+    ):
+        super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
+
+    def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> None:
+        raise NotImplementedError()
 
 
 class Osuawa(object):
     tz = "Asia/Shanghai"
 
-    def __init__(self, oauth_filename: str, output_dir: str, code: Optional[str] = None):
-        auth_url = None
-        p = Properties(oauth_filename)
-        p.load()
-        auth = AsynchronousAuthHandler(p["client_id"], p["client_secret"], p["redirect_url"], Scope("public", "identify", "friends.read"))
-        if code is None:
-            auth_url = auth.get_auth_url()
-        else:
-            asyncio.run(auth.get_auth_token(code))
-        self.auth_url = auth_url
-        self.client = AsynchronousClient(auth)
+    def __init__(self, client_id, client_secret, redirect_url, scopes, domain, output_dir: str, oauth_token: str, oauth_refresh_token: str):
+        self.api = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, access_token=oauth_token, refresh_token=oauth_refresh_token)
         self.output_dir = output_dir
 
     @cached_property
     def user(self) -> tuple[int, str]:
-        own_data = asyncio.run(self.client.get_own_data())
+        """Get own user id and username
+
+        :return: (user_id, username)
+        """
+        own_data: User = asyncio.run(self.api.get_me())
         return own_data.id, own_data.username
 
     def create_scores_dataframe(self, scores: dict[str, list]) -> pd.DataFrame:
@@ -112,36 +134,40 @@ class Osuawa(object):
                 "b_star_rating",
                 "b_max_combo",
                 "b_aim_difficulty",
+                "b_aim_difficult_slider_count",
                 "b_speed_difficulty",
                 "b_speed_note_count",
                 "b_slider_factor",
                 "b_approach_rate",
-                "b_overall_difficulty",
                 "b_pp_100if",
-                "b_pp_95if",
-                "b_pp_90if",
-                "b_pp_80if",
+                "b_pp_92if",
+                "b_pp_85if",
+                "b_pp_67if",
             ],
         )
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["pp_pct"] = df["pp"] / df["b_pp_100if"]
-        df["pp_95pct"] = df["pp"] / df["b_pp_95if"]
-        df["pp_90pct"] = df["pp"] / df["b_pp_90if"]
-        df["pp_80pct"] = df["pp"] / df["b_pp_80if"]
+        df["pp_92pct"] = df["pp"] / df["b_pp_92if"]
+        df["pp_85pct"] = df["pp"] / df["b_pp_85if"]
+        df["pp_67pct"] = df["pp"] / df["b_pp_67if"]
         df["combo_pct"] = df["max_combo"] / df["b_max_combo"]
+        df["density"] = df["b_max_combo"] / df["hit_length"]
+        df["aim_density_ratio"] = df["b_aim_difficulty"] / np.log(df["density"])
+        df["speed_density_ratio"] = df["b_speed_difficulty"] / np.log(df["density"])
+        df["aim_speed_ratio"] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
-        df["mods"] = df["mods"].apply(lambda x: orjson.dumps(x).decode())
+        df["mods"] = df["mods"].apply(lambda x: orjson.dumps(x).decode("utf-8"))
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
-        return user_to_dict(asyncio.run(self.client.get_user(username, key="username")))
+        return asyncio.run(get_user_info(self.api, username))
 
     async def _get_score(self, score_id: int) -> list:
-        score = await self.client.get_score_by_id_only(score_id)
-        score_compact = score_info_list(score)
+        score = await self.api.score(score_id)
+        score_compact = list(score_info_tuple(score))
         score_compact.extend(
-            calc_beatmap_attributes(
-                await self.client.get_beatmap(score.beatmap_id),
+            await calc_beatmap_attributes(
+                await self.api.beatmap(score.beatmap_id),
                 score_compact[7],
             )
         )
@@ -151,9 +177,9 @@ class Osuawa(object):
         return self.create_scores_dataframe({str(score_id): asyncio.run(self._get_score(score_id))}).T
 
     async def _get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, list]:
-        user_scores = await self.client.get_user_beatmap_scores(beatmap, user)
-        scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
-        return complete_scores_compact(scores_compact, {beatmap: await self.client.get_beatmap(beatmap)})
+        user_scores = await self.api.beatmap_user_scores(beatmap, user)
+        scores_compact = {str(x.id): list(score_info_tuple(x)) for x in user_scores}
+        return await complete_scores_compact(scores_compact, {beatmap: await self.api.beatmap(beatmap)})
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
@@ -167,10 +193,10 @@ class Osuawa(object):
         offset = 0
         while True:
             user_scores_current = asyncio.run(
-                self.client.get_user_scores(
-                    user=user,
+                self.api.user_scores(
+                    user_id=user,
                     type="recent",
-                    mode=GameModeStr.STANDARD,
+                    mode=GameMode.OSU,
                     include_fails=include_fails,
                     limit=50,
                     offset=offset,
@@ -181,7 +207,7 @@ class Osuawa(object):
             user_scores.extend(user_scores_current)
             offset += 50
 
-        recent_scores_compact = {str(x.id): score_info_list(x) for x in user_scores}
+        recent_scores_compact = {str(x.id): list(score_info_tuple(x)) for x in user_scores}
         len_got = len(recent_scores_compact)
 
         # concatenate
@@ -197,9 +223,9 @@ class Osuawa(object):
         len_diff = len(recent_scores_compact) - len_local
 
         # calculate difficulty attributes
-        bids_not_calculated = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
-        beatmaps_dict = get_beatmaps_dict(self.client, tuple(bids_not_calculated))
-        recent_scores_compact = complete_scores_compact(recent_scores_compact, beatmaps_dict)
+        bids_not_calculated: set[int] = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
+        beatmaps_dict = get_beatmaps_dict(self.api, tuple(bids_not_calculated))
+        recent_scores_compact = asyncio.run(complete_scores_compact(recent_scores_compact, beatmaps_dict))
 
         # save
         with open(
@@ -210,15 +236,11 @@ class Osuawa(object):
         df = self.create_scores_dataframe(recent_scores_compact)
         df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
         return "%s: local/got/diff: %d/%d/%d" % (
-            get_username(self.client, user),
+            get_username(self.api, user),
             len_local,
             len_got,
             len_diff,
         )
-
-    @staticmethod
-    def create_client_credential_grant_client(client_id: int, client_secret: str) -> Client:
-        return Client.from_credentials(client_id=client_id, client_secret=client_secret, redirect_url=None)
 
 
 def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
@@ -267,12 +289,12 @@ class BeatmapCover(object):
 
     async def download(self, d: Downloader, filename: str) -> str:
         # 下载 cover 原图，若无 cover 则使用默认图片
-        cover_filename = await d.async_start(self.beatmap.beatmapset.covers.cover_2x, filename, headers)
+        cover_filename = await d.async_start(self.beatmap.beatmapset().covers.cover_2x, filename, headers)
         try:
             im = Image.open(cover_filename)
         except UnidentifiedImageError:
             try:
-                im = Image.open(await d.async_start(self.beatmap.beatmapset.covers.slimcover_2x, filename, headers))
+                im = Image.open(await d.async_start(self.beatmap.beatmapset().covers.slimcover_2x, filename, headers))
             except UnidentifiedImageError:
                 im = Image.open("./osuawa/bg1.jpg")
                 im = im.filter(ImageFilter.BLUR)
@@ -284,7 +306,8 @@ class BeatmapCover(object):
             im = im.convert("RGB")
         be = ImageEnhance.Brightness(im)
         im = be.enhance(0.33)
-        im.save(cover_filename)
+        with Lock():
+            im.save(cover_filename)
 
         return cover_filename
 
@@ -298,7 +321,7 @@ class BeatmapCover(object):
         padding = 28
         mod_theme_len = 50
         stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
-        title_u = self.beatmap.beatmapset.title_unicode
+        title_u = self.beatmap.beatmapset().title_unicode
         t1_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u, len_set - stars_len - text_pos - padding - mod_theme_len, False)
         if t1_cut != -1:
             title_u2 = title_u.lstrip(t1_cut)
@@ -325,12 +348,12 @@ class BeatmapCover(object):
         writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset.artist_unicode, "#1f1f1f", fonts, 48, "ls")
-        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset.artist_unicode, "white", fonts, 48, "ls")
-        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset.artist_unicode, "white", fonts, 48, "ls")
-        draw.text((42 + 1188, 326), self.beatmap.beatmapset.creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
-        draw.text((41 + 1188, 324), self.beatmap.beatmapset.creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
-        draw.text((40 + 1188, 324), self.beatmap.beatmapset.creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
+        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        draw.text((42 + 1188, 326), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
+        draw.text((41 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
+        draw.text((40 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
 
         # 在右上角绘制星数
         draw.rounded_rectangle([len_set + text_pos - stars_len - padding, 32, len_set + text_pos + padding, 106], 72, fill="#1f1f1f")
@@ -342,7 +365,8 @@ class BeatmapCover(object):
         draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=(40, 40, 40))
         draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=self.block_color)
 
-        im.save(cover_filename)
+        with Lock():
+            im.save(cover_filename)
         return cover_filename
 
 
@@ -391,7 +415,7 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = get_beatmaps_dict(self.awa.client, [int(x["bid"]) for x in parsed_beatmap_list])
+        beatmaps_dict = get_beatmaps_dict(self.awa.api, [int(x["bid"]) for x in parsed_beatmap_list])
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]
@@ -422,10 +446,9 @@ class OsuPlaylist(object):
         # self.output_zip = output_zip
         # if self.output_zip:
         #     self.osz_type = "full"
-        self.last_root_mod = ""
 
-    async def beatmap_task(self, index_and_beatmap: tuple[int, dict]) -> dict:
-        i, element = index_and_beatmap
+    async def beatmap_task(self, beatmap_index: int) -> dict:
+        i, element = beatmap_index + 1, self.beatmap_list[beatmap_index]
         bid: int = element["bid"]
         b: Beatmap = element["beatmap"]
         raw_mods: list[dict[str, Any]] = element["mods"]
@@ -433,7 +456,8 @@ class OsuPlaylist(object):
         notes: str = element["notes"]
 
         # 处理NM, FM, TB
-        root_mod = raw_mods[0]["acronym"]
+        root_mod: str = raw_mods[0]["acronym"]
+        last_root_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
         is_fm = False
         mods = raw_mods.copy()
         for j in range(len(raw_mods)):
@@ -447,12 +471,8 @@ class OsuPlaylist(object):
             else:
                 mods_ready.append(raw_mods[j]["acronym"])
 
-        # 下载谱面与计算难度（与 utils.calc_difficulty_and_performance 类似，但是省略了许多不必要的计算）
-        if not "%d.osu" % bid in os.listdir(Path.BEATMAPS_CACHE_DIRECTORY.value):
-            with BoundedSemaphore():
-                sleep(1)
-                Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % bid, "%d.osu" % bid, headers)
-                sleep(0.5)
+        # 下载谱面与计算难度（与 utils.calc_beatmap_attributes 类似，但是省略了许多不必要的计算，且为了课题要求优化）
+        download_osu(bid)
         my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
         my_attr.set_mods(mods)
         rosu_map = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid))
@@ -466,10 +486,10 @@ class OsuPlaylist(object):
             stars2 = rosu_attr_fm.stars
         cs = "%s" % round(my_attr.cs, 2)
         ar = "0" if rosu_attr.ar is None else "%s" % round(rosu_attr.ar, 2)
-        od = "0" if rosu_attr.od is None else "%s" % round(rosu_attr.od, 2)
+        od = "0" if my_attr.accuracy is None else "%s" % round(my_attr.accuracy, 2)
         cs_pct = calc_positive_percent(my_attr.cs, 0, 10)
         ar_pct = calc_positive_percent(rosu_attr.ar, 0, 10)
-        od_pct = calc_positive_percent(rosu_attr.od, 0, 10)
+        od_pct = calc_positive_percent(my_attr.accuracy, 0, 10)
         bpm = "%s" % round(my_attr.bpm, 2)
         song_len_in_sec = my_attr.hit_length
         song_len_m, song_len_s = divmod(song_len_in_sec, 60)
@@ -482,17 +502,18 @@ class OsuPlaylist(object):
             # 将背景图片保存在统一文件夹内以减小占用
             if not os.path.exists(os.path.join(self.bg_dir, "%d.jpg" % bid)):
                 bg_d = Downloader(self.bg_dir)
-                bg_filename = await bg_d.async_start(b.beatmapset.background_url, "%d" % bid, headers)
+                bg_filename = await bg_d.async_start(f"https://assets.ppy.sh/beatmaps/%d/covers/raw.jpg" % b.beatmapset_id, "%d" % bid, headers)
                 try:
                     im = Image.open(bg_filename)
                 except UnidentifiedImageError:
                     im = Image.open("./osuawa/bg1.jpg")
                     im = im.filter(ImageFilter.BLUR)
-                if im.mode != "RGB" and im.mode != "RGBA":
+                if im.mode != "RGB":
                     im = im.convert("RGB")
                 be = ImageEnhance.Brightness(im)
                 im = be.enhance(0.67)
-                im.save(bg_filename)
+                with Lock():
+                    im.save(bg_filename)
             bg_filename = os.path.join(self.bg_dir, "%d.jpg" % bid)
             extra_notes = ""
             for column in self.custom_columns:
@@ -501,20 +522,17 @@ class OsuPlaylist(object):
                 else:
                     extra_notes += "<br />%s: %s" % (column, element[column])
 
-            if self.last_root_mod == "":
-                self.last_root_mod = root_mod
-            if root_mod != self.last_root_mod:
-                beatmap_info = '''    </div>
+            if root_mod != last_root_mod and last_root_mod != "":
+                beatmap_info = """    </div>
     <div class="p-4"><br /></div>
     <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
-'''
-                self.last_root_mod = root_mod
+"""
             else:
                 beatmap_info = ""
             beatmap_info += f'''      <div class="group relative">
         <div
           class="relative h-32 rounded-lg overflow-hidden shadow-lg transition-all duration-300 transform group-hover:rounded-b-none group-hover:h-64 group-hover:-translate-y-3">
-          <img src="{"./" + (os.path.relpath(bg_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")}" alt="{html.escape(b.beatmapset.artist)} - {html.escape(b.beatmapset.title)} ({html.escape(b.beatmapset.creator)}) [{html.escape(b.version)}]"
+          <img src="{"./" + (os.path.relpath(bg_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")}" alt="{html.escape(b.beatmapset().artist)} - {html.escape(b.beatmapset().title)} ({html.escape(b.beatmapset().creator)}) [{html.escape(b.version)}]"
             class="w-full h-full object-cover brightness-90 dark:brightness-50 blur-0 contrast-100 scale-100 group-hover:brightness-50 dark:group-hover:brightness-50 group-hover:blur-sm group-hover:contrast-125 group-hover:scale-105 transition-all duration-300" />
           <div class="absolute inset-0 p-4 flex flex-col justify-between">
             <div class="flex justify-between items-start">
@@ -528,11 +546,11 @@ class OsuPlaylist(object):
                 </div>
               </div>
             </div>
-            <div class="text-white card-main" style="padding-top: 1rem">
-              <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden group-hover:line-clamp-2">{html.escape(b.beatmapset.title_unicode)}</h3>
-              <p class="font-semibold overflow-ellipsis overflow-hidden whitespace-nowrap">{html.escape(b.beatmapset.artist_unicode)}</p>
-              <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300" style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Mapper: <a class="font-semibold">{html.escape(b.beatmapset.creator)}</a></p>
+            <div class="text-white card-main pt-2">
+              <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden group-hover:line-clamp-2">{html.escape(b.beatmapset().title_unicode)}</h3>
+              <p class="font-semibold overflow-ellipsis overflow-hidden whitespace-nowrap">{html.escape(b.beatmapset().artist_unicode)}</p>
+              <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300 pt-2 pb-1">
+                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Mapper: <a class="font-semibold">{html.escape(b.beatmapset().creator)}</a></p>
                 <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Difficulty: <span class="font-semibold">{html.escape(b.version)}</span></p>
                 <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Beatmap ID: <span class="font-semibold">{b.id}</span></p>
                 <div class="text-xs w-full grid grid-cols-3 mt-1 gap-6">
@@ -544,7 +562,7 @@ class OsuPlaylist(object):
                           <div class="h-full rounded" style="background-color: white; width: {cs_pct}%"></div>
                         </div>
                       </div>
-                      <div class="flex-initial w-8 text-right font-semibold card-info-lines">{cover.cs}</div>
+                      <div class="flex-initial w-4 text-right font-semibold card-info-lines">{cover.cs}</div>
                     </div>
                   </div>
                   <div>
@@ -555,7 +573,7 @@ class OsuPlaylist(object):
                           <div class="h-full rounded" style="background-color: white; width: {ar_pct}%"></div>
                         </div>
                       </div>
-                      <div class="flex-initial w-8 text-right font-semibold card-info-lines">{cover.ar}</div>
+                      <div class="flex-initial w-4 text-right font-semibold card-info-lines">{cover.ar}</div>
                     </div>
                   </div>
                   <div>
@@ -566,7 +584,7 @@ class OsuPlaylist(object):
                           <div class="h-full rounded" style="background-color: white; width: {od_pct}%"></div>
                         </div>
                       </div>
-                      <div class="flex-initial w-8 text-right font-semibold card-info-lines">{cover.od}</div>
+                      <div class="flex-initial w-4 text-right font-semibold card-info-lines">{cover.od}</div>
                     </div>
                   </div>
                 </div>
@@ -593,8 +611,13 @@ class OsuPlaylist(object):
         </div>
         <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-3 notes">
           <p class="text-xs flex justify-between items-end">
-            <span>{notes}{extra_notes}</span><a href="https://osu.ppy.sh/b/{b.id}"
+            <span>{notes}{extra_notes}</span>
+            <span class="justify-end items-end space-x-2">
+              <a href="https://osu.ppy.sh/b/{b.id}"
               class="text-custom-900 dark:text-custom hover:text-custom-600"><i class="fas fa-external-link-alt"></i></a>
+              <a href="osu://b/{b.id}"
+              class="text-custom-900 dark:text-custom hover:text-custom-600"><i class="fas fa-download"></i></a>
+            </span>
           </p>
         </div>
       </div>
@@ -606,9 +629,9 @@ class OsuPlaylist(object):
             beatmap_info = '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="90"/></a>' % (
                 img_link,
                 img_src,
-                html.escape(b.beatmapset.artist),
-                html.escape(b.beatmapset.title),
-                html.escape(b.beatmapset.creator),
+                html.escape(b.beatmapset().artist),
+                html.escape(b.beatmapset().title),
+                html.escape(b.beatmapset().creator),
                 html.escape(b.version),
             )
             await cover.draw(cover_filename)
@@ -619,7 +642,7 @@ class OsuPlaylist(object):
             "BID": b.id,
             "SID": b.beatmapset_id,
             "Beatmap Info (Click to View)": beatmap_info,
-            "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset.artist, b.beatmapset.title, b.beatmapset.creator, b.version),
+            "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset().artist, b.beatmapset().title, b.beatmapset().creator, b.version),
             "Stars": cover.stars,
             "SR": cover.stars.replace("󰓎", "★"),
             "BPM": cover.bpm,
@@ -641,8 +664,8 @@ class OsuPlaylist(object):
     async def playlist_task(self) -> list[dict]:
         tasks = []
         async with asyncio.TaskGroup() as tg:
-            for index_and_beatmap in enumerate(self.beatmap_list, start=1):
-                tasks.append(tg.create_task(self.beatmap_task(index_and_beatmap)))
+            for i in range(len(self.beatmap_list)):
+                tasks.append(tg.create_task(self.beatmap_task(i)))
         return [task.result() for task in tasks]
 
     def generate(self) -> pd.DataFrame:
@@ -680,9 +703,10 @@ class OsuPlaylist(object):
             self.suffix,
             html_footer,
         )
-        with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fo:
-            if self.css_style:
-                html_head = """  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        with threading.Lock():
+            with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fo:
+                if self.css_style:
+                    html_head = """  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
   <link href="https://ai-public.mastergo.com/gen_page/tailwind-custom.css" rel="stylesheet" />
   <script
@@ -690,7 +714,7 @@ class OsuPlaylist(object):
   <script src="https://ai-public.mastergo.com/gen_page/tailwind-config.min.js" data-color="#A0C8C8"
     data-border-radius="medium"></script>
 """
-                html_body_prefix = """
+                    html_body_prefix = """
   <header class="mb-2">
     %s
     <h1 class="relative text-2xl font-bold text-center pt-8">
@@ -700,22 +724,22 @@ class OsuPlaylist(object):
   <div class="min-h-screen p-4 sm:px-8 lg:px-12 xl:px-20 2xl:px-32">
     <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
 """ % (
-                    self.banner,
-                    self.playlist_name,
-                )
-                fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
-            else:
-                fo.write(html_string.format(html_head="", html_body=df.to_html(index=False, escape=False, classes="pd"), html_body_prefix="", html_body_suffix=""))
+                        self.banner,
+                        self.playlist_name,
+                    )
+                    fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
+                else:
+                    fo.write(html_string.format(html_head="", html_body=df.to_html(index=False, escape=False, classes="pd"), html_body_prefix="", html_body_suffix=""))
 
-        # 功能暂不可用
-        # if self.output_zip:
-        #     # 生成课题压缩包
-        #     if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
-        #         os.mkdir(Path.OUTPUT_DIRECTORY.value)
-        #     df_standalone.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
-        #     compress_as_zip(self.tmp_dir, "./output/%s.zip" % self.playlist_name)
+            # 功能暂不可用
+            # if self.output_zip:
+            #     # 生成课题压缩包
+            #     if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
+            #         os.mkdir(Path.OUTPUT_DIRECTORY.value)
+            #     df_standalone.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
+            #     compress_as_zip(self.tmp_dir, "./output/%s.zip" % self.playlist_name)
 
-        # 清理临时文件夹
-        rmtree(self.tmp_dir)
+            # 清理临时文件夹
+            rmtree(self.tmp_dir)
 
         return df_standalone

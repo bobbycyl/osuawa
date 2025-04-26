@@ -2,14 +2,15 @@ import logging
 import os
 import re
 import time
+from html import escape as html_escape
 from secrets import token_hex
 from shutil import copyfile
 from typing import Optional
 from uuid import UUID
 
 import pandas as pd
+import requests
 import streamlit as st
-from aiohttp import ClientError
 from clayutil.cmdparse import (
     BoolField as Bool,
     CollectionField as Coll,
@@ -20,17 +21,20 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
     StringField as Str,
 )
+from clayutil.futil import Properties
+from ossapi import Domain, Scope
 from streamlit import logger
 from streamlit.components.v1 import html
 from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import LANGUAGES, OsuPlaylist, Osuawa, Path
+from osuawa.osuawa import Awapi
 from osuawa.utils import memorized_selectbox
 
-permitted_ids = [30826405]
-
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
+
+admins = st.secrets.args.admins
 
 
 def set_sidebar():
@@ -58,9 +62,9 @@ def run(g):
             break
 
 
-def register_awa(code: Optional[str] = None):
+def register_awa(ci, cs, ru, s, d, oauth_token: str, oauth_refresh_token: str):
     with st.spinner(_("registering a client...")):
-        return Osuawa(st.secrets.args.oauth_filename, Path.OUTPUT_DIRECTORY.value, code)
+        return Osuawa(ci, cs, ru, s, d, Path.OUTPUT_DIRECTORY.value, oauth_token, oauth_refresh_token)
 
 
 def commands():
@@ -131,14 +135,11 @@ def register_commands(obj: Optional[dict] = None):
             else:
                 ret = _("token mismatched")
         else:
-            st.info(_('Use `reg {"token": "<token>"}` to pass the token, or `reg {"refresh": "true"}` to refresh the client.'))
+            st.info(_('Use `reg {"token": "<token>"}` to pass the token'))
             st.session_state.token = token_hex(16)
             logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
             ret = _("token generated")
             st.toast(_("You need to ask the web admin for the session token to unlock the full features."))
-        if "awa" in st.session_state and obj.get("refresh", False):
-            st.session_state.awa = register_awa()
-            ret = _("client refreshed")
     else:
         # 冗余设计
         pass
@@ -181,7 +182,6 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
     st.write(["%s(%s) " % (k, v) for k, v in original_playlist_beatmaps.items() if v > 1])
 
 
-
 def cat(user: int):
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
         raise ValueError(_("user %d not found") % user)
@@ -210,53 +210,60 @@ if "cmdparser" not in st.session_state:
 set_sidebar()
 
 if "awa" in st.session_state:
-    with st.spinner(_("preparing for the next command...")):
+    with st.spinner(_("preparing for the next operation...")):
         time.sleep(1.5)
+    init_logger()
+    register_commands({"simple": True})
+
+    if "delete_line" not in st.session_state:
+        st.session_state["delete_line"] = True
+    if "counter" not in st.session_state:
+        st.success(_("Welcome!"))
+        st.session_state["counter"] = 0
+    if st.session_state["delete_line"]:
+        st.session_state["input"] = ""
+        st.session_state["delete_line"] = False
+
+    y = st.text_input("> ", key="input", on_change=submit, placeholder=_('Type "help" to get started.'))
+
+    html(
+        f"""<script>
+        var input = window.parent.document.querySelectorAll("input[type=text]");
+        for (var i = 0; i < input.length; ++i) {{
+            input[i].focus();
+        }}
+    </script>
+    """,
+        height=0,
+    )
+
+    if y:
+        st.text(y)
+
+    st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)
 else:
-    if "code" in st.query_params:
-        try:
-            awa = register_awa(st.query_params.code)
-        except ClientError:
-            st.error(_("invalid code"))
-            st.stop()
-        else:
-            st.session_state.awa = awa
-            st.session_state.user_id, st.session_state.username = st.session_state.awa.user
-            if st.session_state.user_id in permitted_ids:
-                st.session_state.token = ""
-                register_commands({"token": ""})
-            st.rerun()
-    else:
+    p = Properties(st.secrets.args.oauth_filename)
+    p.load()
+    client_id = p["client_id"]
+    client_secret = p["client_secret"]
+    redirect_url = p["redirect_url"]
+    scopes = [Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]
+    domain = Domain.OSU.value
+    if "code" not in st.query_params:
         st.info(_("Please click the button below to authorize the app."))
-        st.link_button(_("OAuth2 url"), register_awa().auth_url)
+        st.link_button(_("OAuth2 url"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)))
         st.stop()
-
-init_logger()
-register_commands({"simple": True})
-
-if "delete_line" not in st.session_state:
-    st.session_state["delete_line"] = True
-if "counter" not in st.session_state:
-    st.success(_("Welcome!"))
-    st.session_state["counter"] = 0
-if st.session_state["delete_line"]:
-    st.session_state["input"] = ""
-    st.session_state["delete_line"] = False
-
-y = st.text_input("> ", key="input", on_change=submit, placeholder=_('Type "help" to get started.'))
-
-html(
-    f"""<script>
-    var input = window.parent.document.querySelectorAll("input[type=text]");
-    for (var i = 0; i < input.length; ++i) {{
-        input[i].focus();
-    }}
-</script>
-""",
-    height=0,
-)
-
-if y:
-    st.text(y)
-
-st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)
+    else:
+        code = st.query_params.code
+        r = requests.post(
+            Awapi.TOKEN_URL.format(domain=domain),
+            headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+            data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
+        )
+        awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
+        st.session_state.awa = awa
+        st.session_state.user_id, st.session_state.username = st.session_state.awa.user
+        if st.session_state.user_id in admins:
+            st.session_state.token = ""
+            register_commands({"token": ""})
+        st.rerun()

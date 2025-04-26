@@ -20,8 +20,8 @@ Python 3.12, Rust (for [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
 
    ```shell
    cd osuawa
-   python -m venv ./venv  # replace python with python3 or py if necessary
-   source ./venv/bin/activate  # replace with .\venv\Scripts\activate on Windows
+   python -m venv ./.venv  # replace python with python3 or py if necessary
+   source ./.venv/bin/activate  # replace with .\.venv\Scripts\activate on Windows
    ```
 
 3. Install dependencies.
@@ -31,7 +31,7 @@ Python 3.12, Rust (for [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
    python -m pip install -r requirements.txt
    # manually install fontfallback for Pillow
    git clone https://github.com/TrueMyst/PillowFontFallback.git
-   cp -r ./PillowFontFallback/fontfallback ./venv/lib/python3.12/site-packages/
+   cp -r ./PillowFontFallback/fontfallback ./.venv/lib/python3.12/site-packages/  # replace with .\.venv\Lib\site-packages\ on Windows
    rm -r PillowFontFallback
    ```
 
@@ -40,15 +40,22 @@ Python 3.12, Rust (for [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
    1. Acquire your osu! OAuth client from [here](https://osu.ppy.sh/home/account/edit).
       The port should match which set in `./.streamlit/config.toml`.
 
-   2. Create a file called `osu.properties` somewhere. The file should like this:
+   2. Create a file called `osu.properties` somewhere. The file should like as follows.
 
       ```properties
       client_id=<Client ID>
       client_secret=<Client Secret>
       redirect_url=<Application Callback URLs>
+      
       ```
 
    3. Edit `./.streamlit/secrets.toml`.
+
+      ```toml
+      [args]
+      oauth_filename = "/path/to/osu.properties"
+      admins = []  # user who match the id will auto gain the highest cmdparser permission without any need to pass the token
+      ```
 
    4. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
 

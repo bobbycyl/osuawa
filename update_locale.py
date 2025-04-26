@@ -1,9 +1,17 @@
 import os
 import subprocess
 
-if __name__ == "__main__":
+_ = lambda x: x  # dummy translation function
+from osuawa import LANGUAGES
 
-    langs = ["zh_CN"]
+if __name__ == "__main__":
+    # you might need to install babel and gettext first
+
+    langs = LANGUAGES
+
+    langs.remove("en_US")
+
+    print("langs:", langs)
 
     for lang in langs:
         path = "./share/locale/{}/LC_MESSAGES".format(lang)
