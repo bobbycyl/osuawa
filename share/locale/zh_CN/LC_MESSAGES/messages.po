@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2025-03-07 10:19+0800\n"
-"PO-Revision-Date: 2024-12-17 19:33+0800\n"
+"POT-Creation-Date: 2025-04-27 04:26+0800\n"
+"PO-Revision-Date: 2025-04-27 04:25+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -19,92 +19,85 @@ msgstr ""
 "Generated-By: Babel 2.14.0\n"
 "X-Generator: Poedit 3.5\n"
 
-#: Home.py:33 app.py:47
+#: Home.py:35 app.py:47
 msgid "Homepage"
 msgstr "主页"
 
-#: Home.py:56
+#: Home.py:60
 #, python-format
 msgid "uncaught exception: %s"
 msgstr "未捕获异常：%s"
 
-#: Home.py:62
+#: Home.py:66
 msgid "registering a client..."
 msgstr "正在注册客户端……"
 
-#: Home.py:70
+#: Home.py:74
 msgid "register command parser"
 msgstr "注册命令解析器"
 
-#: Home.py:77
+#: Home.py:81
 msgid "get user info"
 msgstr "获取用户信息"
 
-#: Home.py:84
+#: Home.py:88
 msgid "save user recent scores"
 msgstr "保存用户最近分数"
 
-#: Home.py:91
+#: Home.py:95
 msgid "update user recent scores"
 msgstr "更新用户最近分数"
 
-#: Home.py:101
+#: Home.py:105
 msgid "get and show score"
 msgstr "展示分数"
 
-#: Home.py:104
+#: Home.py:108
 msgid "get and show user scores of a beatmap"
 msgstr "展示用户谱面分数"
 
-#: Home.py:111
+#: Home.py:115
 msgid "generate local playlists"
 msgstr "生成本地课题"
 
-#: Home.py:116
+#: Home.py:120
 msgid "show user recent scores"
 msgstr "展示用户最近分数"
 
-#: Home.py:130
+#: Home.py:134
 msgid "token matched"
 msgstr "令牌验证通过"
 
-#: Home.py:132
+#: Home.py:136
 msgid "token mismatched"
 msgstr "令牌验证失败"
 
-#: Home.py:134
-msgid ""
-"Use `reg {\"token\": \"<token>\"}` to pass the token, or `reg {\"refresh\": "
-"\"true\"}` to refresh the client."
-msgstr ""
-"使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌，或使用 `reg {\"refresh"
-"\": \"true\"}` 以刷新客户端。"
+#: Home.py:138
+#, python-brace-format
+msgid "Use `reg {\"token\": \"<token>\"}` to pass the token"
+msgstr "使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌"
 
-#: Home.py:137
+#: Home.py:141
 msgid "token generated"
 msgstr "令牌已生成"
 
-#: Home.py:138
+#: Home.py:142
 msgid ""
 "You need to ask the web admin for the session token to unlock the full "
 "features."
 msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。"
 
-#: Home.py:141
-msgid "client refreshed"
-msgstr "客户端已刷新"
-
-#: Home.py:164
+#: Home.py:165
 #, python-format
 msgid "skipped %s"
 msgstr "已跳过 %s"
 
-#: Home.py:175
+#: Home.py:176
 #, python-format
 msgid "failed to generate %s"
 msgstr "生成 %s 失败"
 
-#: Home.py:177
+#: Home.py:178
 #, python-format
 msgid "generated %s"
 msgstr "已生成 %s"
@@ -115,35 +108,31 @@ msgid "user %d not found"
 msgstr "用户 %d 不存在"
 
 #: Home.py:213
-msgid "preparing for the next command..."
+msgid "preparing for the next operation..."
 msgstr "请稍候……"
 
-#: Home.py:220
-msgid "invalid code"
-msgstr "无效授权码"
-
-#: Home.py:230
-msgid "Please click the button below to authorize the app."
-msgstr "请点击下方的按钮以完成授权。"
-
-#: Home.py:231
-msgid "OAuth2 url"
-msgstr "授权链接"
-
-#: Home.py:240
+#: Home.py:221
 msgid "Welcome!"
 msgstr "欢迎使用！"
 
-#: Home.py:246
+#: Home.py:227
 msgid "Type \"help\" to get started."
 msgstr "键入“help”以开始。"
 
-#: Home.py:262
+#: Home.py:243
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:48 tools/Score_visualizer.py:11 tools/Score_visualizer.py:13
+#: Home.py:253
+msgid "Please click the button below to authorize the app."
+msgstr "请点击下方的按钮以完成授权。"
+
+#: Home.py:254
+msgid "OAuth2 url"
+msgstr "授权链接"
+
+#: app.py:48 tools/Score_visualizer.py:13 tools/Score_visualizer.py:15
 msgid "Score visualizer"
 msgstr "查成分"
 
@@ -151,7 +140,7 @@ msgstr "查成分"
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:50
+#: app.py:50 tools/Recorder.py:16 tools/Recorder.py:18
 msgid "Recorder"
 msgstr "看记录"
 
@@ -171,166 +160,95 @@ msgstr "请先上传文件。"
 msgid "Download the resources"
 msgstr "下载资源"
 
-#: tools/Recorder.py:9
-msgid "Ruleset"
-msgstr "游戏模式"
-
-#: tools/Recorder.py:10
-msgid "Limit"
-msgstr "数量限制"
-
-#: tools/Recorder.py:27
-#, python-format
-msgid "Next update in %d seconds"
-msgstr "%d秒后更新"
-
-#: tools/Score_visualizer.py:15
+#: tools/Recorder.py:20 tools/Score_visualizer.py:17
 msgid "wide page layout"
 msgstr "宽页布局"
 
-#: tools/Score_visualizer.py:16
+#: tools/Recorder.py:39
+msgid "table options"
+msgstr "表格选项"
+
+#: tools/Recorder.py:41
+msgid "best only"
+msgstr "仅最好成绩"
+
+#: tools/Recorder.py:42
+msgid "prettify"
+msgstr "美化输出"
+
+#: tools/Recorder.py:80
+msgid "full info"
+msgstr "完整信息"
+
+#: tools/Recorder.py:84
+msgid "User IDs"
+msgstr "用户 ID 列表"
+
+#: tools/Recorder.py:87
+msgid "Ruleset"
+msgstr "游戏模式"
+
+#: tools/Recorder.py:88
+msgid "Limit"
+msgstr "数量限制"
+
+#: tools/Score_visualizer.py:18
 msgid "user"
 msgstr "用户"
 
-#: tools/Score_visualizer.py:50
+#: tools/Score_visualizer.py:53
 msgid "user not found"
 msgstr "用户不存在"
 
-#: tools/Score_visualizer.py:54
+#: tools/Score_visualizer.py:57
 msgid "no scores found"
 msgstr "暂无本地分数"
 
-#: tools/Score_visualizer.py:57
+#: tools/Score_visualizer.py:60
 msgid "user profile"
 msgstr "用户主页"
 
-#: tools/Score_visualizer.py:59
+#: tools/Score_visualizer.py:62
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: tools/Score_visualizer.py:78
+#: tools/Score_visualizer.py:81
 msgid "## Scatter Plot"
 msgstr "## 散点图"
 
-#: tools/Score_visualizer.py:79
+#: tools/Score_visualizer.py:82
 msgid "date range"
 msgstr "日期范围"
 
-#: tools/Score_visualizer.py:81
+#: tools/Score_visualizer.py:84
 msgid "star rating"
 msgstr "难度星数"
 
-#: tools/Score_visualizer.py:83
+#: tools/Score_visualizer.py:86
+msgid "custom columns"
+msgstr "自定义列"
+
+#: tools/Score_visualizer.py:109
 msgid "advanced filter"
 msgstr "高级筛选"
 
-#: tools/Score_visualizer.py:88
-msgid "enable scatter plot size parameter"
-msgstr "设置点的大小"
+#: tools/Score_visualizer.py:114
+msgid "more complex charts"
+msgstr "使用复杂图表"
 
-#: tools/Score_visualizer.py:113
+#: tools/Score_visualizer.py:146
 msgid "## filtered data"
 msgstr "## 目前筛选数据"
 
-#, python-format
-#~ msgid "saving recent scores of %d"
-#~ msgstr "正在保存 %d 的最近分数"
+#~ msgid "enable scatter plot size parameter"
+#~ msgstr "设置点的大小"
 
-#~ msgid "getting scores..."
-#~ msgstr "获取分数……"
+#~ msgid "client refreshed"
+#~ msgstr "客户端已刷新"
 
-#~ msgid "merging scores..."
-#~ msgstr "合并分数……"
-
-#~ msgid "calculating difficulty attributes..."
-#~ msgstr "计算难度……"
+#~ msgid "invalid code"
+#~ msgstr "无效授权码"
 
 #, python-format
-#~ msgid "calculating difficulty attributes... %d/%d (%d unique)"
-#~ msgstr "计算难度…… %d/%d（%d 唯一项）"
-
-#, python-format
-#~ msgid "recent scores of %d saved"
-#~ msgstr "已保存 %d 的最近分数"
-
-#, python-format
-#~ msgid "generating %s"
-#~ msgstr "正在生成 %s"
-
-#, python-format
-#~ msgid "%16d: downloading the beatmapset..."
-#~ msgstr "%16d：下载谱面……"
-
-#, python-format
-#~ msgid "beatmap %s not found"
-#~ msgstr "谱面难度 %s 不存在"
-
-#, python-format
-#~ msgid "%16d: calculating difficulty..."
-#~ msgstr "%16d：计算难度……"
-
-#, python-format
-#~ msgid "%16d: drawing the cover..."
-#~ msgstr "%16d：绘制封面……"
-
-#, python-format
-#~ msgid "%16d: finished"
-#~ msgstr "%16d：完成"
-
-#, python-format
-#~ msgid "using filename: %s"
-#~ msgstr "使用文件名：%s"
-
-#~ msgid "select language"
-#~ msgstr "选择语言"
-
-#~ msgid "**WARNING: DEBUG MODE ON**"
-#~ msgstr "**警告：调试模式已开启**"
-
-#~ msgid ""
-#~ "1. **Enter your client credential.** ([get one](https://osu.ppy.sh/home/"
-#~ "account/edit))"
-#~ msgstr ""
-#~ "1. **输入您的开放授权客户端凭据** ([前往获取](https://osu.ppy.sh/home/"
-#~ "account/edit))"
-
-#~ msgid "Client ID"
-#~ msgstr "客户端 ID"
-
-#~ msgid "Client ID must be an integer"
-#~ msgstr "客户端 ID 须为整型"
-
-#~ msgid "Client Secret"
-#~ msgstr "客户端密钥"
-
-#~ msgid "2. **Upload a playlist source file.**"
-#~ msgstr "2. **上传一个谱面源文件**"
-
-#~ msgid "Please enter your client ID and secret first."
-#~ msgstr "请先填写您的客户端 ID 和密钥。"
-
-#~ msgid "3. **Preview and download the generated resources.**"
-#~ msgstr "3. **预览和下载生成的资源**"
-
-#~ msgid "Permission denied"
-#~ msgstr "无权限"
-
-#, python-format
-#~ msgid "%s option requires an argument"
-#~ msgstr "%s 选项需要一个参数"
-
-#, python-format
-#~ msgid "%s option requires an argument "
-#~ msgstr "%s 选项需要一个参数"
-
-#, python-format
-#~ msgid "(choose from %s), "
-#~ msgstr "（从 %s 中选择），"
-
-#, python-format
-#~ msgid "%s option requires %d arguments"
-#~ msgstr "%s 选项需要 %d 个参数"
-
-#, python-format
-#~ msgid "%s option does not take a value"
-#~ msgstr "%s 选项未接受到值"
+#~ msgid "Next update in %d seconds"
+#~ msgstr "%d 秒后更新"

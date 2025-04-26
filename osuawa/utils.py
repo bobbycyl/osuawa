@@ -8,29 +8,31 @@ from time import sleep
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import rosu_pp_py as rosu
 import streamlit as st
 from clayutil.futil import Downloader
-from osu import AsynchronousClient
-from osu.objects import Beatmap, LegacyScore, SoloScore, UserCompact, UserStatistics
-from osu.enums import Mod
+from ossapi import Beatmap as ApiBeatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap 冲突
+from rosu_pp_py import Beatmap as RosuMap  # 避免与 ossapi.Beatmap 冲突
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",
     "User-Agent": "osuawa",
 }
 
+LANGUAGES = ["en_US", "zh_CN"]
+
 
 @unique
 class Path(Enum):
-    LOGS: str = "./logs"
-    LOCALE: str = "./share/locale"
-    OUTPUT_DIRECTORY: str = "./output"
-    STATIC_DIRECTORY: str = "./static"
-    UPLOADED_DIRECTORY: str = "./static/uploaded"
-    BEATMAPS_CACHE_DIRECTORY: str = "./static/beatmaps"
-    RAW_RECENT_SCORES: str = "raw_recent_scores"
-    RECENT_SCORES: str = "recent_scores"
+    LOGS: str = "./logs/"
+    LOCALE: str = "./share/locale/"
+    OUTPUT_DIRECTORY: str = "./output/"
+    STATIC_DIRECTORY: str = "./static/"
+    UPLOADED_DIRECTORY: str = "./static/uploaded/"
+    BEATMAPS_CACHE_DIRECTORY: str = "./static/beatmaps/"
+    RAW_RECENT_SCORES: str = "raw_recent_scores/"
+    RECENT_SCORES: str = "recent_scores/"
 
 
 @unique
@@ -43,57 +45,70 @@ class ColorBar(Enum):
 
 
 def save_value(key: str) -> None:
+    # <key> <-> st.session_state._<key>_value
     st.session_state["_%s_value" % key] = st.session_state[key]
 
 
 def load_value(key: str, default_value: Any) -> Any:
+    # <key> <-> st.session_state._<key>_value
     if "_%s_value" % key not in st.session_state:
         st.session_state["_%s_value" % key] = default_value
     st.session_state[key] = st.session_state["_%s_value" % key]
 
 
-def memorized_multiselect(label: str, key: str, options, default_value: Any) -> None:
+def memorized_multiselect(label: str, key: str, options: list, default_value: Any) -> None:
     load_value(key, default_value)
     st.multiselect(label, options, key=key, on_change=save_value, args=(key,))
 
 
-def memorized_selectbox(label: str, key: str, options, default_value: Any) -> None:
+def memorized_selectbox(label: str, key: str, options: list, default_value: Any) -> None:
     load_value(key, default_value)
     st.selectbox(label, options, key=key, on_change=save_value, args=(key,))
 
 
-def user_to_dict(user: UserCompact) -> dict[str, Any]:
-    attr_dict = {}
-    for attr in UserCompact.__slots__:
-        attr_dict[attr] = getattr(user, attr)
-    stats = user.statistics
-    stats_dict = {}
-    for attr in UserStatistics.__slots__:
-        stats_dict[attr] = getattr(stats, attr)
-    attr_dict["statistics"] = stats_dict
-    return attr_dict
+def memorized_toggle(label: str, key: str, default_value: bool) -> None:
+    load_value(key, default_value)
+    st.toggle(label, key, on_change=save_value, args=(key,))
 
 
-def get_user_info(client: AsynchronousClient, username: str) -> dict[str, Any]:
-    return user_to_dict(asyncio.run(client.get_user(username, key="username")))
+def calc_bin_size(data: pd.DataFrame | pd.Series | np.ndarray | list) -> float:
+    return (np.max(data) - np.min(data)) / np.min((np.sqrt(len(data)), 10 * np.log10(len(data))))
 
 
-def get_username(client: AsynchronousClient, user: int) -> str:
-    return asyncio.run(client.get_user(user, key="id")).username
+async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
+    return {
+        "username": user.username,
+        "user_id": user.id,
+        "country": user.country,
+        "is_online": user.is_online,
+        "is_supporter": user.is_supporter,
+        "team": user.team,
+        "stat_pp": user.statistics.pp,
+        "stat_global_rank": user.statistics.global_rank,
+        "stat_country_rank": user.statistics.country_rank,
+    }
 
 
-async def _get_beatmaps_dict(client: AsynchronousClient, cut_bids: Sequence[Sequence[int]]) -> list[list[Beatmap]]:
+async def get_user_info(client: OssapiAsync, username: str) -> dict[str, Any]:
+    return await simple_user_dict(await client.user(username, key="username"))
+
+
+def get_username(client: OssapiAsync, user: int) -> str:
+    return asyncio.run(client.user(user, key="id")).username
+
+
+async def _get_beatmaps_dict(client: OssapiAsync, cut_bids: Sequence[list[int]]) -> list[list[ApiBeatmap]]:
     tasks = []
     async with asyncio.TaskGroup() as tg:
         for bids in cut_bids:
-            tasks.append(tg.create_task(client.get_beatmaps(bids)))
+            tasks.append(tg.create_task(client.beatmaps(bids)))
     return [task.result() for task in tasks]
 
 
-def get_beatmaps_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[int, Beatmap]:
+def get_beatmaps_dict(client: OssapiAsync, bids: Sequence[int]) -> dict[int, ApiBeatmap]:
     cut_bids = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(bids[i:i + 50])
+        cut_bids.append(list(bids[i: i + 50]))
     results = asyncio.run(_get_beatmaps_dict(client, cut_bids))
     beatmaps_dict = {}
     for bs in results:
@@ -103,27 +118,27 @@ def get_beatmaps_dict(client: AsynchronousClient, bids: Sequence[int]) -> dict[i
 
 
 def calc_hit_window(original_accuracy: float, magnitude: float = 1.0) -> float:
-    hit_window = 80.0 - 6 * original_accuracy
+    hit_window = 80.0 - 6.0 * original_accuracy
     return hit_window / magnitude
 
 
 def calc_accuracy(hit_window: float) -> float:
-    return (80 - hit_window) / 6
+    return (80.0 - hit_window) / 6.0
 
 
 def calc_preempt(original_ar: float, magnitude: float = 1.0) -> float:
-    if original_ar < 5:
-        preempt = 1200.0 + 600.0 * (5 - original_ar) / 5
+    if original_ar < 5.0:
+        preempt = 1200.0 + 600.0 * (5.0 - original_ar) / 5.0
     else:
-        preempt = 1200.0 - 750 * (original_ar - 5) / 5
+        preempt = 1200.0 - 750 * (original_ar - 5.0) / 5.0
     return preempt / magnitude
 
 
 def calc_ar(preempt: float) -> float:
-    if preempt > 1200:
-        ar = 5.0 - (preempt - 1200) / 600 * 5
+    if preempt > 1200.0:
+        ar = 5.0 - (preempt - 1200.0) / 600 * 5.0
     else:
-        ar = 5.0 + (1200 - preempt) / 750 * 5
+        ar = 5.0 + (1200.0 - preempt) / 750 * 5.0
     return ar
 
 
@@ -147,11 +162,11 @@ class OsuDifficultyAttribute(object):
 
     def set_mods(self, mods: list):
         mods_dict = {mod["acronym"]: (mod["settings"] if mod.get("settings", None) else {}) for mod in mods}
-        if Mod.NoFail.value in mods_dict:
+        if "NF" in mods_dict:
             self.is_nf = True
-        if Mod.Hidden.value in mods_dict:
+        if "HD" in mods_dict:
             self.is_hd = True
-        if Mod.HardRock.value in mods_dict:
+        if "HR" in mods_dict:
             self.cs = self.cs * 1.3
             if self.cs > 10:
                 self.cs = 10.0
@@ -159,63 +174,57 @@ class OsuDifficultyAttribute(object):
             if self.accuracy > 10:
                 self.accuracy = 10.0
             self.ar = self.ar * 1.4
-        elif Mod.Easy.value in mods_dict:
+        elif "EZ" in mods_dict:
             self.cs = self.cs * 0.5
             self.accuracy = self.accuracy * 0.5
             self.ar = self.ar * 0.5
-        elif Mod.DifficultyAdjust.value in mods_dict:
-            self.cs = mods_dict[Mod.DifficultyAdjust.value].get("circle_size", self.cs)
-            self.accuracy = mods_dict[Mod.DifficultyAdjust.value].get("overall_difficulty", self.accuracy)
-            self.ar = mods_dict[Mod.DifficultyAdjust.value].get("approach_rate", self.ar)
+        elif "DA" in mods_dict:
+            self.cs = mods_dict["DA"].get("circle_size", self.cs)
+            self.accuracy = mods_dict["DA"].get("overall_difficulty", self.accuracy)
+            self.ar = mods_dict["DA"].get("approach_rate", self.ar)
         magnitude = 1.0
-        if Mod.DoubleTime.value in mods_dict:
-            magnitude = mods_dict[Mod.DoubleTime.value].get("speed_change", 1.5)
-        elif Mod.Nightcore.value in mods_dict:
-            magnitude = mods_dict[Mod.Nightcore.value].get("speed_change", 1.5)
-        elif Mod.HalfTime.value in mods_dict:
-            magnitude = mods_dict[Mod.HalfTime.value].get("speed_change", 0.75)
-        elif Mod.Daycore.value in mods_dict:
-            magnitude = mods_dict[Mod.Daycore.value].get("speed_change", 0.75)
-        elif Mod.WindUp.value in mods_dict:
-            _settings = mods_dict[Mod.WindUp.value]
+        if "DT" in mods_dict:
+            magnitude = mods_dict["DT"].get("speed_change", 1.5)
+        elif "NC" in mods_dict:
+            magnitude = mods_dict["NC"].get("speed_change", 1.5)
+        elif "HT" in mods_dict:
+            magnitude = mods_dict["HT"].get("speed_change", 0.75)
+        elif "DC" in mods_dict:
+            magnitude = mods_dict["DC"].get("speed_change", 0.75)
+        elif "WU" in mods_dict:
+            _settings = mods_dict["WU"]
             magnitude = 2.0 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 1.5))
-        elif Mod.WindDown.value in mods_dict:
-            _settings = mods_dict[Mod.WindDown.value]
+        elif "WD" in mods_dict:
+            _settings = mods_dict["WD"]
             magnitude = 2.0 / (_settings.get("initial_rate", 1.0) + _settings.get("final_rate", 0.75))
-        if magnitude > 1:
+        if magnitude > 1.0:
             self.is_speed_up = True
-        elif magnitude < 1:
+        elif magnitude < 1.0:
             self.is_speed_down = True
         self.hit_window = calc_hit_window(self.accuracy, magnitude)
         self.accuracy = calc_accuracy(self.hit_window)
         self.preempt = calc_preempt(self.ar, magnitude)
         self.ar = calc_ar(self.preempt)
-        if self.preempt <= 450:
+        if self.preempt <= 450.0:
             self.is_high_ar = True
-        elif 750 <= self.preempt < 1050:
+        elif 675.0 <= self.preempt < 900.0:
             self.is_low_ar = True
-        elif self.preempt >= 1050:
+        elif self.preempt >= 900.0:
             self.is_very_low_ar = True
         self.bpm *= magnitude
         self.hit_length = round(self.hit_length / magnitude)
 
 
-def get_acronym(mod: Mod | str) -> str:
-    if isinstance(mod, Mod):
-        return mod.value
-    else:
-        return mod
+score_info = (int, int, int, float, int, bool, float, list[dict[str, str | dict] | dict[str, str]], datetime)
 
 
-def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool | list[dict[str, str | dict] | dict[str, str]] | datetime]:
-    """
-
-    Create compact score info list from a score.
+def score_info_tuple(score: Score) -> score_info:
+    """Create compact score info list from a score.
 
     :param score: score object
     :return: [bid, user, score, accuracy, max_combo, passed, pp, mods, ts]
     """
-    return [
+    return (
         score.beatmap_id,
         score.user_id,
         score.total_score,
@@ -223,85 +232,79 @@ def score_info_list(score: SoloScore | LegacyScore) -> list[int | float | bool |
         score.max_combo,
         score.passed,
         score.pp,
-        [({"acronym": get_acronym(y.mod), "settings": y.settings} if y.settings is not None else {"acronym": get_acronym(y.mod)}) for y in score.mods],
+        [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],
         score.ended_at,
-    ]
-
-
-def rosu_calc(beatmap_file: str, mods: list) -> tuple:
-    beatmap = rosu.Beatmap(path=beatmap_file)
-    diff = rosu.Difficulty(mods=mods)
-    diff_attr = diff.calculate(beatmap)
-    perf100 = rosu.Performance(accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
-    perf95 = rosu.Performance(accuracy=95, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf90 = rosu.Performance(accuracy=90, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf80 = rosu.Performance(accuracy=80, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    pp100 = perf100.calculate(diff_attr).pp
-    pp95 = perf95.calculate(diff_attr).pp
-    pp90 = perf90.calculate(diff_attr).pp
-    pp80 = perf80.calculate(diff_attr).pp
-    return (
-        diff_attr.stars,
-        diff_attr.max_combo,
-        diff_attr.aim,
-        diff_attr.speed,
-        diff_attr.speed_note_count,
-        diff_attr.slider_factor,
-        diff_attr.ar,
-        diff_attr.od,
-        pp100,
-        pp95,
-        pp90,
-        pp80,
     )
 
 
-def calc_difficulty_and_performance(beatmap: int, mods: list) -> tuple:
+def download_osu(beatmap: int):
     if not "%d.osu" % beatmap in os.listdir(Path.BEATMAPS_CACHE_DIRECTORY.value):
         with BoundedSemaphore():
             sleep(1)
             Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % beatmap, "%d.osu" % beatmap, headers)
-            sleep(0.5)
-    return rosu_calc(os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap), mods)
+            sleep(1)
 
 
-def calc_beatmap_attributes(beatmap: Beatmap, mods: list) -> list:
-    osu_diff_attr = OsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
-    osu_diff_attr.set_mods(mods)
+async def calc_beatmap_attributes(beatmap: ApiBeatmap, mods: list) -> list:
+    my_attr = OsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
+    my_attr.set_mods(mods)
+    download_osu(beatmap.id)
+    rosu_map: RosuMap = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap.id))
+    rosu_diff: rosu.Difficulty = rosu.Difficulty(mods=mods)
+    rosu_attr: rosu.DifficultyAttributes = rosu_diff.calculate(rosu_map)
+    perf100: rosu.Performance = rosu.Performance(accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
+    perf92: rosu.Performance = rosu.Performance(accuracy=92, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf85: rosu.Performance = rosu.Performance(accuracy=85, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf67: rosu.Performance = rosu.Performance(accuracy=67, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    pp100 = perf100.calculate(rosu_attr).pp
+    pp92 = perf92.calculate(rosu_attr).pp
+    pp85 = perf85.calculate(rosu_attr).pp
+    pp67 = perf67.calculate(rosu_attr).pp
     attr = [
-        osu_diff_attr.cs,
-        osu_diff_attr.hit_window,
-        osu_diff_attr.preempt,
-        osu_diff_attr.bpm,
-        osu_diff_attr.hit_length,
-        osu_diff_attr.is_nf,
-        osu_diff_attr.is_hd,
-        osu_diff_attr.is_high_ar,
-        osu_diff_attr.is_low_ar,
-        osu_diff_attr.is_very_low_ar,
-        osu_diff_attr.is_speed_up,
-        osu_diff_attr.is_speed_down,
+        my_attr.cs,
+        my_attr.hit_window,
+        my_attr.preempt,
+        my_attr.bpm,
+        my_attr.hit_length,
+        my_attr.is_nf,
+        my_attr.is_hd,
+        my_attr.is_high_ar,
+        my_attr.is_low_ar,
+        my_attr.is_very_low_ar,
+        my_attr.is_speed_up,
+        my_attr.is_speed_down,
         "%s - %s (%s) [%s]"
         % (
-            beatmap.beatmapset.artist,
-            beatmap.beatmapset.title,
-            beatmap.beatmapset.creator,
+            beatmap.beatmapset().artist,
+            beatmap.beatmapset().title,
+            beatmap.beatmapset().creator,
             beatmap.version,
         ),
         beatmap.difficulty_rating,
+        rosu_attr.stars,
+        rosu_attr.max_combo,
+        rosu_attr.aim,
+        rosu_attr.aim_difficult_slider_count,
+        rosu_attr.speed,
+        rosu_attr.speed_note_count,
+        rosu_attr.slider_factor,
+        rosu_attr.ar,
+        pp100,
+        pp92,
+        pp85,
+        pp67,
     ]
-    attr.extend(calc_difficulty_and_performance(beatmap.id, mods))
     return attr
 
 
 def calc_positive_percent(score: int | float | None, min_score: int | float, max_score: int | float) -> int:
     if score is None:
-        score = 0
-    score_pct = int((score - min_score) / (max_score - min_score) * 100)
-    if score_pct > 100:
-        score_pct = 100
-    elif score_pct < 0:
-        score_pct = 0
+        score = 0.0
+    score_pct = int((score - min_score) / (max_score - min_score) * 100.0)
+    if score_pct > 100.0:
+        score_pct = 100.0
+    elif score_pct < 0.0:
+        score_pct = 0.0
     return score_pct
 
 

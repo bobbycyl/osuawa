@@ -2,8 +2,11 @@ git+https://github.com/bobbycyl/ClayUtilities.git
 fonttools
 numpy
 orjson
-osu.py
+ossapi[async]
 pandas
 pillow
+plotly
 rosu-pp-py
+scipy
 streamlit
+websockets

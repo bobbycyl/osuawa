@@ -21,8 +21,8 @@ def convert_df(df: pd.DataFrame, filename: str):
 
 
 @st.cache_data(show_spinner=False)
-def generate_playlist(playlist_filename: str, css_style: Optional[int] = None):
-    playlist = OsuPlaylist(st.session_state.awa, playlist_filename, css_style=css_style)
+def generate_playlist(filename: str, css_style: Optional[int] = None):
+    playlist = OsuPlaylist(st.session_state.awa, filename, css_style=css_style)
     return playlist.generate()
 
 
@@ -57,5 +57,5 @@ else:
         shutil.copy("./playlists/style.css", css_filename)
     st.dataframe(table, hide_index=True)
     compress_as_zip(session_path, zip_filename)
-    with open(zip_filename, "rb") as zipfi:
-        st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zipfi)
+    with open(zip_filename, "rb") as zfi:
+        st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zfi)

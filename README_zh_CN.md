@@ -18,8 +18,8 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
 
    ```shell
    cd osuawa
-   python -m venv ./venv  # 如果必要，将 python 替换为 python3 或 py
-   source ./venv/bin/activate  # Windows平台须使用 .\venv\Scripts\activate
+   python -m venv ./.venv  # 如有必要，将 python 替换为 python3 或 py
+   source ./.venv/bin/activate  # Windows 平台须使用 .\.venv\Scripts\activate
    ```
 
 3. 安装依赖。
@@ -29,7 +29,7 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
    python -m pip install -r requirements.txt
    # 但 fontfallback 需要手动安装
    git clone https://github.com/TrueMyst/PillowFontFallback.git
-   cp -r ./PillowFontFallback/fontfallback ./venv/lib/python3.12/site-packages/
+   cp -r ./PillowFontFallback/fontfallback ./.venv/lib/python3.12/site-packages/  # Windows 平台须使用 .\.venv\Lib\site-packages\
    rm -r PillowFontFallback
    ```
 
@@ -44,9 +44,16 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
       client_id=<客户端 ID>
       client_secret=<客户端密钥>
       redirect_url=<应用回调链接>
+      
       ```
 
    3. 编辑 `./.streamlit/secrets.toml`。
+
+      ```toml
+      [args]
+      oauth_filename = "你的 osu.properties 文件路径（建议使用相对路径）"
+      admins = []  # UID 匹配的用户会自动获得 cmdparser 的最高权限，无需获取和传递一次性令牌
+      ```
 
    4. 如果不需要HTTPS，删除 `./.streamlit/config.toml` 中的SSL相关设置。
 
