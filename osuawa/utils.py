@@ -71,6 +71,16 @@ def memorized_toggle(label: str, key: str, default_value: bool) -> None:
     st.toggle(label, key, on_change=save_value, args=(key,))
 
 
+def readable_mods(mods: list[dict[str, Any]]) -> list[str]:
+    mods_ready: list[str] = []
+    for i in range(len(mods)):
+        if "settings" in mods[i]:
+            mods_ready.append("%s(%s)" % (mods[i]["acronym"], ",".join(["%s=%s" % it for it in mods[i]["settings"].items()])))
+        else:
+            mods_ready.append(mods[i]["acronym"])
+    return mods_ready
+
+
 def calc_bin_size(data: pd.DataFrame | pd.Series | np.ndarray | list) -> float:
     return (np.max(data) - np.min(data)) / np.min((np.sqrt(len(data)), 10 * np.log10(len(data))))
 
@@ -89,8 +99,8 @@ async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
     }
 
 
-async def get_user_info(client: OssapiAsync, username: str) -> dict[str, Any]:
-    return await simple_user_dict(await client.user(username, key="username"))
+async def _get_user_info(client: OssapiAsync, user: int | str) -> dict[str, Any]:
+    return await simple_user_dict(await client.user(user, key="username" if isinstance(user, str) else "id"))
 
 
 def get_username(client: OssapiAsync, user: int) -> str:
@@ -108,7 +118,7 @@ async def _get_beatmaps_dict(client: OssapiAsync, cut_bids: Sequence[list[int]])
 def get_beatmaps_dict(client: OssapiAsync, bids: Sequence[int]) -> dict[int, ApiBeatmap]:
     cut_bids = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i: i + 50]))
+        cut_bids.append(list(bids[i : i + 50]))
     results = asyncio.run(_get_beatmaps_dict(client, cut_bids))
     beatmaps_dict = {}
     for bs in results:

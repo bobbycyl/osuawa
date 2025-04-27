@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2025-04-27 04:26+0800\n"
-"PO-Revision-Date: 2025-04-27 04:25+0800\n"
+"POT-Creation-Date: 2025-04-28 00:32+0800\n"
+"PO-Revision-Date: 2025-04-28 00:33+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -140,7 +140,7 @@ msgstr "查成分"
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:50 tools/Recorder.py:16 tools/Recorder.py:18
+#: app.py:50 tools/Recorder.py:18 tools/Recorder.py:20
 msgid "Recorder"
 msgstr "看记录"
 
@@ -160,37 +160,61 @@ msgstr "请先上传文件。"
 msgid "Download the resources"
 msgstr "下载资源"
 
-#: tools/Recorder.py:20 tools/Score_visualizer.py:17
+#: tools/Recorder.py:22 tools/Score_visualizer.py:17
 msgid "wide page layout"
 msgstr "宽页布局"
 
-#: tools/Recorder.py:39
-msgid "table options"
-msgstr "表格选项"
-
-#: tools/Recorder.py:41
-msgid "best only"
-msgstr "仅最好成绩"
-
-#: tools/Recorder.py:42
-msgid "prettify"
-msgstr "美化输出"
-
-#: tools/Recorder.py:80
+#: tools/Recorder.py:83
 msgid "full info"
 msgstr "完整信息"
 
-#: tools/Recorder.py:84
-msgid "User IDs"
-msgstr "用户 ID 列表"
-
 #: tools/Recorder.py:87
+msgid "## tosu Panel"
+msgstr "## tosu 面板"
+
+#: tools/Recorder.py:89
+msgid "table options"
+msgstr "表格选项"
+
+#: tools/Recorder.py:91
+msgid "best only"
+msgstr "仅最好成绩"
+
+#: tools/Recorder.py:92
+msgid "prettify"
+msgstr "美化输出"
+
+#: tools/Recorder.py:94
+msgid "friends"
+msgstr "好友"
+
+#: tools/Recorder.py:95
+msgid "submit"
+msgstr "提交"
+
+#: tools/Recorder.py:96
+msgid "manually add user ids"
+msgstr "手动添加用户 ID"
+
+#: tools/Recorder.py:100
+msgid "failed to connect to tosu"
+msgstr "无法连接到 tosu"
+
+#: tools/Recorder.py:105
+msgid "## Local Beatmap ID Records"
+msgstr "## 本地谱面 ID 记录"
+
+#: tools/Recorder.py:106
 msgid "Ruleset"
 msgstr "游戏模式"
 
-#: tools/Recorder.py:88
+#: tools/Recorder.py:107
 msgid "Limit"
 msgstr "数量限制"
+
+#: tools/Recorder.py:123
+msgid "Clear all caches"
+msgstr "清除缓存"
 
 #: tools/Score_visualizer.py:18
 msgid "user"
@@ -240,8 +264,8 @@ msgstr "使用复杂图表"
 msgid "## filtered data"
 msgstr "## 目前筛选数据"
 
-#~ msgid "enable scatter plot size parameter"
-#~ msgstr "设置点的大小"
+#~ msgid "User IDs"
+#~ msgstr "用户 ID 列表"
 
 #~ msgid "client refreshed"
 #~ msgstr "客户端已刷新"
