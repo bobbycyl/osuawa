@@ -5,6 +5,7 @@ import os
 import os.path
 import platform
 import threading
+from asyncio import Task
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
@@ -32,11 +33,13 @@ from .utils import (
     download_osu,
     get_beatmaps_dict,
     get_username,
+    readable_mods,
     score_info,
     score_info_tuple,
     Path,
     headers,
-    get_user_info,
+    _get_user_info,
+    simple_user_dict,
 )
 
 LANGUAGES = LANGUAGES
@@ -79,7 +82,7 @@ class Awapi(OssapiAsync):
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
         domain: Domain | str = Domain.OSU,
-        api_version: int | str = 20241024,
+        api_version: int | str = 20240529,
     ):
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
@@ -115,7 +118,7 @@ class Osuawa(object):
                 "max_combo",
                 "passed",
                 "pp",
-                "mods",
+                "_mods",
                 "ts",
                 "cs",
                 "hit_window",
@@ -156,11 +159,20 @@ class Osuawa(object):
         df["speed_density_ratio"] = df["b_speed_difficulty"] / np.log(df["density"])
         df["aim_speed_ratio"] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
-        df["mods"] = df["mods"].apply(lambda x: orjson.dumps(x).decode("utf-8"))
+        df["mods"] = df["_mods"].apply(lambda x: "; ".join(readable_mods(x)))
+        df["_mods"] = df["_mods"].apply(lambda x: orjson.dumps(x).decode("utf-8"))
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
-        return asyncio.run(get_user_info(self.api, username))
+        return asyncio.run(_get_user_info(self.api, username))
+
+    async def _get_friends(self) -> list[dict[str, Any]]:
+        friends = await self.api.friends()
+        tasks: list[Task[dict[str, Any]]] = []
+        async with asyncio.TaskGroup() as tg:
+            for friend in friends:
+                tasks.append(tg.create_task(simple_user_dict(friend)))
+        return [task.result() for task in tasks]
 
     async def _get_score(self, score_id: int) -> list:
         score = await self.api.score(score_id)
@@ -452,24 +464,20 @@ class OsuPlaylist(object):
         bid: int = element["bid"]
         b: Beatmap = element["beatmap"]
         raw_mods: list[dict[str, Any]] = element["mods"]
-        mods_ready: list[str] = []
         notes: str = element["notes"]
 
         # 处理NM, FM, TB
         root_mod: str = raw_mods[0]["acronym"]
         last_root_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
         is_fm = False
-        mods = raw_mods.copy()
+        mods = raw_mods.copy()  # 只能使用官方 Mods 的用这个变量
         for j in range(len(raw_mods)):
             # 如果非官方 Mods 缩写在列表中，则处理过后剔除该 Mod
             if raw_mods[j]["acronym"] in self.custom_mods_acronym:
                 if raw_mods[j]["acronym"] == "FM" or raw_mods[j]["acronym"] == "F+":
                     is_fm = True
                 mods.pop(j)
-            if "settings" in raw_mods[j]:
-                mods_ready.append("%s(%s)" % (raw_mods[j]["acronym"], ",".join(["%s=%s" % it for it in raw_mods[j]["settings"].items()])))
-            else:
-                mods_ready.append(raw_mods[j]["acronym"])
+            mods_ready = readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
 
         # 下载谱面与计算难度（与 utils.calc_beatmap_attributes 类似，但是省略了许多不必要的计算，且为了课题要求优化）
         download_osu(bid)
@@ -547,7 +555,7 @@ class OsuPlaylist(object):
               </div>
             </div>
             <div class="text-white card-main pt-2">
-              <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden group-hover:line-clamp-2">{html.escape(b.beatmapset().title_unicode)}</h3>
+              <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden">{html.escape(b.beatmapset().title_unicode)}</h3>
               <p class="font-semibold overflow-ellipsis overflow-hidden whitespace-nowrap">{html.escape(b.beatmapset().artist_unicode)}</p>
               <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300 pt-2 pb-1">
                 <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Mapper: <a class="font-semibold">{html.escape(b.beatmapset().creator)}</a></p>
@@ -609,8 +617,8 @@ class OsuPlaylist(object):
             </div>
           </div>
         </div>
-        <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-3 notes">
-          <p class="text-xs flex justify-between items-end">
+        <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-7 notes">
+          <p class="text-sm flex justify-between items-end">
             <span>{notes}{extra_notes}</span>
             <span class="justify-end items-end space-x-2">
               <a href="https://osu.ppy.sh/b/{b.id}"
