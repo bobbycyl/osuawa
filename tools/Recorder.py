@@ -7,6 +7,7 @@ from typing import Any
 import orjson
 import pandas as pd
 import streamlit as st
+from streamlit import logger
 from websockets.sync.client import connect
 
 import osuawa
@@ -60,6 +61,7 @@ def tosu_main():
         message = websocket.recv()
         obj = orjson.loads(message)
         bid: int = obj["beatmap"]["id"]
+        logger.get_logger(st.session_state.username).info("getting records of %d" % bid)
         reversed_friends = {v: k for k, v in friends().items()}
         quickly_selected_friend_ids = [reversed_friends[username] for username in quickly_selected_friend_usernames]
         ids = sorted(list(set(orjson.loads(st.session_state.rec_user_ids) + quickly_selected_friend_ids)))
@@ -120,5 +122,5 @@ with threading.Lock():
     with open(os.path.join(Path.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w") as fo:
         fo.write("\n".join([f"{score.beatmap_id}" for score in user_scores_current]))
 
-if st.button(_("Clear all caches")):
+if st.button(_("clear all caches")):
     st.cache_data.clear()
