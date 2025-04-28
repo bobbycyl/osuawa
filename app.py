@@ -1,13 +1,23 @@
 import builtins
-import ctypes
 import gettext
-import locale
 import os.path
-import platform
 
 import streamlit as st
+from babel import Locale
 
-from osuawa import Path
+from osuawa import LANGUAGES, Path
+
+
+def convert_locale(accept_language: str):
+    try:
+        parsed_locale = Locale.parse(accept_language.split(",")[0], sep="-")
+        converted_lang = "%s_%s" % (parsed_locale.language, parsed_locale.territory)
+        if converted_lang not in LANGUAGES:
+            return "en_US"
+        else:
+            return converted_lang
+    except:
+        return "en_US"
 
 
 def gettext_getfunc(lang):
@@ -34,9 +44,7 @@ if "translate" not in st.session_state:
         os.mkdir(Path.UPLOADED_DIRECTORY.value)
     if not os.path.exists(Path.BEATMAPS_CACHE_DIRECTORY.value):
         os.mkdir(Path.BEATMAPS_CACHE_DIRECTORY.value)
-    _lang = locale.getlocale()[0]
-    if platform.system() == "Windows":
-        _lang = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
+    _lang = convert_locale(st.context.locale)
     st.session_state._uni_lang_value = _lang
 else:
     _lang = st.session_state._uni_lang_value

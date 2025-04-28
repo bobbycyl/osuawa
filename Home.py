@@ -261,6 +261,7 @@ else:
             data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
         )
         awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
+        awa.tz = st.context.timezone
         st.session_state.awa = awa
         st.session_state.user_id, st.session_state.username = st.session_state.awa.user
         if st.session_state.user_id in admins:
