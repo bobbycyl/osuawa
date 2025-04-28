@@ -12,49 +12,82 @@ Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
 
 ## 快速开始
 
-1. 克隆本仓库。 `git clone https://github.com/bobbycyl/osuawa.git`
+### 克隆仓库
 
-2. 创建并激活虚拟环境。
+```shell
+git clone https://github.com/bobbycyl/osuawa.git
+```
+
+### 创建并激活虚拟环境
+
+```shell
+# 切换目录
+cd osuawa
+# 创建虚拟环境
+python -m venv ./.venv  # 如有必要，将 python 替换为 python3 或 py
+# 激活虚拟环境
+source ./.venv/bin/activate  # Windows 没有 source 命令，须替换为 .\.venv\Scripts\activate
+```
+
+每当你重新打开终端并想要运行程序，都需要先激活虚拟环境。
+
+### 安装依赖
+
+1. pip 可以帮你安装绝大多数依赖。
 
    ```shell
-   cd osuawa
-   python -m venv ./.venv  # 如有必要，将 python 替换为 python3 或 py
-   source ./.venv/bin/activate  # Windows 平台须使用 .\.venv\Scripts\activate
-   ```
-
-3. 安装依赖。
-
-   ```shell
-   # 使用 pip 可以安装绝大多数依赖
    python -m pip install -r requirements.txt
-   # 但 fontfallback 需要手动安装
-   git clone https://github.com/TrueMyst/PillowFontFallback.git
-   cp -r ./PillowFontFallback/fontfallback ./.venv/lib/python3.12/site-packages/  # Windows 平台须使用 .\.venv\Lib\site-packages\
-   rm -r PillowFontFallback
    ```
 
-4. 配置。
+2. 但是 `fontfallback` 需要手动安装.
 
-   1. 从[这里](https://osu.ppy.sh/home/account/edit)获取你的开放授权客户端。
-      端口号须和 `./.streamlit/config.toml` 中的 `server.port` 一致。
+   1. 假设你已经按照上述操作进入 `osuawa` 目录, 克隆这个项目的仓库。
 
-   2. 在一个你喜欢的地方创建 `osu.properties` 文件，并添加以下内容：
-
-      ```properties
-      client_id=<客户端 ID>
-      client_secret=<客户端密钥>
-      redirect_url=<应用回调链接>
-      
+      ```shell
+      git clone https://github.com/TrueMyst/PillowFontFallback.git
       ```
 
-   3. 编辑 `./.streamlit/secrets.toml`。
+   2. 将 `fontfallback` 文件夹复制到虚拟环境的 `site-packages` 目录中。
 
-      ```toml
-      [args]
-      oauth_filename = "你的 osu.properties 文件路径（建议使用相对路径）"
-      admins = []  # UID 匹配的用户会自动获得 cmdparser 的最高权限，无需获取和传递一次性令牌
+      ```shell
+      cp -r ./PillowFontFallback/fontfallback/ ./.venv/lib/python3.12/site-packages/  # 在 Windows 上该目录为 .\.venv\Lib\site-packages\
       ```
 
-   4. 如果不需要HTTPS，删除 `./.streamlit/config.toml` 中的SSL相关设置。
+   3. 如果你没有别的需求，可以删除 `PillowFontFallback` 目录。
 
-5. 运行程序。 `python run.py`
+      ```shell
+      rm -r ./PillowFontFallback/
+      ```
+
+### 配置设置
+
+1. 从 [这里](https://osu.ppy.sh/home/account/edit) 获取你的 osu! 开放授权客户端。
+   端口设置须与 `./.streamlit/config.toml` 中的保持一致。
+
+2. 在一个你喜欢的地方按下述格式创建 `osu.properties` 文件，注意文件末尾须留空行。
+
+   ```properties
+   client_id=<客户端 ID>
+   client_secret=<客户端密钥>
+   redirect_url=<应用回调链接>
+
+   ```
+
+3. 编辑 `./.streamlit/secrets.toml`.
+
+   ```toml
+   [args]
+   oauth_filename = "<之前创建的 osu.properties 目录（可以使用相对目录表示）>"
+   admins = []  # 匹配的用户将无需传递一次性令牌即可获得所有功能的使用权限
+   ```
+
+4. 如果你用不到 SSL，或者使用反向代理实现了这个功能，在 `./.streamlit/config.toml` 中删除与 SSL 相关的配置即可。
+
+### 开始使用吧
+
+```shell
+# 可以直接调用 run.py
+python run.py
+# 或者可以用 streamlit run app.py 以应用更多启动设置
+streamlit run --server.enableCORS=false --server.enableXsrfProtection=false app.py
+```
