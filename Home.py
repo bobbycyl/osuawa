@@ -135,7 +135,7 @@ def register_commands(obj: Optional[dict] = None):
             else:
                 ret = _("token mismatched")
         else:
-            st.info(_('Use `reg {"token": "<token>"}` to pass the token'))
+            st.info(_('use `reg {"token": "<token>"}` to pass the token'))
             st.session_state.token = token_hex(16)
             logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
             ret = _("token generated")

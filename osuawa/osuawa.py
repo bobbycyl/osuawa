@@ -1,10 +1,12 @@
 import asyncio
 import ctypes
+import datetime
 import html
 import os
 import os.path
 import platform
 import threading
+import typing
 from asyncio import Task
 from functools import cached_property
 from shutil import rmtree
@@ -48,7 +50,9 @@ html_body_suffix = """    </div>
   </div>
 """
 
-score_info_length = len(score_info)
+assert typing
+assert datetime
+score_info_length = len(eval(repr(score_info).lstrip("tuple")))
 
 
 def strip_quotes(text: str) -> str:
@@ -63,7 +67,7 @@ def strip_quotes(text: str) -> str:
 async def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict[int, Beatmap]) -> dict[str, list]:
     for score_id in scores_compact:
         if len(scores_compact[score_id]) == score_info_length:
-            scores_compact[score_id].extend(await calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id][0]], scores_compact[score_id][7]))
+            scores_compact[score_id].extend(await calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id][0]], tuple(scores_compact[score_id])))
     return scores_compact
 
 
@@ -120,6 +124,8 @@ class Osuawa(object):
                 "pp",
                 "_mods",
                 "ts",
+                "statistics",
+                "st",
                 "cs",
                 "hit_window",
                 "preempt",
@@ -142,6 +148,12 @@ class Osuawa(object):
                 "b_speed_note_count",
                 "b_slider_factor",
                 "b_approach_rate",
+                "pp_aim",
+                "pp_speed",
+                "pp_accuracy",
+                "b_pp_100if_aim",
+                "b_pp_100if_speed",
+                "b_pp_100if_accuracy",
                 "b_pp_100if",
                 "b_pp_92if",
                 "b_pp_85if",
@@ -149,7 +161,11 @@ class Osuawa(object):
             ],
         )
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
+        df["time"] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
         df["pp_pct"] = df["pp"] / df["b_pp_100if"]
+        df["pp_aim_pct"] = df["pp_aim"] / df["b_pp_100if_aim"]
+        df["pp_speed_pct"] = df["pp_speed"] / df["b_pp_100if_speed"]
+        df["pp_accuracy_pct"] = df["pp_accuracy"] / df["b_pp_100if_accuracy"]
         df["pp_92pct"] = df["pp"] / df["b_pp_92if"]
         df["pp_85pct"] = df["pp"] / df["b_pp_85if"]
         df["pp_67pct"] = df["pp"] / df["b_pp_67if"]
@@ -180,7 +196,7 @@ class Osuawa(object):
         score_compact.extend(
             await calc_beatmap_attributes(
                 await self.api.beatmap(score.beatmap_id),
-                score_compact[7],
+                tuple(score_compact),
             )
         )
         return score_compact
@@ -235,7 +251,7 @@ class Osuawa(object):
         len_diff = len(recent_scores_compact) - len_local
 
         # calculate difficulty attributes
-        bids_not_calculated: set[int] = {x[0] for x in recent_scores_compact.values() if len(x) == 9}
+        bids_not_calculated: set[int] = {x[0] for x in recent_scores_compact.values() if len(x) == score_info_length}
         beatmaps_dict = get_beatmaps_dict(self.api, tuple(bids_not_calculated))
         recent_scores_compact = asyncio.run(complete_scores_compact(recent_scores_compact, beatmaps_dict))
 
@@ -464,6 +480,7 @@ class OsuPlaylist(object):
         bid: int = element["bid"]
         b: Beatmap = element["beatmap"]
         raw_mods: list[dict[str, Any]] = element["mods"]
+        mods_ready: list[str] = []
         notes: str = element["notes"]
 
         # 处理NM, FM, TB

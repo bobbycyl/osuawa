@@ -5,10 +5,9 @@ from datetime import datetime
 from enum import Enum, unique
 from threading import BoundedSemaphore
 from time import sleep
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
-import pandas as pd
 import rosu_pp_py as rosu
 import streamlit as st
 from clayutil.futil import Downloader
@@ -25,14 +24,14 @@ LANGUAGES = ["en_US", "zh_CN"]
 
 @unique
 class Path(Enum):
-    LOGS: str = "./logs/"
-    LOCALE: str = "./share/locale/"
-    OUTPUT_DIRECTORY: str = "./output/"
-    STATIC_DIRECTORY: str = "./static/"
-    UPLOADED_DIRECTORY: str = "./static/uploaded/"
-    BEATMAPS_CACHE_DIRECTORY: str = "./static/beatmaps/"
-    RAW_RECENT_SCORES: str = "raw_recent_scores/"
-    RECENT_SCORES: str = "recent_scores/"
+    LOGS = "./logs/"
+    LOCALE = "./share/locale/"
+    OUTPUT_DIRECTORY = "./output/"
+    STATIC_DIRECTORY = "./static/"
+    UPLOADED_DIRECTORY = "./static/uploaded/"
+    BEATMAPS_CACHE_DIRECTORY = "./static/beatmaps/"
+    RAW_RECENT_SCORES = "raw_recent_scores/"
+    RECENT_SCORES = "recent_scores/"
 
 
 @unique
@@ -81,7 +80,7 @@ def readable_mods(mods: list[dict[str, Any]]) -> list[str]:
     return mods_ready
 
 
-def calc_bin_size(data: pd.DataFrame | pd.Series | np.ndarray | list) -> float:
+def calc_bin_size(data) -> float:
     return (np.max(data) - np.min(data)) / np.min((np.sqrt(len(data)), 10 * np.log10(len(data))))
 
 
@@ -225,14 +224,14 @@ class OsuDifficultyAttribute(object):
         self.hit_length = round(self.hit_length / magnitude)
 
 
-score_info = (int, int, int, float, int, bool, float, list[dict[str, str | dict] | dict[str, str]], datetime)
+score_info = tuple[int, int, int, float, int, bool, float, list[dict[str, str | dict] | dict[str, str]], datetime, dict[str, int], Optional[datetime]]
 
 
 def score_info_tuple(score: Score) -> score_info:
     """Create compact score info list from a score.
 
     :param score: score object
-    :return: [bid, user, score, accuracy, max_combo, passed, pp, mods, ts]
+    :return: [bid, user, score, accuracy, max_combo, passed, pp, mods, ts, statistics, st]
     """
     return (
         score.beatmap_id,
@@ -244,6 +243,16 @@ def score_info_tuple(score: Score) -> score_info:
         score.pp,
         [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],
         score.ended_at,
+        {
+            "large_tick_hit": score.statistics.large_tick_hit,
+            "small_tick_hit": score.statistics.small_tick_hit,
+            "slider_tail_hit": score.statistics.slider_tail_hit,
+            "great": score.statistics.great,
+            "ok": score.statistics.ok,
+            "meh": score.statistics.meh,
+            "miss": score.statistics.miss,
+        },
+        score.started_at,
     )
 
 
@@ -255,18 +264,39 @@ def download_osu(beatmap: int):
             sleep(1)
 
 
-async def calc_beatmap_attributes(beatmap: ApiBeatmap, mods: list) -> list:
+async def calc_beatmap_attributes(beatmap: ApiBeatmap, score: score_info) -> list:
+    mods = score[7]
     my_attr = OsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
     my_attr.set_mods(mods)
     download_osu(beatmap.id)
     rosu_map: RosuMap = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap.id))
     rosu_diff: rosu.Difficulty = rosu.Difficulty(mods=mods)
     rosu_attr: rosu.DifficultyAttributes = rosu_diff.calculate(rosu_map)
-    perf100: rosu.Performance = rosu.Performance(accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
-    perf92: rosu.Performance = rosu.Performance(accuracy=92, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf85: rosu.Performance = rosu.Performance(accuracy=85, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    perf67: rosu.Performance = rosu.Performance(accuracy=67, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    pp100 = perf100.calculate(rosu_attr).pp
+    perf_real: rosu.Performance = rosu.Performance(
+        mods=mods,
+        combo=score[4],
+        large_tick_hits=score[9].get("large_tick_hit", 0),
+        small_tick_hits=score[9].get("small_tick_hit", 0),
+        slider_end_hits=score[9].get("slider_tail_hit", 0),
+        n300=score[9].get("great", 0),
+        n100=score[9].get("ok", 0),
+        n50=score[9].get("meh", 0),
+        misses=score[9].get("miss", 0),
+        lazer=bool(score[10]),
+    )
+    perf100: rosu.Performance = rosu.Performance(mods=mods, accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
+    perf92: rosu.Performance = rosu.Performance(mods=mods, accuracy=92, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf85: rosu.Performance = rosu.Performance(mods=mods, accuracy=85, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    perf67: rosu.Performance = rosu.Performance(mods=mods, accuracy=67, hitresult_priority=rosu.HitResultPriority.WorstCase)
+    pp_real_attr = perf_real.calculate(rosu_attr)
+    pp_aim = pp_real_attr.pp_aim
+    pp_speed = pp_real_attr.pp_speed
+    pp_accuracy = pp_real_attr.pp_accuracy
+    pp100_attr = perf100.calculate(rosu_attr)
+    pp100_aim = pp100_attr.pp_aim
+    pp100_speed = pp100_attr.pp_speed
+    pp100_accuracy = pp100_attr.pp_accuracy
+    pp100 = pp100_attr.pp
     pp92 = perf92.calculate(rosu_attr).pp
     pp85 = perf85.calculate(rosu_attr).pp
     pp67 = perf67.calculate(rosu_attr).pp
@@ -299,6 +329,12 @@ async def calc_beatmap_attributes(beatmap: ApiBeatmap, mods: list) -> list:
         rosu_attr.speed_note_count,
         rosu_attr.slider_factor,
         rosu_attr.ar,
+        pp_aim,
+        pp_speed,
+        pp_accuracy,
+        pp100_aim,
+        pp100_speed,
+        pp100_accuracy,
         pp100,
         pp92,
         pp85,

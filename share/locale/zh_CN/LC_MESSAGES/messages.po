@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2025-04-28 00:32+0800\n"
-"PO-Revision-Date: 2025-04-28 00:33+0800\n"
+"POT-Creation-Date: 2025-04-28 18:17+0800\n"
+"PO-Revision-Date: 2025-04-28 18:07+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -19,7 +19,7 @@ msgstr ""
 "Generated-By: Babel 2.14.0\n"
 "X-Generator: Poedit 3.5\n"
 
-#: Home.py:35 app.py:47
+#: Home.py:35 app.py:55
 msgid "Homepage"
 msgstr "主页"
 
@@ -74,7 +74,7 @@ msgstr "令牌验证失败"
 
 #: Home.py:138
 #, python-brace-format
-msgid "Use `reg {\"token\": \"<token>\"}` to pass the token"
+msgid "use `reg {\"token\": \"<token>\"}` to pass the token"
 msgstr "使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌"
 
 #: Home.py:141
@@ -132,136 +132,161 @@ msgstr "请点击下方的按钮以完成授权。"
 msgid "OAuth2 url"
 msgstr "授权链接"
 
-#: app.py:48 tools/Score_visualizer.py:13 tools/Score_visualizer.py:15
+#: app.py:56 tools/Score_visualizer.py:15 tools/Score_visualizer.py:17
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:49 tools/Playlist_generator.py:13
+#: app.py:57 tools/Playlist_generator.py:14
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:50 tools/Recorder.py:18 tools/Recorder.py:20
+#: app.py:58 tools/Recorder.py:19 tools/Recorder.py:21
 msgid "Recorder"
 msgstr "看记录"
 
-#: tools/Playlist_generator.py:15
+#: tools/Playlist_generator.py:16
 msgid "new style"
 msgstr "新样式"
 
-#: tools/Playlist_generator.py:29
-msgid "Choose a file"
+#: tools/Playlist_generator.py:30
+msgid "choose a file"
 msgstr "选择文件"
 
-#: tools/Playlist_generator.py:31
+#: tools/Playlist_generator.py:32
 msgid "Please upload a file first."
 msgstr "请先上传文件。"
 
-#: tools/Playlist_generator.py:61
-msgid "Download the resources"
+#: tools/Playlist_generator.py:63
+msgid "download the resources"
 msgstr "下载资源"
 
-#: tools/Recorder.py:22 tools/Score_visualizer.py:17
+#: tools/Recorder.py:23 tools/Score_visualizer.py:19
 msgid "wide page layout"
 msgstr "宽页布局"
 
-#: tools/Recorder.py:83
+#: tools/Recorder.py:85
 msgid "full info"
 msgstr "完整信息"
 
-#: tools/Recorder.py:87
+#: tools/Recorder.py:89
 msgid "## tosu Panel"
 msgstr "## tosu 面板"
 
-#: tools/Recorder.py:89
+#: tools/Recorder.py:91
 msgid "table options"
 msgstr "表格选项"
 
-#: tools/Recorder.py:91
+#: tools/Recorder.py:93
 msgid "best only"
 msgstr "仅最好成绩"
 
-#: tools/Recorder.py:92
+#: tools/Recorder.py:94
 msgid "prettify"
 msgstr "美化输出"
 
-#: tools/Recorder.py:94
+#: tools/Recorder.py:96
 msgid "friends"
 msgstr "好友"
 
-#: tools/Recorder.py:95
+#: tools/Recorder.py:97
 msgid "submit"
 msgstr "提交"
 
-#: tools/Recorder.py:96
+#: tools/Recorder.py:98
 msgid "manually add user ids"
 msgstr "手动添加用户 ID"
 
-#: tools/Recorder.py:100
+#: tools/Recorder.py:102
 msgid "failed to connect to tosu"
 msgstr "无法连接到 tosu"
 
-#: tools/Recorder.py:105
+#: tools/Recorder.py:107
 msgid "## Local Beatmap ID Records"
 msgstr "## 本地谱面 ID 记录"
 
-#: tools/Recorder.py:106
+#: tools/Recorder.py:108
 msgid "Ruleset"
 msgstr "游戏模式"
 
-#: tools/Recorder.py:107
+#: tools/Recorder.py:109
 msgid "Limit"
 msgstr "数量限制"
 
-#: tools/Recorder.py:123
-msgid "Clear all caches"
+#: tools/Recorder.py:125
+msgid "clear all caches"
 msgstr "清除缓存"
 
-#: tools/Score_visualizer.py:18
+#: tools/Score_visualizer.py:21
 msgid "user"
 msgstr "用户"
 
-#: tools/Score_visualizer.py:53
+#: tools/Score_visualizer.py:120
 msgid "user not found"
 msgstr "用户不存在"
 
-#: tools/Score_visualizer.py:57
+#: tools/Score_visualizer.py:124
 msgid "no scores found"
 msgstr "暂无本地分数"
 
-#: tools/Score_visualizer.py:60
+#: tools/Score_visualizer.py:127
 msgid "user profile"
 msgstr "用户主页"
 
-#: tools/Score_visualizer.py:62
+#: tools/Score_visualizer.py:129
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: tools/Score_visualizer.py:81
-msgid "## Scatter Plot"
-msgstr "## 散点图"
+#: tools/Score_visualizer.py:147
+msgid "Filtering"
+msgstr "筛选"
 
-#: tools/Score_visualizer.py:82
+#: tools/Score_visualizer.py:148
 msgid "date range"
 msgstr "日期范围"
 
-#: tools/Score_visualizer.py:84
+#: tools/Score_visualizer.py:149
 msgid "star rating"
 msgstr "难度星数"
 
-#: tools/Score_visualizer.py:86
+#: tools/Score_visualizer.py:150
+msgid "passed only"
+msgstr "排除失败成绩"
+
+#: tools/Score_visualizer.py:152
 msgid "custom columns"
 msgstr "自定义列"
 
-#: tools/Score_visualizer.py:109
+#: tools/Score_visualizer.py:177
 msgid "advanced filter"
 msgstr "高级筛选"
 
-#: tools/Score_visualizer.py:114
+#: tools/Score_visualizer.py:182
+msgid "## Playing Preferences"
+msgstr "## 游玩偏好"
+
+#: tools/Score_visualizer.py:185
+msgid "compared to"
+msgstr "比较方"
+
+#: tools/Score_visualizer.py:217
+msgid "index"
+msgstr "指标"
+
+#: tools/Score_visualizer.py:231 tools/Score_visualizer.py:234
+#, python-format
+msgid "%s of user %s is constant (%s)"
+msgstr "指标 %s（用户 %s）无变异（值为 %s）"
+
+#: tools/Score_visualizer.py:268
+msgid "## Skills Analysis"
+msgstr "## 能力分析"
+
+#: tools/Score_visualizer.py:269
 msgid "more complex charts"
 msgstr "使用复杂图表"
 
-#: tools/Score_visualizer.py:146
-msgid "## filtered data"
+#: tools/Score_visualizer.py:301
+msgid "## Filtered Data"
 msgstr "## 目前筛选数据"
 
 #~ msgid "User IDs"

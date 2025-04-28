@@ -3,8 +3,10 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 from plotly import figure_factory as ff
+from scipy import stats
 
 from osuawa import Path
 from osuawa.utils import calc_bin_size, memorized_multiselect, memorized_selectbox
@@ -15,7 +17,17 @@ else:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
 with st.sidebar:
     st.toggle(_("wide page layout"), key="wide_layout", value=False)
-user = st.selectbox(_("user"), [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))])
+all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))]
+user = st.selectbox(_("user"), all_users)
+
+THEME_COLOR_BLUE = "#4C95D9"
+THEME_COLOR_RED = "#FF6A6A"
+if st.session_state._uni_lang_value == "en_US":
+    CO = THEME_COLOR_BLUE
+    CC = THEME_COLOR_RED
+else:
+    CO = THEME_COLOR_RED
+    CC = THEME_COLOR_BLUE
 
 
 def calc_pp_overall_main(df: pd.DataFrame, tag: Optional[str] = None) -> str:
@@ -47,6 +59,61 @@ def calc_pp_overall_count(df: pd.DataFrame, tag: Optional[str] = None) -> str:
     return "%d (%.2f%%)" % (len(df_tag), len(df_tag) / len(df) * 100)
 
 
+def apply_filter(df: pd.DataFrame) -> pd.DataFrame:
+    begin_date, end_date = st.session_state.cat_date_range
+    srl, srh = st.session_state.cat_sr_range
+    df1: pd.DataFrame = df[(df["ts"].dt.date > begin_date) & (df["ts"].dt.date < end_date)]
+    if srl == 0.0 and srh == 10.0:
+        df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df["passed"])]
+    else:
+        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df["passed"])]
+    if st.session_state.cat_advanced_filter != "":
+        df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
+    else:
+        df3 = df2
+    return df3
+
+
+def calc_statistics(df: pd.DataFrame, column: str) -> tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, int]:
+    data = df[column]
+    # table: | index | min | Q1 | median | Q3 | max | mean | winsor_mean | mode | std | var | CV | skew | kurtosis | 95% CI L | 95% CI U | N |
+    data_se = data.sem()
+    data_df = len(data) - 1
+    t_critical = stats.t.ppf(0.975, data_df)
+    margin_of_error = t_critical * data_se
+    ci_l = data.mean() - margin_of_error
+    ci_u = data.mean() + margin_of_error
+    # 1% winsorize
+    data_winsor = data.clip(lower=data.quantile(0.01), upper=data.quantile(0.99))
+    return (
+        data.min(),
+        data.quantile(0.25),
+        data.median(),
+        data.quantile(0.75),
+        data.max(),
+        data.mean(),
+        data_winsor.mean(),
+        data.mode().values[0],
+        data.std(ddof=1),
+        data.var(ddof=1),
+        (data.std(ddof=1) / data.mean()),
+        data.skew(),
+        data.kurt(),
+        ci_l,
+        ci_u,
+        len(data),
+    )
+
+
+def generate_stats_dataframe(df: pd.DataFrame, index_list: list[str]) -> pd.DataFrame:
+    index_records = {}
+    for index in index_list:
+        index_records[index] = calc_statistics(df, index)
+    df_stats = pd.DataFrame.from_dict(index_records, orient="index", columns=("min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "mode", "std", "var", "CV", "skew", "kurtosis", "_CIL", "_CIU", "N"))
+    df_stats["95% CI"] = df_stats.apply(lambda row: f"[{row['_CIL']:.2f}, {row['_CIU']:.2f}]", axis=1)
+    return df_stats
+
+
 def main():
     np.seterr(divide="ignore")
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
@@ -67,21 +134,20 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
 
 | tag         | got (passed)                                  | if (passed)                                 | count (total)                                 |
 | ----------- | --------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
-| HD          | {calc_pp_overall_main(dfp, "is_hd")}          | {calc_pp_overall_if(dfp, "is_hd")}          | {calc_pp_overall_count(df, "is_hd")}          |
-| High_AR     | {calc_pp_overall_main(dfp, "is_high_ar")}     | {calc_pp_overall_if(dfp, "is_high_ar")}     | {calc_pp_overall_count(df, "is_high_ar")}     |
-| Low_AR      | {calc_pp_overall_main(dfp, "is_low_ar")}      | {calc_pp_overall_if(dfp, "is_low_ar")}      | {calc_pp_overall_count(df, "is_low_ar")}      |
-| Very_Low_AR | {calc_pp_overall_main(dfp, "is_very_low_ar")} | {calc_pp_overall_if(dfp, "is_very_low_ar")} | {calc_pp_overall_count(df, "is_very_low_ar")} |
-| Speed_Up    | {calc_pp_overall_main(dfp, "is_speed_up")}    | {calc_pp_overall_if(dfp, "is_speed_up")}    | {calc_pp_overall_count(df, "is_speed_up")}    |
-| Speed_Down  | {calc_pp_overall_main(dfp, "is_speed_down")}  | {calc_pp_overall_if(dfp, "is_speed_down")}  | {calc_pp_overall_count(df, "is_speed_down")}  |
-| Total       | {calc_pp_overall_main(dfp)}                   | {calc_pp_overall_if(dfp)}                   | {calc_pp_overall_count(df)}                   |
+| hd          | {calc_pp_overall_main(dfp, "is_hd")}          | {calc_pp_overall_if(dfp, "is_hd")}          | {calc_pp_overall_count(df, "is_hd")}          |
+| high_ar     | {calc_pp_overall_main(dfp, "is_high_ar")}     | {calc_pp_overall_if(dfp, "is_high_ar")}     | {calc_pp_overall_count(df, "is_high_ar")}     |
+| low_ar      | {calc_pp_overall_main(dfp, "is_low_ar")}      | {calc_pp_overall_if(dfp, "is_low_ar")}      | {calc_pp_overall_count(df, "is_low_ar")}      |
+| very_low_ar | {calc_pp_overall_main(dfp, "is_very_low_ar")} | {calc_pp_overall_if(dfp, "is_very_low_ar")} | {calc_pp_overall_count(df, "is_very_low_ar")} |
+| speed_up    | {calc_pp_overall_main(dfp, "is_speed_up")}    | {calc_pp_overall_if(dfp, "is_speed_up")}    | {calc_pp_overall_count(df, "is_speed_up")}    |
+| speed_down  | {calc_pp_overall_main(dfp, "is_speed_down")}  | {calc_pp_overall_if(dfp, "is_speed_down")}  | {calc_pp_overall_count(df, "is_speed_down")}  |
+| total       | {calc_pp_overall_main(dfp)}                   | {calc_pp_overall_if(dfp)}                   | {calc_pp_overall_count(df)}                   |
 
 """
         )
-    with st.container(border=True):
-        st.markdown(_("## Scatter Plot"))
-        begin_date, end_date = st.date_input(_("date range"), [df["ts"].min() - pd.Timedelta(days=1), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
-        df1: pd.DataFrame = df[(df["ts"].dt.date > begin_date) & (df["ts"].dt.date < end_date)]
-        sr_slider = st.slider(_("star rating"), 0.0, 13.5, (0.5, 8.5))
+    with st.expander(_("Filtering")):
+        st.date_input(_("date range"), [df["ts"].min() - pd.Timedelta(days=1), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
+        st.slider(_("star rating"), 0.0, 10.0, (1.5, 8.5), key="cat_sr_range")
+        st.checkbox(_("passed only"), key="cat_passed")
         memorized_multiselect(
             _("custom columns"),
             "cat_col",
@@ -91,7 +157,10 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
                 "passed",
                 "combo_pct",
                 "accuracy",
-                "pp",
+                "pp_pct",
+                "pp_aim_pct",
+                "pp_speed_pct",
+                "pp_accuracy_pct",
                 "density",
                 "aim_density_ratio",
                 "speed_density_ratio",
@@ -105,12 +174,98 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
                 "bid",
             ],
         )
-        df2: pd.DataFrame = df1[(df1["b_star_rating"] > sr_slider[0]) & (df1["b_star_rating"] < sr_slider[1])]
-        advanced_filter = st.text_input(_("advanced filter"), key="cat_advanced_filter")
-        if advanced_filter:
-            df3: pd.DataFrame = df2.query(advanced_filter)
-        else:
-            df3 = df2
+        st.text_input(_("advanced filter"), key="cat_advanced_filter")
+
+    df_o = apply_filter(df)
+
+    with st.container(border=True):
+        st.markdown(_("## Playing Preferences"))
+        all_users_except_own = all_users.copy()
+        all_users_except_own.remove(user)
+        comp_user = st.selectbox(_("compared to"), all_users_except_own)
+        df_c = apply_filter(pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{comp_user}.csv"), index_col=0, parse_dates=["ts"]))
+        if len(df_c) == 0:
+            st.stop()
+        index_list = [
+            "accuracy",
+            "hit_window",
+            "preempt",
+            "bpm",
+            "hit_length",
+            "b_star_rating",
+            "b_max_combo",
+            "b_aim_difficulty",
+            "b_aim_difficult_slider_count",
+            "b_speed_difficulty",
+            "b_speed_note_count",
+            "b_slider_factor",
+            "time",
+            "pp_pct",
+            "pp_aim_pct",
+            "pp_speed_pct",
+            "pp_accuracy_pct",
+            "pp_92pct",
+            "pp_85pct",
+            "pp_67pct",
+            "combo_pct",
+            "density",
+            "aim_density_ratio",
+            "speed_density_ratio",
+            "aim_speed_ratio",
+            "score_nf",
+        ]
+        memorized_selectbox(_("index"), "cat_comp_index", index_list, "b_star_rating")
+
+        df_o_stats = generate_stats_dataframe(df_o, index_list)
+        df_c_stats = generate_stats_dataframe(df_c, index_list)
+
+        st.dataframe(df_o_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
+        st.dataframe(df_c_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
+
+        # 根据用户选择的指标，将两个玩家的数据放在同一张图中呈现
+        df_o_ind = df_o[st.session_state.cat_comp_index]
+        df_c_ind = df_c[st.session_state.cat_comp_index]
+        # st.write(df_o_ind)
+        # st.write(df_c_ind)
+        if df_o_stats.at[st.session_state.cat_comp_index, "std"] == 0:
+            st.error(_("%s of user %s is constant (%s)") % (st.session_state.cat_comp_index, user, df_o_stats.at[st.session_state.cat_comp_index, "mean"]))
+            st.stop()
+        if df_c_stats.at[st.session_state.cat_comp_index, "std"] == 0:
+            st.error(_("%s of user %s is constant (%s)") % (st.session_state.cat_comp_index, comp_user, df_c_stats.at[st.session_state.cat_comp_index, "mean"]))
+            st.stop()
+        df_ind_joined = pd.DataFrame(
+            {
+                st.session_state.cat_comp_index: pd.concat([df_o_ind, df_c_ind], ignore_index=True),
+                "user": [user] * len(df_o_ind) + [comp_user] * len(df_c_ind),
+            }
+        )
+        fig_data = [list(df_o_ind), list(df_c_ind)]
+        fig = ff.create_distplot(
+            fig_data,
+            [user, comp_user],
+            bin_size=[calc_bin_size(data) for data in fig_data],
+            show_rug=False,
+            colors=[CO, CC],
+        )
+        st.plotly_chart(fig)
+
+        fig = px.box(
+            df_ind_joined,
+            x="user",
+            y=st.session_state.cat_comp_index,
+            color="user",
+            category_orders={"user": [comp_user, user]},  # 为了匹配 ff.create_distplot 的奇怪图例顺序行为
+            color_discrete_map={
+                user: CO,
+                comp_user: CC,
+            },
+            points="suspectedoutliers",
+            notched=True,
+        )
+        st.plotly_chart(fig)
+
+    with st.container(border=True):
+        st.markdown(_("## Skills Analysis"))
         enable_complex = st.checkbox(_("more complex charts"), key="cat_enable_complex")
 
         if enable_complex:
@@ -120,7 +275,7 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
             with col2:
                 memorized_selectbox("s", "cat_s", list(df.columns), "b_star_rating")
             memorized_multiselect("y", "cat_y2", list(df.columns), ["b_aim_difficulty", "b_speed_difficulty"])
-            fig_data = [df3[col] for col in st.session_state.cat_y2]
+            fig_data = [list(df_o[col]) for col in st.session_state.cat_y2]
             fig = ff.create_distplot(
                 fig_data,
                 st.session_state.cat_y2,
@@ -128,7 +283,7 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
             )
             st.plotly_chart(fig)
             st.scatter_chart(
-                df3,
+                df_o,
                 x=st.session_state.cat_x2,
                 y=st.session_state.cat_y2,
                 size=st.session_state.cat_s,
@@ -137,17 +292,17 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
             memorized_selectbox("x", "cat_x", list(df.columns), "b_star_rating")
             memorized_multiselect("y", "cat_y", list(df.columns), ["score_nf"])
             st.scatter_chart(
-                df3,
+                df_o,
                 x=st.session_state.cat_x,
                 y=st.session_state.cat_y,
             )
 
     with st.container(border=True):
-        st.markdown(_("## filtered data"))
+        st.markdown(_("## Filtered Data"))
         if len(st.session_state.cat_col) > 0:
-            st.dataframe(df3.sort_values(by="ts", ascending=False), key="cat_dataframe", column_order=st.session_state.cat_col, hide_index=True)
+            st.dataframe(df_o.sort_values(by="ts", ascending=False), key="cat_dataframe", column_order=st.session_state.cat_col, hide_index=True)
         else:
-            st.dataframe(df3, key="cat_dataframe")
+            st.dataframe(df_o, key="cat_dataframe")
 
 
 main()
