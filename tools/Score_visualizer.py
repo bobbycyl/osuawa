@@ -9,7 +9,8 @@ from plotly import figure_factory as ff
 from scipy import stats
 
 from osuawa import Path
-from osuawa.utils import calc_bin_size, memorized_multiselect, memorized_selectbox
+from osuawa.components import memorized_multiselect, memorized_selectbox
+from osuawa.utils import calc_bin_size
 
 if "wide_layout" in st.session_state:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
@@ -119,7 +120,7 @@ def main():
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
         st.error(_("user not found"))
         st.stop()
-    df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts"])
+    df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts", "st"])
     if len(df) == 0:
         st.error(_("no scores found"))
         st.stop()
@@ -180,12 +181,8 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
 
     with st.container(border=True):
         st.markdown(_("## Playing Preferences"))
-        all_users_except_own = all_users.copy()
-        all_users_except_own.remove(user)
-        comp_user = st.selectbox(_("compared to"), all_users_except_own)
-        df_c = apply_filter(pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{comp_user}.csv"), index_col=0, parse_dates=["ts"]))
-        if len(df_c) == 0:
-            st.stop()
+        comp_user = st.selectbox(_("compared to"), all_users)
+        df_c = apply_filter(pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{comp_user}.csv"), index_col=0, parse_dates=["ts", "st"]))
         index_list = [
             "accuracy",
             "hit_window",
@@ -225,77 +222,79 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
         # 根据用户选择的指标，将两个玩家的数据放在同一张图中呈现
         df_o_ind = df_o[st.session_state.cat_comp_index]
         df_c_ind = df_c[st.session_state.cat_comp_index]
-        # st.write(df_o_ind)
-        # st.write(df_c_ind)
+        can_show_chart_pr = True
         if df_o_stats.at[st.session_state.cat_comp_index, "std"] == 0:
             st.error(_("%s of user %s is constant (%s)") % (st.session_state.cat_comp_index, user, df_o_stats.at[st.session_state.cat_comp_index, "mean"]))
-            st.stop()
+            can_show_chart_pr = False
         if df_c_stats.at[st.session_state.cat_comp_index, "std"] == 0:
             st.error(_("%s of user %s is constant (%s)") % (st.session_state.cat_comp_index, comp_user, df_c_stats.at[st.session_state.cat_comp_index, "mean"]))
-            st.stop()
-        df_ind_joined = pd.DataFrame(
-            {
-                st.session_state.cat_comp_index: pd.concat([df_o_ind, df_c_ind], ignore_index=True),
-                "user": [user] * len(df_o_ind) + [comp_user] * len(df_c_ind),
-            }
-        )
-        fig_data = [list(df_o_ind), list(df_c_ind)]
-        fig = ff.create_distplot(
-            fig_data,
-            [user, comp_user],
-            bin_size=[calc_bin_size(data) for data in fig_data],
-            show_rug=False,
-            colors=[CO, CC],
-        )
-        st.plotly_chart(fig)
+            can_show_chart_pr = False
+        if can_show_chart_pr:
+            df_ind_joined = pd.DataFrame(
+                {
+                    st.session_state.cat_comp_index: pd.concat([df_o_ind, df_c_ind], ignore_index=True),
+                    "user": [user] * len(df_o_ind) + [comp_user] * len(df_c_ind),
+                }
+            )
+            fig_data = [list(df_o_ind), list(df_c_ind)]
+            fig = ff.create_distplot(
+                fig_data,
+                [user, comp_user],
+                bin_size=[calc_bin_size(data) for data in fig_data],
+                show_rug=False,
+                colors=[CO, CC],
+            )
+            st.plotly_chart(fig)
 
-        fig = px.box(
-            df_ind_joined,
-            x="user",
-            y=st.session_state.cat_comp_index,
-            color="user",
-            category_orders={"user": [comp_user, user]},  # 为了匹配 ff.create_distplot 的奇怪图例顺序行为
-            color_discrete_map={
-                user: CO,
-                comp_user: CC,
-            },
-            points="suspectedoutliers",
-            notched=True,
-        )
-        st.plotly_chart(fig)
+            fig = px.box(
+                df_ind_joined,
+                x="user",
+                y=st.session_state.cat_comp_index,
+                color="user",
+                category_orders={"user": [comp_user, user]},  # 为了匹配 ff.create_distplot 的奇怪图例顺序行为
+                color_discrete_map={
+                    user: CO,
+                    comp_user: CC,
+                },
+                points="suspectedoutliers",
+                notched=True,
+            )
+            st.plotly_chart(fig)
 
     with st.container(border=True):
         st.markdown(_("## Skills Analysis"))
         enable_complex = st.checkbox(_("more complex charts"), key="cat_enable_complex")
-
-        if enable_complex:
-            col1, col2 = st.columns(2)
-            with col1:
-                memorized_selectbox("x", "cat_x2", list(df.columns), "score_nf")
-            with col2:
-                memorized_selectbox("s", "cat_s", list(df.columns), "b_star_rating")
-            memorized_multiselect("y", "cat_y2", list(df.columns), ["b_aim_difficulty", "b_speed_difficulty"])
-            fig_data = [list(df_o[col]) for col in st.session_state.cat_y2]
-            fig = ff.create_distplot(
-                fig_data,
-                st.session_state.cat_y2,
-                bin_size=[calc_bin_size(data) for data in fig_data],
-            )
-            st.plotly_chart(fig)
-            st.scatter_chart(
-                df_o,
-                x=st.session_state.cat_x2,
-                y=st.session_state.cat_y2,
-                size=st.session_state.cat_s,
-            )
-        else:
-            memorized_selectbox("x", "cat_x", list(df.columns), "b_star_rating")
-            memorized_multiselect("y", "cat_y", list(df.columns), ["score_nf"])
-            st.scatter_chart(
-                df_o,
-                x=st.session_state.cat_x,
-                y=st.session_state.cat_y,
-            )
+        try:
+            if enable_complex:
+                col1, col2 = st.columns(2)
+                with col1:
+                    memorized_selectbox("x", "cat_x2", list(df.columns), "score_nf")
+                with col2:
+                    memorized_selectbox("s", "cat_s", list(df.columns), "b_star_rating")
+                memorized_multiselect("y", "cat_y2", list(df.columns), ["b_aim_difficulty", "b_speed_difficulty"])
+                fig_data = [list(df_o[col]) for col in st.session_state.cat_y2]
+                fig = ff.create_distplot(
+                    fig_data,
+                    st.session_state.cat_y2,
+                    bin_size=[calc_bin_size(data) for data in fig_data],
+                )
+                st.plotly_chart(fig)
+                st.scatter_chart(
+                    df_o,
+                    x=st.session_state.cat_x2,
+                    y=st.session_state.cat_y2,
+                    size=st.session_state.cat_s,
+                )
+            else:
+                memorized_selectbox("x", "cat_x", list(df.columns), "b_star_rating")
+                memorized_multiselect("y", "cat_y", list(df.columns), ["score_nf"])
+                st.scatter_chart(
+                    df_o,
+                    x=st.session_state.cat_x,
+                    y=st.session_state.cat_y,
+                )
+        except Exception as e:
+            st.error(str(e))
 
     with st.container(border=True):
         st.markdown(_("## Filtered Data"))
