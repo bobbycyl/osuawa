@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2025-04-28 18:17+0800\n"
+"POT-Creation-Date: 2025-05-08 01:29+0800\n"
 "PO-Revision-Date: 2025-04-28 18:07+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -132,7 +132,7 @@ msgstr "请点击下方的按钮以完成授权。"
 msgid "OAuth2 url"
 msgstr "授权链接"
 
-#: app.py:56 tools/Score_visualizer.py:15 tools/Score_visualizer.py:17
+#: app.py:56 tools/Score_visualizer.py:16 tools/Score_visualizer.py:18
 msgid "Score visualizer"
 msgstr "查成分"
 
@@ -160,7 +160,7 @@ msgstr "请先上传文件。"
 msgid "download the resources"
 msgstr "下载资源"
 
-#: tools/Recorder.py:23 tools/Score_visualizer.py:19
+#: tools/Recorder.py:23 tools/Score_visualizer.py:20
 msgid "wide page layout"
 msgstr "宽页布局"
 
@@ -216,76 +216,76 @@ msgstr "数量限制"
 msgid "clear all caches"
 msgstr "清除缓存"
 
-#: tools/Score_visualizer.py:21
+#: tools/Score_visualizer.py:22
 msgid "user"
 msgstr "用户"
 
-#: tools/Score_visualizer.py:120
+#: tools/Score_visualizer.py:121
 msgid "user not found"
 msgstr "用户不存在"
 
-#: tools/Score_visualizer.py:124
+#: tools/Score_visualizer.py:125
 msgid "no scores found"
 msgstr "暂无本地分数"
 
-#: tools/Score_visualizer.py:127
+#: tools/Score_visualizer.py:128
 msgid "user profile"
 msgstr "用户主页"
 
-#: tools/Score_visualizer.py:129
+#: tools/Score_visualizer.py:130
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: tools/Score_visualizer.py:147
+#: tools/Score_visualizer.py:148
 msgid "Filtering"
 msgstr "筛选"
 
-#: tools/Score_visualizer.py:148
+#: tools/Score_visualizer.py:149
 msgid "date range"
 msgstr "日期范围"
 
-#: tools/Score_visualizer.py:149
+#: tools/Score_visualizer.py:150
 msgid "star rating"
 msgstr "难度星数"
 
-#: tools/Score_visualizer.py:150
+#: tools/Score_visualizer.py:151
 msgid "passed only"
 msgstr "排除失败成绩"
 
-#: tools/Score_visualizer.py:152
+#: tools/Score_visualizer.py:153
 msgid "custom columns"
 msgstr "自定义列"
 
-#: tools/Score_visualizer.py:177
+#: tools/Score_visualizer.py:178
 msgid "advanced filter"
 msgstr "高级筛选"
 
-#: tools/Score_visualizer.py:182
+#: tools/Score_visualizer.py:183
 msgid "## Playing Preferences"
 msgstr "## 游玩偏好"
 
-#: tools/Score_visualizer.py:185
+#: tools/Score_visualizer.py:184
 msgid "compared to"
 msgstr "比较方"
 
-#: tools/Score_visualizer.py:217
+#: tools/Score_visualizer.py:214
 msgid "index"
 msgstr "指标"
 
-#: tools/Score_visualizer.py:231 tools/Score_visualizer.py:234
+#: tools/Score_visualizer.py:227 tools/Score_visualizer.py:230
 #, python-format
 msgid "%s of user %s is constant (%s)"
 msgstr "指标 %s（用户 %s）无变异（值为 %s）"
 
-#: tools/Score_visualizer.py:268
+#: tools/Score_visualizer.py:265
 msgid "## Skills Analysis"
 msgstr "## 能力分析"
 
-#: tools/Score_visualizer.py:269
+#: tools/Score_visualizer.py:266
 msgid "more complex charts"
 msgstr "使用复杂图表"
 
-#: tools/Score_visualizer.py:301
+#: tools/Score_visualizer.py:300
 msgid "## Filtered Data"
 msgstr "## 目前筛选数据"
 
