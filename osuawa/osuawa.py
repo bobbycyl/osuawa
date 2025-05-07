@@ -46,10 +46,6 @@ from .utils import (
 
 LANGUAGES = LANGUAGES
 
-html_body_suffix = """    </div>
-  </div>
-"""
-
 assert typing
 assert datetime
 score_info_length = len(eval(repr(score_info).lstrip("tuple")))
@@ -572,60 +568,60 @@ class OsuPlaylist(object):
               </div>
             </div>
             <div class="text-white card-main pt-2">
-              <h3 class="text-xl font-bold mb-1 line-clamp-1 overflow-ellipsis overflow-hidden">{html.escape(b.beatmapset().title_unicode)}</h3>
+              <h3 class="text-xl font-bold mb-1 truncate">{html.escape(b.beatmapset().title_unicode)}</h3>
               <p class="font-semibold overflow-ellipsis overflow-hidden whitespace-nowrap">{html.escape(b.beatmapset().artist_unicode)}</p>
               <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300 pt-2 pb-1">
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Mapper: <a class="font-semibold">{html.escape(b.beatmapset().creator)}</a></p>
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Difficulty: <span class="font-semibold">{html.escape(b.version)}</span></p>
-                <p class="text-xs overflow-ellipsis overflow-hidden whitespace-nowrap card-info-lines">Beatmap ID: <span class="font-semibold">{b.id}</span></p>
-                <div class="text-xs w-full grid grid-cols-3 mt-1 gap-6">
+                <p class="text-xs leading-[1.5] overflow-ellipsis overflow-hidden whitespace-nowrap opacity-[88%]">Mapper: <a class="font-semibold">{html.escape(b.beatmapset().creator)}</a></p>
+                <p class="text-xs leading-[1.5] overflow-ellipsis overflow-hidden whitespace-nowrap opacity-[88%]">Difficulty: <span class="font-semibold">{html.escape(b.version)}</span></p>
+                <p class="text-xs leading-[1.5] overflow-ellipsis overflow-hidden whitespace-nowrap opacity-[88%]">Beatmap ID: <span class="font-semibold">{b.id}</span></p>
+                <div class="text-xs w-full grid grid-cols-3 mt-2 gap-6">
                   <div>
                     <div class="flex items-center justify-between">
-                      <div class="text-left flex-initial w-6 card-info-lines"><span>CS</span></div>
+                      <div class="text-left flex-initial w-6 opacity-[88%]"><span>CS</span></div>
                       <div class="flex-1 w-full mr-2">
                         <div class="w-full h-2 bg-gray-600 rounded">
                           <div class="h-full rounded" style="background-color: white; width: {cs_pct}%"></div>
                         </div>
                       </div>
-                      <div class="flex-initial w-4 text-right font-semibold card-info-lines">{cover.cs}</div>
+                      <div class="flex-initial w-4 text-right font-semibold opacity-[88%]">{cover.cs}</div>
                     </div>
                   </div>
                   <div>
                     <div class="flex items-center justify-between">
-                      <div class="text-left flex-initial w-6 card-info-lines"><span>AR</span></div>
+                      <div class="text-left flex-initial w-6 opacity-[88%]"><span>AR</span></div>
                       <div class="flex-1 w-full mr-2">
                         <div class="w-full h-2 bg-gray-600 rounded">
                           <div class="h-full rounded" style="background-color: white; width: {ar_pct}%"></div>
                         </div>
                       </div>
-                      <div class="flex-initial w-4 text-right font-semibold card-info-lines">{cover.ar}</div>
+                      <div class="flex-initial w-4 text-right font-semibold opacity-[88%]">{cover.ar}</div>
                     </div>
                   </div>
                   <div>
                     <div class="flex items-center justify-between">
-                      <div class="text-left flex-initial w-6 card-info-lines"><span>OD</span></div>
+                      <div class="text-left flex-initial w-6 opacity-[88%]"><span>OD</span></div>
                       <div class="flex-1 w-full mr-2">
                         <div class="w-full h-2 bg-gray-600 rounded">
                           <div class="h-full rounded" style="background-color: white; width: {od_pct}%"></div>
                         </div>
                       </div>
-                      <div class="flex-initial w-4 text-right font-semibold card-info-lines">{cover.od}</div>
+                      <div class="flex-initial w-4 text-right font-semibold opacity-[88%]">{cover.od}</div>
                     </div>
                   </div>
                 </div>
-                <div class="text-xs w-full grid grid-cols-3 gap-6">
+                <div class="text-xs/6 w-full grid grid-cols-3 gap-6 pb-2">
                   <div>
-                    <div class="flex items-center justify-between card-info-lines"><img src="./images/bpm.svg" class="w-4"/>
+                    <div class="flex items-center justify-between opacity-[88%]"><img src="./images/bpm.svg" class="w-4"/>
                       <div class="flex-1 font-semibold ml-2">{cover.bpm}</div>
                     </div>
                   </div>
                   <div>
-                    <div class="flex items-center justify-between card-info-lines"><img src="./images/total_length.svg" class="w-4"/>
+                    <div class="flex items-center justify-between opacity-[88%]"><img src="./images/total_length.svg" class="w-4"/>
                       <div class="flex-1 font-semibold ml-2">{cover.hit_length}</div>
                     </div>
                   </div>
                   <div>
-                    <div class="flex items-center justify-between card-info-lines"><img src="./images/count_circles.svg" class="w-4"/>
+                    <div class="flex items-center justify-between opacity-[88%]"><img src="./images/count_circles.svg" class="w-4"/>
                       <div class="flex-1 font-semibold ml-2">{cover.max_combo}</div>
                     </div>
                   </div>
@@ -636,8 +632,8 @@ class OsuPlaylist(object):
         </div>
         <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-7 notes">
           <p class="text-sm flex justify-between items-end">
-            <span>{notes}{extra_notes}</span>
-            <span class="justify-end items-end space-x-2">
+            <span class="w-fit pr-2">{notes}{extra_notes}</span>
+            <span class="w-12 justify-end items-end space-x-2">
               <a href="https://osu.ppy.sh/b/{b.id}"
               class="text-custom-900 dark:text-custom hover:text-custom-600"><i class="fas fa-external-link-alt"></i></a>
               <a href="osu://b/{b.id}"
@@ -752,6 +748,9 @@ class OsuPlaylist(object):
                         self.banner,
                         self.playlist_name,
                     )
+                    html_body_suffix = """    </div>
+  </div>
+"""
                     fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
                 else:
                     fo.write(html_string.format(html_head="", html_body=df.to_html(index=False, escape=False, classes="pd"), html_body_prefix="", html_body_suffix=""))
