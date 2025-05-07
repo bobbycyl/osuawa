@@ -185,7 +185,7 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
 def cat(user: int):
     if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
         raise ValueError(_("user %d not found") % user)
-    df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts"])
+    df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts", "st"])
     return df
 
 
