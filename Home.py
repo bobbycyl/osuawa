@@ -30,7 +30,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import LANGUAGES, OsuPlaylist, Osuawa, Path
 from osuawa.osuawa import Awapi
-from osuawa.utils import memorized_selectbox
+from osuawa.components import memorized_selectbox
 
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 

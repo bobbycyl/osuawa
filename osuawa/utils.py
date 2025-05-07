@@ -9,7 +9,6 @@ from typing import Any, Optional
 
 import numpy as np
 import rosu_pp_py as rosu
-import streamlit as st
 from clayutil.futil import Downloader
 from ossapi import Beatmap as ApiBeatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap 冲突
 from rosu_pp_py import Beatmap as RosuMap  # 避免与 ossapi.Beatmap 冲突
@@ -43,33 +42,6 @@ class ColorBar(Enum):
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
 
-def save_value(key: str) -> None:
-    # <key> <-> st.session_state._<key>_value
-    st.session_state["_%s_value" % key] = st.session_state[key]
-
-
-def load_value(key: str, default_value: Any) -> Any:
-    # <key> <-> st.session_state._<key>_value
-    if "_%s_value" % key not in st.session_state:
-        st.session_state["_%s_value" % key] = default_value
-    st.session_state[key] = st.session_state["_%s_value" % key]
-
-
-def memorized_multiselect(label: str, key: str, options: list, default_value: Any) -> None:
-    load_value(key, default_value)
-    st.multiselect(label, options, key=key, on_change=save_value, args=(key,))
-
-
-def memorized_selectbox(label: str, key: str, options: list, default_value: Any) -> None:
-    load_value(key, default_value)
-    st.selectbox(label, options, key=key, on_change=save_value, args=(key,))
-
-
-def memorized_toggle(label: str, key: str, default_value: bool) -> None:
-    load_value(key, default_value)
-    st.toggle(label, key, on_change=save_value, args=(key,))
-
-
 def readable_mods(mods: list[dict[str, Any]]) -> list[str]:
     mods_ready: list[str] = []
     for i in range(len(mods)):
@@ -98,27 +70,27 @@ async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
     }
 
 
-async def _get_user_info(client: OssapiAsync, user: int | str) -> dict[str, Any]:
-    return await simple_user_dict(await client.user(user, key="username" if isinstance(user, str) else "id"))
+async def _get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
+    return await simple_user_dict(await api.user(user, key="username" if isinstance(user, str) else "id"))
 
 
-def get_username(client: OssapiAsync, user: int) -> str:
-    return asyncio.run(client.user(user, key="id")).username
+def get_username(api: OssapiAsync, user: int) -> str:
+    return asyncio.run(api.user(user, key="id")).username
 
 
-async def _get_beatmaps_dict(client: OssapiAsync, cut_bids: Sequence[list[int]]) -> list[list[ApiBeatmap]]:
+async def _get_beatmaps_dict(api: OssapiAsync, cut_bids: Sequence[list[int]]) -> list[list[ApiBeatmap]]:
     tasks = []
     async with asyncio.TaskGroup() as tg:
         for bids in cut_bids:
-            tasks.append(tg.create_task(client.beatmaps(bids)))
+            tasks.append(tg.create_task(api.beatmaps(bids)))
     return [task.result() for task in tasks]
 
 
-def get_beatmaps_dict(client: OssapiAsync, bids: Sequence[int]) -> dict[int, ApiBeatmap]:
+def get_beatmaps_dict(api: OssapiAsync, bids: Sequence[int]) -> dict[int, ApiBeatmap]:
     cut_bids = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i : i + 50]))
-    results = asyncio.run(_get_beatmaps_dict(client, cut_bids))
+        cut_bids.append(list(bids[i: i + 50]))
+    results = asyncio.run(_get_beatmaps_dict(api, cut_bids))
     beatmaps_dict = {}
     for bs in results:
         for b in bs:
