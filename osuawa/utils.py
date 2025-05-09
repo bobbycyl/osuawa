@@ -42,14 +42,14 @@ class ColorBar(Enum):
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
 
-def readable_mods(mods: list[dict[str, Any]]) -> list[str]:
-    mods_ready: list[str] = []
+def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
+    readable_mods: list[str] = []
     for i in range(len(mods)):
         if "settings" in mods[i]:
-            mods_ready.append("%s(%s)" % (mods[i]["acronym"], ",".join(["%s=%s" % it for it in mods[i]["settings"].items()])))
+            readable_mods.append("%s(%s)" % (mods[i]["acronym"], ",".join(["%s=%s" % it for it in mods[i]["settings"].items()])))
         else:
-            mods_ready.append(mods[i]["acronym"])
-    return mods_ready
+            readable_mods.append(mods[i]["acronym"])
+    return readable_mods
 
 
 def calc_bin_size(data) -> float:

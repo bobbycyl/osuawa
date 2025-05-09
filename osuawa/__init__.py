@@ -1,1 +1,2 @@
-from .osuawa import LANGUAGES, OsuPlaylist, Osuawa, Path
+from .osuawa import Awapi, OsuPlaylist, Osuawa, Path
+from .utils import LANGUAGES
