@@ -28,18 +28,12 @@ from streamlit.components.v1 import html
 from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import LANGUAGES, OsuPlaylist, Osuawa, Path
-from osuawa.osuawa import Awapi
+from osuawa import Awapi, LANGUAGES, OsuPlaylist, Osuawa, Path
 from osuawa.components import memorized_selectbox
 
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
 admins = st.secrets.args.admins
-
-
-def set_sidebar():
-    with st.sidebar:
-        memorized_selectbox("lang", "uni_lang", LANGUAGES, None)
 
 
 def run(g):
@@ -62,9 +56,9 @@ def run(g):
             break
 
 
-def register_awa(ci, cs, ru, s, d, oauth_token: str, oauth_refresh_token: str):
+def register_awa(ci, cs, ru, s, d, oauth_token: Optional[str] = None, oauth_refresh_token: Optional[str] = None):
     with st.spinner(_("registering a client...")):
-        return Osuawa(ci, cs, ru, s, d, Path.OUTPUT_DIRECTORY.value, oauth_token, oauth_refresh_token)
+        return Osuawa(ci, cs, ru, s, d, Path.OUTPUT_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token)
 
 
 def commands():
@@ -204,25 +198,26 @@ def submit():
     st.session_state["counter"] += 1
 
 
+with st.sidebar:
+    memorized_selectbox("lang", "uni_lang", LANGUAGES, None)
+
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
-
-set_sidebar()
 
 if "awa" in st.session_state:
     with st.spinner(_("preparing for the next operation...")):
         time.sleep(1.5)
-    init_logger()
-    register_commands({"simple": True})
+        init_logger()
+        register_commands({"simple": True})
 
-    if "delete_line" not in st.session_state:
-        st.session_state["delete_line"] = True
-    if "counter" not in st.session_state:
-        st.success(_("Welcome!"))
-        st.session_state["counter"] = 0
-    if st.session_state["delete_line"]:
-        st.session_state["input"] = ""
-        st.session_state["delete_line"] = False
+        if "delete_line" not in st.session_state:
+            st.session_state["delete_line"] = True
+        if "counter" not in st.session_state:
+            st.success(_("Welcome!"))
+            st.session_state["counter"] = 0
+        if st.session_state["delete_line"]:
+            st.session_state["input"] = ""
+            st.session_state["delete_line"] = False
 
     y = st.text_input("> ", key="input", on_change=submit, placeholder=_('Type "help" to get started.'))
 
@@ -250,9 +245,13 @@ else:
     scopes = [Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]
     domain = Domain.OSU.value
     if "code" not in st.query_params:
-        st.info(_("Please click the button below to authorize the app."))
-        st.link_button(_("OAuth2 url"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)))
-        st.stop()
+        # check if ossapi's token is pickled
+        if os.path.exists("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
+            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
+        else:
+            st.info(_("Please click the button below to authorize the app."))
+            st.link_button(_("OAuth2 url"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)))
+            st.stop()
     else:
         code = st.query_params.code
         r = requests.post(
@@ -261,10 +260,11 @@ else:
             data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
         )
         awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
-        awa.tz = st.context.timezone
-        st.session_state.awa = awa
-        st.session_state.user_id, st.session_state.username = st.session_state.awa.user
-        if st.session_state.user_id in admins:
-            st.session_state.token = ""
-            register_commands({"token": ""})
-        st.rerun()
+        awa.api._save_token(awa.api.session.token)
+    awa.tz = st.context.timezone
+    st.session_state.awa = awa
+    st.session_state.user_id, st.session_state.username = st.session_state.awa.user
+    if st.session_state.user_id in admins:
+        st.session_state.token = ""
+        register_commands({"token": ""})
+    st.rerun()

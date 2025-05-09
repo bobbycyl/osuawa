@@ -27,7 +27,6 @@ from fontfallback import writing
 from ossapi import Grant, OssapiAsync, Domain, User, GameMode, Beatmap
 
 from .utils import (
-    LANGUAGES,
     OsuDifficultyAttribute,
     calc_beatmap_attributes,
     calc_positive_percent,
@@ -35,7 +34,7 @@ from .utils import (
     download_osu,
     get_beatmaps_dict,
     get_username,
-    readable_mods,
+    to_readable_mods,
     score_info,
     score_info_tuple,
     Path,
@@ -43,8 +42,6 @@ from .utils import (
     _get_user_info,
     simple_user_dict,
 )
-
-LANGUAGES = LANGUAGES
 
 assert typing
 assert datetime
@@ -92,9 +89,23 @@ class Awapi(OssapiAsync):
 
 class Osuawa(object):
     tz = "Asia/Shanghai"
+    common_mods = {
+        "EZ",
+        "NF",
+        "HT",
+        "DC",
+        "HR",
+        "SD",
+        "PF",
+        "DT",
+        "NC",
+        "HD",
+        "CL",
+        "SO",
+    }
 
-    def __init__(self, client_id, client_secret, redirect_url, scopes, domain, output_dir: str, oauth_token: str, oauth_refresh_token: str):
-        self.api = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, access_token=oauth_token, refresh_token=oauth_refresh_token)
+    def __init__(self, client_id, client_secret, redirect_url, scopes, domain, output_dir: str, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
+        self.api = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
         self.output_dir = output_dir
 
     @cached_property
@@ -171,7 +182,9 @@ class Osuawa(object):
         df["speed_density_ratio"] = df["b_speed_difficulty"] / np.log(df["density"])
         df["aim_speed_ratio"] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
-        df["mods"] = df["_mods"].apply(lambda x: "; ".join(readable_mods(x)))
+        df["mods"] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
+        df["mods_acronym"] = df["_mods"].apply(lambda x: {mod["acronym"] for mod in x})
+        df["all_common_mods"] = df["mods_acronym"].apply(lambda x: len(x | self.common_mods) == len(self.common_mods))  # if all mods are common mods, all_common_mods = True
         df["_mods"] = df["_mods"].apply(lambda x: orjson.dumps(x).decode("utf-8"))
         return df
 
@@ -490,7 +503,7 @@ class OsuPlaylist(object):
                 if raw_mods[j]["acronym"] == "FM" or raw_mods[j]["acronym"] == "F+":
                     is_fm = True
                 mods.pop(j)
-            mods_ready = readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
+            mods_ready = to_readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
 
         # 下载谱面与计算难度（与 utils.calc_beatmap_attributes 类似，但是省略了许多不必要的计算，且为了课题要求优化）
         download_osu(bid)
@@ -767,3 +780,8 @@ class OsuPlaylist(object):
             rmtree(self.tmp_dir)
 
         return df_standalone
+
+
+class LocalOsuawa(Osuawa):
+    def __init__(self, client_id, client_secret, redirect_url, scopes, domain, output_dir: str):
+        super().__init__(client_id, client_secret, redirect_url, scopes, domain, output_dir, None, None)
