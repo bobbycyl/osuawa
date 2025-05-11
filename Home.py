@@ -78,14 +78,14 @@ def commands():
             st.session_state.awa.get_user_info,
         ),
         Command(
-            "ps",
+            "save",
             _("save user recent scores"),
             [Int("user"), Bool("include_fails", True)],
             1,
             st.session_state.awa.save_recent_scores,
         ),
         Command(
-            "psa",
+            "update",
             _("update user recent scores"),
             [
                 Coll(
@@ -96,16 +96,16 @@ def commands():
             1,
             st.session_state.awa.save_recent_scores,
         ),
-        Command("s2", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
+        Command("score", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
         Command(
-            "s",
+            "scores",
             _("get and show user scores of a beatmap"),
             [Int("beatmap"), Int("user", True)],
             0,
             st.session_state.awa.get_user_beatmap_scores,
         ),
         Command(
-            "autogen",
+            "gen",
             _("generate local playlists"),
             [Bool("fast_gen", True), Bool("output_zip", True)],
             1,
