@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2025-05-08 01:29+0800\n"
-"PO-Revision-Date: 2025-04-28 18:07+0800\n"
+"POT-Creation-Date: 2025-05-11 17:12+0800\n"
+"PO-Revision-Date: 2025-05-11 16:54+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -19,128 +19,128 @@ msgstr ""
 "Generated-By: Babel 2.14.0\n"
 "X-Generator: Poedit 3.5\n"
 
-#: Home.py:35 app.py:55
+#: Home.py:34 app.py:52
 msgid "Homepage"
 msgstr "主页"
 
-#: Home.py:60
+#: Home.py:54
 #, python-format
 msgid "uncaught exception: %s"
 msgstr "未捕获异常：%s"
 
-#: Home.py:66
+#: Home.py:60
 msgid "registering a client..."
 msgstr "正在注册客户端……"
 
-#: Home.py:74
+#: Home.py:68
 msgid "register command parser"
 msgstr "注册命令解析器"
 
-#: Home.py:81
+#: Home.py:75
 msgid "get user info"
 msgstr "获取用户信息"
 
-#: Home.py:88
+#: Home.py:82
 msgid "save user recent scores"
 msgstr "保存用户最近分数"
 
-#: Home.py:95
+#: Home.py:89
 msgid "update user recent scores"
 msgstr "更新用户最近分数"
 
-#: Home.py:105
+#: Home.py:99
 msgid "get and show score"
 msgstr "展示分数"
 
-#: Home.py:108
+#: Home.py:102
 msgid "get and show user scores of a beatmap"
 msgstr "展示用户谱面分数"
 
-#: Home.py:115
+#: Home.py:109
 msgid "generate local playlists"
 msgstr "生成本地课题"
 
-#: Home.py:120
+#: Home.py:114
 msgid "show user recent scores"
 msgstr "展示用户最近分数"
 
-#: Home.py:134
+#: Home.py:128
 msgid "token matched"
 msgstr "令牌验证通过"
 
-#: Home.py:136
+#: Home.py:130
 msgid "token mismatched"
 msgstr "令牌验证失败"
 
-#: Home.py:138
+#: Home.py:132
 #, python-brace-format
 msgid "use `reg {\"token\": \"<token>\"}` to pass the token"
 msgstr "使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌"
 
-#: Home.py:141
+#: Home.py:135
 msgid "token generated"
 msgstr "令牌已生成"
 
-#: Home.py:142
+#: Home.py:136
 msgid ""
 "You need to ask the web admin for the session token to unlock the full "
 "features."
 msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。"
 
-#: Home.py:165
+#: Home.py:159
 #, python-format
 msgid "skipped %s"
 msgstr "已跳过 %s"
 
-#: Home.py:176
+#: Home.py:170
 #, python-format
 msgid "failed to generate %s"
 msgstr "生成 %s 失败"
 
-#: Home.py:178
+#: Home.py:172
 #, python-format
 msgid "generated %s"
 msgstr "已生成 %s"
 
-#: Home.py:187
+#: Home.py:181
 #, python-format
 msgid "user %d not found"
 msgstr "用户 %d 不存在"
 
-#: Home.py:213
+#: Home.py:208
 msgid "preparing for the next operation..."
 msgstr "请稍候……"
 
-#: Home.py:221
+#: Home.py:216
 msgid "Welcome!"
 msgstr "欢迎使用！"
 
-#: Home.py:227
+#: Home.py:222
 msgid "Type \"help\" to get started."
 msgstr "键入“help”以开始。"
 
-#: Home.py:243
+#: Home.py:238
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: Home.py:253
+#: Home.py:252
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: Home.py:254
+#: Home.py:253
 msgid "OAuth2 url"
 msgstr "授权链接"
 
-#: app.py:56 tools/Score_visualizer.py:16 tools/Score_visualizer.py:18
+#: app.py:53 tools/Score_visualizer.py:16 tools/Score_visualizer.py:18
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:57 tools/Playlist_generator.py:14
+#: app.py:54 tools/Playlist_generator.py:14
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:58 tools/Recorder.py:19 tools/Recorder.py:21
+#: app.py:55 tools/Recorder.py:19 tools/Recorder.py:21
 msgid "Recorder"
 msgstr "看记录"
 
@@ -220,15 +220,15 @@ msgstr "清除缓存"
 msgid "user"
 msgstr "用户"
 
-#: tools/Score_visualizer.py:121
+#: tools/Score_visualizer.py:120
 msgid "user not found"
 msgstr "用户不存在"
 
-#: tools/Score_visualizer.py:125
+#: tools/Score_visualizer.py:124
 msgid "no scores found"
 msgstr "暂无本地分数"
 
-#: tools/Score_visualizer.py:128
+#: tools/Score_visualizer.py:127
 msgid "user profile"
 msgstr "用户主页"
 
@@ -236,56 +236,64 @@ msgstr "用户主页"
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: tools/Score_visualizer.py:148
+#: tools/Score_visualizer.py:149
 msgid "Filtering"
 msgstr "筛选"
 
-#: tools/Score_visualizer.py:149
+#: tools/Score_visualizer.py:150
 msgid "date range"
 msgstr "日期范围"
 
-#: tools/Score_visualizer.py:150
+#: tools/Score_visualizer.py:151
 msgid "star rating"
 msgstr "难度星数"
 
-#: tools/Score_visualizer.py:151
+#: tools/Score_visualizer.py:152
 msgid "passed only"
 msgstr "排除失败成绩"
 
 #: tools/Score_visualizer.py:153
+msgid "common mods only"
+msgstr "仅常见模组"
+
+#: tools/Score_visualizer.py:155
 msgid "custom columns"
 msgstr "自定义列"
 
-#: tools/Score_visualizer.py:178
+#: tools/Score_visualizer.py:180
 msgid "advanced filter"
 msgstr "高级筛选"
 
-#: tools/Score_visualizer.py:183
+#: tools/Score_visualizer.py:185
 msgid "## Playing Preferences"
 msgstr "## 游玩偏好"
 
-#: tools/Score_visualizer.py:184
+#: tools/Score_visualizer.py:186
 msgid "compared to"
 msgstr "比较方"
 
-#: tools/Score_visualizer.py:214
+#: tools/Score_visualizer.py:218
+msgid "Statistics"
+msgstr "统计数据"
+
+#: tools/Score_visualizer.py:222
 msgid "index"
 msgstr "指标"
 
-#: tools/Score_visualizer.py:227 tools/Score_visualizer.py:230
+#: tools/Score_visualizer.py:236 tools/Score_visualizer.py:239
 #, python-format
 msgid "%s of user %s is constant (%s)"
 msgstr "指标 %s（用户 %s）无变异（值为 %s）"
 
-#: tools/Score_visualizer.py:265
+#: tools/Score_visualizer.py:274
 msgid "## Skills Analysis"
 msgstr "## 能力分析"
 
-#: tools/Score_visualizer.py:266
+#: tools/Score_visualizer.py:275
 msgid "more complex charts"
 msgstr "使用复杂图表"
 
-#: tools/Score_visualizer.py:300
+#: tools/Score_visualizer.py:309
 msgid "## Filtered Data"
 msgstr "## 目前筛选数据"
 

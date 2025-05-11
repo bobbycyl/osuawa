@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, Unidenti
 from clayutil.futil import Downloader, Properties, filelock
 from clayutil.validator import Integer
 from fontfallback import writing
-from ossapi import Grant, OssapiAsync, Domain, User, GameMode, Beatmap
+from ossapi import Grant, OssapiAsync, Domain, Scope, User, GameMode, Beatmap
 
 from .utils import (
     OsuDifficultyAttribute,
@@ -70,7 +70,7 @@ class Awapi(OssapiAsync):
         client_id: int,
         client_secret: str,
         redirect_uri: Optional[str] = None,
-        scopes: list[str] = None,
+        scopes: Optional[list[str]] = None,
         *,
         grant: Optional[Grant | str] = None,
         strict: bool = False,
@@ -81,6 +81,8 @@ class Awapi(OssapiAsync):
         domain: Domain | str = Domain.OSU,
         api_version: int | str = 20240529,
     ):
+        if scopes is None:
+            scopes = [Scope.PUBLIC]
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
     def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> None:
@@ -178,8 +180,8 @@ class Osuawa(object):
         df["pp_67pct"] = df["pp"] / df["b_pp_67if"]
         df["combo_pct"] = df["max_combo"] / df["b_max_combo"]
         df["density"] = df["b_max_combo"] / df["hit_length"]
-        df["aim_density_ratio"] = df["b_aim_difficulty"] / np.log(df["density"])
-        df["speed_density_ratio"] = df["b_speed_difficulty"] / np.log(df["density"])
+        df["aim_density_ratio"] = df["b_aim_difficulty"] / np.log(1 + df["density"])
+        df["speed_density_ratio"] = df["b_speed_difficulty"] / np.log(1 + df["density"])
         df["aim_speed_ratio"] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
         df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
         df["mods"] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
@@ -199,19 +201,13 @@ class Osuawa(object):
                 tasks.append(tg.create_task(simple_user_dict(friend)))
         return [task.result() for task in tasks]
 
-    async def _get_score(self, score_id: int) -> list:
+    async def _get_score(self, score_id: int) -> dict[str, list]:
         score = await self.api.score(score_id)
-        score_compact = list(score_info_tuple(score))
-        score_compact.extend(
-            await calc_beatmap_attributes(
-                await self.api.beatmap(score.beatmap_id),
-                tuple(score_compact),
-            )
-        )
-        return score_compact
+        score_compact = {str(score.id): list(score_info_tuple(score))}
+        return await complete_scores_compact(score_compact, {score.beatmap.id: await self.api.beatmap(score.beatmap.id)})
 
     def get_score(self, score_id: int) -> pd.DataFrame:
-        return self.create_scores_dataframe({str(score_id): asyncio.run(self._get_score(score_id))}).T
+        return self.create_scores_dataframe(asyncio.run(self._get_score(score_id))).T
 
     async def _get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, list]:
         user_scores = await self.api.beatmap_user_scores(beatmap, user)
@@ -433,7 +429,7 @@ class OsuPlaylist(object):
                 % banner_img_src
             )
         self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
-        parsed_beatmap_list = []
+        parsed_beatmap_list: list[dict[str, str | int | list[dict[str, Any]] | Beatmap | None]] = []
 
         # pop p from end until empty
         current_parsed_beatmap: dict[str, str | int | list[dict[str, Any]] | Beatmap | None] = {"notes": ""}
@@ -780,8 +776,3 @@ class OsuPlaylist(object):
             rmtree(self.tmp_dir)
 
         return df_standalone
-
-
-class LocalOsuawa(Osuawa):
-    def __init__(self, client_id, client_secret, redirect_url, scopes, domain, output_dir: str):
-        super().__init__(client_id, client_secret, redirect_url, scopes, domain, output_dir, None, None)

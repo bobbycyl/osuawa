@@ -145,7 +145,7 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
     original_playlist_pattern = re.compile(r"O\.(.*)\.properties")
     match_playlist_pattern = re.compile(r"M\.(.*)\.properties")
     community_playlist_pattern = re.compile(r"C\.(.*)\.properties")
-    original_playlist_beatmaps = {}
+    original_playlist_beatmaps: dict[int, int] = {}
     for filename in os.listdir("./playlists/raw/"):
         if m := original_playlist_pattern.match(filename):
             suffix = " — original playlist"
