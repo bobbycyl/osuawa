@@ -319,10 +319,10 @@ def calc_positive_percent(score: int | float | None, min_score: int | float, max
     if score is None:
         score = 0.0
     score_pct = int((score - min_score) / (max_score - min_score) * 100.0)
-    if score_pct > 100.0:
-        score_pct = 100.0
-    elif score_pct < 0.0:
-        score_pct = 0.0
+    if score_pct > 100:
+        score_pct = 100
+    elif score_pct < 0:
+        score_pct = 0
     return score_pct
 
 

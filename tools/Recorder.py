@@ -43,7 +43,7 @@ def friends() -> dict[int, str]:
     return ret_friends
 
 
-def tosu_df_style(row):
+def tosu_df_style(row) -> list[str]:
     if row["accuracy"] == 1.0:
         return ["background-color: lavenderblush"] * len(row)
     elif row["accuracy"] >= 0.92 and row["max_combo"] == row["b_max_combo"]:
@@ -56,7 +56,7 @@ def tosu_df_style(row):
         return [""] * len(row)
 
 
-def tosu_main():
+def tosu_main() -> None:
     with connect("%s%s" % (st.session_state.rec_tosu_url.rstrip("/"), "/websocket/v2")) as websocket:
         message = websocket.recv()
         obj = orjson.loads(message)
