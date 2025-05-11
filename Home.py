@@ -262,8 +262,13 @@ else:
         awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
         awa.api._save_token(awa.api.session.token)
     awa.tz = st.context.timezone
-    st.session_state.awa = awa
-    st.session_state.user_id, st.session_state.username = st.session_state.awa.user
+    try:
+        st.session_state.awa = awa
+        st.session_state.user_id, st.session_state.username = st.session_state.awa.user
+    except NotImplementedError:
+        os.remove("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"])
+        st.warning(_("OAuth2 token has expired. Please refresh the page to re-authorization."))
+        st.stop()
     if st.session_state.user_id in admins:
         st.session_state.token = ""
         register_commands({"token": ""})
