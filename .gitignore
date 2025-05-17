@@ -1,10 +1,13 @@
 /logs/
 /output/
 /playlists/
+/playlists
 /static/beatmaps/
 /static/uploaded/
+/osuawa/*.dll
+/osuawa/*.jpg
+/osuawa/*.ttf
 /.venv/
-/playlists
 /.streamlit/private.key
 /.streamlit/full_chain.pem
 /.streamlit/*.pickle
