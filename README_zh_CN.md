@@ -8,7 +8,7 @@
 
 ## 软件要求
 
-Python 3.12, Rust ([rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py) 需要)
+Python 3.12, Rust (可选，如果你需要自行构建 [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
 
 ## 快速开始
 
@@ -26,7 +26,7 @@ cd osuawa
 # 创建虚拟环境
 python -m venv ./.venv  # 如有必要，将 python 替换为 python3 或 py
 # 激活虚拟环境
-source ./.venv/bin/activate  # Windows 没有 source 命令，须替换为 .\.venv\Scripts\activate
+source ./.venv/bin/activate  # Windows 没有 source 命令，直接使用 .\.venv\Scripts\activate 即可
 ```
 
 每当你重新打开终端并想要运行程序，都需要先激活虚拟环境。
@@ -38,26 +38,6 @@ source ./.venv/bin/activate  # Windows 没有 source 命令，须替换为 .\.ve
    ```shell
    python -m pip install -r requirements.txt
    ```
-
-2. 但是 `fontfallback` 需要手动安装.
-
-   1. 假设你已经按照上述操作进入 `osuawa` 目录, 克隆这个项目的仓库。
-
-      ```shell
-      git clone https://github.com/TrueMyst/PillowFontFallback.git
-      ```
-
-   2. 将 `fontfallback` 文件夹复制到虚拟环境的 `site-packages` 目录中。
-
-      ```shell
-      cp -r ./PillowFontFallback/fontfallback/ ./.venv/lib/python3.12/site-packages/  # 在 Windows 上该目录为 .\.venv\Lib\site-packages\
-      ```
-
-   3. 如果你没有别的需求，可以删除 `PillowFontFallback` 目录。
-
-      ```shell
-      rm -r ./PillowFontFallback/
-      ```
 
 ### 配置设置
 
@@ -86,8 +66,8 @@ source ./.venv/bin/activate  # Windows 没有 source 命令，须替换为 .\.ve
 ### 开始使用吧
 
 ```shell
-# 可以直接调用 run.py
+# 第一次使用建议调用 run.py 以自动补全依赖 
 python run.py
-# 或者可以用 streamlit run app.py 以应用更多启动设置
+# 如果是经验丰富的老手，可以用 streamlit run app.py 以应用更多启动设置
 streamlit run --server.enableCORS=false --server.enableXsrfProtection=false app.py
 ```

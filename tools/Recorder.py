@@ -12,6 +12,7 @@ from websockets.sync.client import connect
 
 import osuawa
 from osuawa import Path
+from osuawa.utils import CompletedScoreInfo
 
 st.session_state.awa: osuawa.Osuawa  # type: ignore
 
@@ -23,12 +24,12 @@ with st.sidebar:
     st.toggle(_("wide page layout"), key="wide_layout", value=False)
 
 
-async def get_users_beatmap_scores(ids: list[int], bid: int) -> pd.DataFrame:
-    tasks: list[Task[dict[str, list]]] = []
+async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
+    tasks: list[Task[dict[str, CompletedScoreInfo]]] = []
     async with asyncio.TaskGroup() as tg:
         for user_id in ids:
-            tasks.append(tg.create_task(st.session_state.awa._get_user_beatmap_scores(bid, user_id)))
-    scores: dict[str, list] = {}
+            tasks.append(tg.create_task(st.session_state.awa._get_user_beatmap_scores(beatmap, user_id)))
+    scores: dict[str, CompletedScoreInfo] = {}
     for task in tasks:
         scores = {**scores, **task.result()}
     return st.session_state.awa.create_scores_dataframe(scores)
