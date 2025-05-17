@@ -245,7 +245,7 @@ else:
     scopes = [Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]
     domain = Domain.OSU.value
     if "code" not in st.query_params:
-        # check if ossapi's token is pickled
+        # check if ossapi token is pickled
         if os.path.exists("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
             awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
         else:

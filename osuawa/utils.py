@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, unique
 from threading import BoundedSemaphore
@@ -10,8 +11,8 @@ from typing import Any, Optional
 import numpy as np
 import rosu_pp_py as rosu
 from clayutil.futil import Downloader
-from ossapi import Beatmap as ApiBeatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap 冲突
-from rosu_pp_py import Beatmap as RosuMap  # 避免与 ossapi.Beatmap 冲突
+from clayutil.sutil import md5sum
+from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap 冲突
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",
@@ -74,11 +75,11 @@ async def _get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
     return await simple_user_dict(await api.user(user, key="username" if isinstance(user, str) else "id"))
 
 
-def get_username(api: OssapiAsync, user: int) -> str:
-    return asyncio.run(api.user(user, key="id")).username
+async def get_username(api: OssapiAsync, user: int) -> str:
+    return (await api.user(user, key="id")).username
 
 
-async def _get_beatmaps_dict(api: OssapiAsync, cut_bids: Sequence[list[int]]) -> list[list[ApiBeatmap]]:
+async def _get_beatmaps_dict(api: OssapiAsync, cut_bids: Sequence[list[int]]) -> list[list[Beatmap]]:
     tasks = []
     async with asyncio.TaskGroup() as tg:
         for bids in cut_bids:
@@ -86,10 +87,11 @@ async def _get_beatmaps_dict(api: OssapiAsync, cut_bids: Sequence[list[int]]) ->
     return [task.result() for task in tasks]
 
 
-def get_beatmaps_dict(api: OssapiAsync, bids: Sequence[int]) -> dict[int, ApiBeatmap]:
+def get_beatmaps_dict(api: OssapiAsync, bids: set[int]) -> dict[int, Beatmap]:
+    bids = tuple(bids)
     cut_bids = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i: i + 50]))
+        cut_bids.append(list(bids[i : i + 50]))
     results = asyncio.run(_get_beatmaps_dict(api, cut_bids))
     beatmaps_dict = {}
     for bs in results:
@@ -196,74 +198,151 @@ class OsuDifficultyAttribute(object):
         self.hit_length = round(self.hit_length / magnitude)
 
 
-score_info = tuple[int, int, int, float, int, bool, float, list[dict[str, str | dict] | dict[str, str]], datetime, dict[str, int], Optional[datetime]]
+@dataclass(slots=True)
+class ScoreInfo(object):
+    """ScoreInfo 参数顺序
 
+    0  => bid
 
-def score_info_tuple(score: Score) -> score_info:
-    """Create compact score info list from a score.
+    1  => user
 
-    :param score: score object
-    :return: [bid, user, score, accuracy, max_combo, passed, pp, mods, ts, statistics, st]
+    2  => score
+
+    3  => accuracy
+
+    4  => max_combo
+
+    5  => passed
+
+    6  => pp
+
+    7  => _mods
+
+    8  => ts
+
+    9  => statistics
+
+    10 => st
+
     """
-    return (
-        score.beatmap_id,
-        score.user_id,
-        score.total_score,
-        score.accuracy,
-        score.max_combo,
-        score.passed,
-        score.pp,
-        [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],
-        score.ended_at,
-        {
-            "large_tick_hit": score.statistics.large_tick_hit,
-            "small_tick_hit": score.statistics.small_tick_hit,
-            "slider_tail_hit": score.statistics.slider_tail_hit,
-            "great": score.statistics.great,
-            "ok": score.statistics.ok,
-            "meh": score.statistics.meh,
-            "miss": score.statistics.miss,
-        },
-        score.started_at,
-    )
+
+    beatmap_id: int
+    user_id: int
+    total_score: int
+    accuracy: float
+    max_combo: int
+    passed: bool
+    pp: Optional[float]
+    mods: list[dict[str, str] | dict[str, dict[str, str]]]
+    ended_at: datetime
+    statistics: dict[str, Optional[int]]
+    started_at: Optional[datetime]
+
+    @classmethod
+    def from_score(cls, score: Score):
+        return cls(
+            score.beatmap_id,
+            score.user_id,
+            score.total_score,
+            score.accuracy,
+            score.max_combo,
+            score.passed,
+            score.pp,
+            [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],
+            score.ended_at,
+            {
+                "large_tick_hit": score.statistics.large_tick_hit,
+                "small_tick_hit": score.statistics.small_tick_hit,
+                "slider_tail_hit": score.statistics.slider_tail_hit,
+                "great": score.statistics.great,
+                "ok": score.statistics.ok,
+                "meh": score.statistics.meh,
+                "miss": score.statistics.miss,
+            },
+            score.started_at,
+        )
 
 
-def download_osu(beatmap: int):
-    if not "%d.osu" % beatmap in os.listdir(Path.BEATMAPS_CACHE_DIRECTORY.value):
+@dataclass(slots=True)
+class CompletedScoreInfo(ScoreInfo):
+    cs: float
+    hit_window: float
+    preempt: float
+    bpm: float
+    hit_length: int
+    is_nf: bool
+    is_hd: bool
+    is_high_ar: bool
+    is_low_ar: bool
+    is_very_low_ar: bool
+    is_speed_up: bool
+    is_speed_down: bool
+    info: str
+    difficulty_rating: float
+    rosu_stars: float
+    rosu_max_combo: int
+    rosu_aim: Optional[float]
+    rosu_aim_difficult_slider_count: Optional[float]
+    rosu_speed: Optional[float]
+    rosu_speed_note_count: Optional[float]
+    rosu_slider_factor: Optional[float]
+    rosu_ar: Optional[float]
+    rosu_pp_aim: Optional[float]
+    rosu_pp_speed: Optional[float]
+    rosu_pp_accuracy: Optional[float]
+    rosu_pp100_aim: Optional[float]
+    rosu_pp100_speed: Optional[float]
+    rosu_pp100_accuracy: Optional[float]
+    rosu_pp100: float
+    rosu_pp92: float
+    rosu_pp85: float
+    rosu_pp67: float
+
+
+def download_osu(beatmap: Beatmap):
+    need_download = False
+    if not "%d.osu" % beatmap.id in os.listdir(Path.BEATMAPS_CACHE_DIRECTORY.value):
+        need_download = True
+    else:
+        with open(os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap.id), "rb") as fi_b:
+            local_md5sum = md5sum(fi_b.read())
+        if local_md5sum != beatmap.checksum:
+            need_download = True
+    if need_download:
         with BoundedSemaphore():
             sleep(1)
             Downloader(Path.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % beatmap, "%d.osu" % beatmap, headers)
             sleep(1)
 
 
-async def calc_beatmap_attributes(beatmap: ApiBeatmap, score: score_info) -> list:
-    mods = score[7]
+def calc_beatmap_attributes(beatmap: Beatmap, score: ScoreInfo) -> CompletedScoreInfo:
+    mods = score.mods
     my_attr = OsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
     my_attr.set_mods(mods)
-    download_osu(beatmap.id)
-    rosu_map: RosuMap = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap.id))
+    download_osu(beatmap)
+    rosu_map: rosu.Beatmap = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % beatmap.id))
     rosu_diff: rosu.Difficulty = rosu.Difficulty(mods=mods)
     rosu_attr: rosu.DifficultyAttributes = rosu_diff.calculate(rosu_map)
-    perf_real: rosu.Performance = rosu.Performance(
+    perf_got: rosu.Performance = rosu.Performance(
         mods=mods,
-        combo=score[4],
-        large_tick_hits=score[9].get("large_tick_hit", 0),
-        small_tick_hits=score[9].get("small_tick_hit", 0),
-        slider_end_hits=score[9].get("slider_tail_hit", 0),
-        n300=score[9].get("great", 0),
-        n100=score[9].get("ok", 0),
-        n50=score[9].get("meh", 0),
-        misses=score[9].get("miss", 0),
-        lazer=bool(score[10]),
+        combo=score.max_combo,
+        large_tick_hits=score.statistics.get("large_tick_hit", 0),
+        small_tick_hits=score.statistics.get("small_tick_hit", 0),
+        slider_end_hits=score.statistics.get("slider_tail_hit", 0),
+        n300=score.statistics.get("great", 0),
+        n100=score.statistics.get("ok", 0),
+        n50=score.statistics.get("meh", 0),
+        misses=score.statistics.get("miss", 0),
+        lazer=bool(score.started_at),
     )
     perf100: rosu.Performance = rosu.Performance(mods=mods, accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
     perf92: rosu.Performance = rosu.Performance(mods=mods, accuracy=92, hitresult_priority=rosu.HitResultPriority.WorstCase)
     perf85: rosu.Performance = rosu.Performance(mods=mods, accuracy=85, hitresult_priority=rosu.HitResultPriority.WorstCase)
     perf67: rosu.Performance = rosu.Performance(mods=mods, accuracy=67, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    pp_real_attr = perf_real.calculate(rosu_attr)
-    pp_aim = pp_real_attr.pp_aim
-    pp_speed = pp_real_attr.pp_speed
-    pp_accuracy = pp_real_attr.pp_accuracy
+    pp_got_attr = perf_got.calculate(rosu_attr)
+    pp_aim = pp_got_attr.pp_aim
+    pp_speed = pp_got_attr.pp_speed
+    pp_accuracy = pp_got_attr.pp_accuracy
     pp100_attr = perf100.calculate(rosu_attr)
     pp100_aim = pp100_attr.pp_aim
     pp100_speed = pp100_attr.pp_speed
@@ -272,7 +351,18 @@ async def calc_beatmap_attributes(beatmap: ApiBeatmap, score: score_info) -> lis
     pp92 = perf92.calculate(rosu_attr).pp
     pp85 = perf85.calculate(rosu_attr).pp
     pp67 = perf67.calculate(rosu_attr).pp
-    attr = [
+    return CompletedScoreInfo(
+        score.beatmap_id,
+        score.user_id,
+        score.total_score,
+        score.accuracy,
+        score.max_combo,
+        score.passed,
+        score.pp,
+        score.mods,
+        score.ended_at,
+        score.statistics,
+        score.started_at,
         my_attr.cs,
         my_attr.hit_window,
         my_attr.preempt,
@@ -311,8 +401,7 @@ async def calc_beatmap_attributes(beatmap: ApiBeatmap, score: score_info) -> lis
         pp92,
         pp85,
         pp67,
-    ]
-    return attr
+    )
 
 
 def calc_positive_percent(score: int | float | None, min_score: int | float, max_score: int | float) -> int:

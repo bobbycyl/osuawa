@@ -7,6 +7,7 @@ ossapi[async]
 pandas
 pillow
 plotly
+py7zr
 rosu-pp-py
 scipy
 streamlit

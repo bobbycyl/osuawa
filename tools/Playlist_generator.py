@@ -44,8 +44,8 @@ else:
     zip_filename = str(os.path.join(Path.UPLOADED_DIRECTORY.value, "%s.zip" % uid))
     content = uploaded_file.getvalue()
 
-    with open(playlist_filename, "wb") as fo:
-        fo.write(content)
+    with open(playlist_filename, "wb") as fo_b:
+        fo_b.write(content)
     logger.get_logger(st.session_state.username).info("generating playlist %s at %s" % (playlist_name, session_path))
     if st.session_state["new_style"]:
         table = generate_playlist(playlist_filename, 1)

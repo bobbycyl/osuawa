@@ -8,6 +8,7 @@ import platform
 import threading
 import typing
 from asyncio import Task
+from dataclasses import astuple
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
@@ -23,6 +24,8 @@ if platform.system() == "Windows":
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
 from clayutil.futil import Downloader, Properties, filelock
 from clayutil.validator import Integer
+
+# noinspection PyUnresolvedReferences
 from fontfallback import writing
 from ossapi import Grant, OssapiAsync, Domain, Scope, User, GameMode, Beatmap
 
@@ -32,11 +35,11 @@ from .utils import (
     calc_positive_percent,
     calc_star_rating_color,
     download_osu,
+    CompletedScoreInfo,
     get_beatmaps_dict,
     get_username,
     to_readable_mods,
-    score_info,
-    score_info_tuple,
+    ScoreInfo,
     Path,
     headers,
     _get_user_info,
@@ -45,7 +48,7 @@ from .utils import (
 
 assert typing
 assert datetime
-score_info_length = len(eval(repr(score_info).lstrip("tuple")))
+score_info_length = ScoreInfo.__annotations__.__len__()
 
 
 def strip_quotes(text: str) -> str:
@@ -57,11 +60,8 @@ def strip_quotes(text: str) -> str:
     return text
 
 
-async def complete_scores_compact(scores_compact: dict[str, list], beatmaps_dict: dict[int, Beatmap]) -> dict[str, list]:
-    for score_id in scores_compact:
-        if len(scores_compact[score_id]) == score_info_length:
-            scores_compact[score_id].extend(await calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id][0]], tuple(scores_compact[score_id])))
-    return scores_compact
+def complete_scores_compact(scores_compact: dict[str, ScoreInfo], beatmaps_dict: dict[int, Beatmap]) -> dict[str, CompletedScoreInfo]:
+    return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].beatmap_id], scores_compact[score_id]) for score_id in scores_compact}
 
 
 class Awapi(OssapiAsync):
@@ -119,7 +119,7 @@ class Osuawa(object):
         own_data: User = asyncio.run(self.api.get_me())
         return own_data.id, own_data.username
 
-    def create_scores_dataframe(self, scores: dict[str, list]) -> pd.DataFrame:
+    def create_scores_dataframe(self, scores: dict[str, CompletedScoreInfo]) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
             scores,
             orient="index",
@@ -201,18 +201,18 @@ class Osuawa(object):
                 tasks.append(tg.create_task(simple_user_dict(friend)))
         return [task.result() for task in tasks]
 
-    async def _get_score(self, score_id: int) -> dict[str, list]:
+    async def _get_score(self, score_id: int) -> dict[str, CompletedScoreInfo]:
         score = await self.api.score(score_id)
-        score_compact = {str(score.id): list(score_info_tuple(score))}
-        return await complete_scores_compact(score_compact, {score.beatmap.id: await self.api.beatmap(score.beatmap.id)})
+        score_compact = {str(score.id): ScoreInfo.from_score(score)}
+        return complete_scores_compact(score_compact, {score.beatmap.id: await self.api.beatmap(score.beatmap.id)})
 
     def get_score(self, score_id: int) -> pd.DataFrame:
         return self.create_scores_dataframe(asyncio.run(self._get_score(score_id))).T
 
-    async def _get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, list]:
+    async def _get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedScoreInfo]:
         user_scores = await self.api.beatmap_user_scores(beatmap, user)
-        scores_compact = {str(x.id): list(score_info_tuple(x)) for x in user_scores}
-        return await complete_scores_compact(scores_compact, {beatmap: await self.api.beatmap(beatmap)})
+        scores_compact = {str(x.id): ScoreInfo.from_score(x) for x in user_scores}
+        return complete_scores_compact(scores_compact, {beatmap: await self.api.beatmap(beatmap)})
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
@@ -240,36 +240,34 @@ class Osuawa(object):
             user_scores.extend(user_scores_current)
             offset += 50
 
-        recent_scores_compact = {str(x.id): list(score_info_tuple(x)) for x in user_scores}
+        recent_scores_compact: dict[str, ScoreInfo | CompletedScoreInfo] = {str(x.id): ScoreInfo.from_score(x) for x in user_scores}
         len_got = len(recent_scores_compact)
 
         # concatenate
         len_local = 0
         if os.path.exists(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json")):
-            with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"), encoding="utf-8") as fi:
-                recent_scores_compact_old = orjson.loads(fi.read())
+            with open(os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"), "rb") as fi_b:
+                recent_scores_compact_old = {str(k): CompletedScoreInfo(*v) for k, v in orjson.loads(fi_b.read()).items()}
             len_local = len(recent_scores_compact_old)
-            recent_scores_compact = {
-                **recent_scores_compact,
-                **recent_scores_compact_old,
-            }
+            recent_scores_compact.update(recent_scores_compact_old)
         len_diff = len(recent_scores_compact) - len_local
 
         # calculate difficulty attributes
-        bids_not_calculated: set[int] = {x[0] for x in recent_scores_compact.values() if len(x) == score_info_length}
-        beatmaps_dict = get_beatmaps_dict(self.api, tuple(bids_not_calculated))
-        recent_scores_compact = asyncio.run(complete_scores_compact(recent_scores_compact, beatmaps_dict))
+        bids_not_calculated: set[int] = {x.beatmap_id for x in recent_scores_compact.values() if not isinstance(x, CompletedScoreInfo)}
+        beatmaps_dict = get_beatmaps_dict(self.api, bids_not_calculated)
+        completed_recent_scores_compact: dict[str, CompletedScoreInfo] = complete_scores_compact(recent_scores_compact, beatmaps_dict)
 
         # save
         with open(
             os.path.join(self.output_dir, Path.RAW_RECENT_SCORES.value, f"{user}.json"),
-            "w",
-        ) as fo:
-            fo.write(orjson.dumps(recent_scores_compact).decode("utf-8"))
-        df = self.create_scores_dataframe(recent_scores_compact)
+            "wb",
+        ) as fo_b:
+            # noinspection PyTypeChecker
+            fo_b.write(orjson.dumps({k: astuple(v) for k, v in completed_recent_scores_compact.items()}))
+        df = self.create_scores_dataframe(completed_recent_scores_compact)
         df.to_csv(os.path.join(self.output_dir, Path.RECENT_SCORES.value, f"{user}.csv"))
         return "%s: local/got/diff: %d/%d/%d" % (
-            get_username(self.api, user),
+            asyncio.run(get_username(self.api, user)),
             len_local,
             len_got,
             len_diff,
@@ -448,7 +446,7 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = get_beatmaps_dict(self.awa.api, [int(x["bid"]) for x in parsed_beatmap_list])
+        beatmaps_dict = get_beatmaps_dict(self.awa.api, {int(x["bid"]) for x in parsed_beatmap_list})
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]
@@ -502,7 +500,7 @@ class OsuPlaylist(object):
             mods_ready = to_readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
 
         # 下载谱面与计算难度（与 utils.calc_beatmap_attributes 类似，但是省略了许多不必要的计算，且为了课题要求优化）
-        download_osu(bid)
+        download_osu(b)
         my_attr = OsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
         my_attr.set_mods(mods)
         rosu_map = rosu.Beatmap(path=os.path.join(Path.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid))
@@ -763,14 +761,6 @@ class OsuPlaylist(object):
                     fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
                 else:
                     fo.write(html_string.format(html_head="", html_body=df.to_html(index=False, escape=False, classes="pd"), html_body_prefix="", html_body_suffix=""))
-
-            # 功能暂不可用
-            # if self.output_zip:
-            #     # 生成课题压缩包
-            #     if not os.path.exists(Path.OUTPUT_DIRECTORY.value):
-            #         os.mkdir(Path.OUTPUT_DIRECTORY.value)
-            #     df_standalone.to_csv(os.path.join(self.tmp_dir, "table.csv"), index=False)
-            #     compress_as_zip(self.tmp_dir, "./output/%s.zip" % self.playlist_name)
 
             # 清理临时文件夹
             rmtree(self.tmp_dir)

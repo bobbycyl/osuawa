@@ -46,6 +46,7 @@ if "translate" not in st.session_state:
         os.mkdir(Path.BEATMAPS_CACHE_DIRECTORY.value)
     st.session_state._uni_lang_value = convert_locale(st.context.locale)
 
+# noinspection PyUnresolvedReferences
 builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)
 

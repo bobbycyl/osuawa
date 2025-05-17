@@ -10,7 +10,7 @@ current tools: Score Visualizer, Playlist Generator and Recorder
 
 ## Requirements
 
-Python 3.12, Rust (for [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
+Python 3.12, Rust (Optional, if you need to build [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
 
 ## Getting Started
 
@@ -41,26 +41,6 @@ Everytime you want to run the app, you need to activate the virtual environment 
    python -m pip install -r requirements.txt
    ```
 
-2. Install `fontfallback` for Pillow.
-
-   1. Assuming you have entered the `osuawa` directory as described above, clone the `fontfallback` repository.
-
-      ```shell
-      git clone https://github.com/TrueMyst/PillowFontFallback.git
-      ```
-
-   2. Copy the `fontfallback` folder to the `site-packages` directory of the virtual environment.
-
-      ```shell
-      cp -r ./PillowFontFallback/fontfallback/ ./.venv/lib/python3.12/site-packages/  # replace with .\.venv\Lib\site-packages\ on Windows
-      ```
-
-   3. Remove the `PillowFontFallback` folder if you do not need it anymore.
-
-      ```shell
-      rm -r ./PillowFontFallback/
-      ```
-
 ### Configure the settings
 
 1. Acquire your osu! OAuth client from [here](https://osu.ppy.sh/home/account/edit).
@@ -89,4 +69,6 @@ Everytime you want to run the app, you need to activate the virtual environment 
 
 ```shell
 python run.py
+# If automatic bootstrapping is not needed, use the following command instead
+streamlit run --server.enableCORS=false --server.enableXsrfProtection=false app.py
 ```
