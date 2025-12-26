@@ -7,8 +7,10 @@
 /osuawa/*.dll
 /osuawa/*.jpg
 /osuawa/*.ttf
+/osu-tools/
 /.venv/
 /.streamlit/private.key
 /.streamlit/full_chain.pem
 /.streamlit/*.pickle
+/.streamlit/secrets.toml
 qodana.yaml

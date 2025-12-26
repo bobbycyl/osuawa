@@ -11,8 +11,8 @@ from streamlit import logger
 from websockets.sync.client import connect
 
 import osuawa
-from osuawa import Path
-from osuawa.utils import CompletedScoreInfo
+from osuawa import C
+from osuawa.utils import CompletedSimpleScoreInfo
 
 st.session_state.awa: osuawa.Osuawa  # type: ignore
 
@@ -25,11 +25,11 @@ with st.sidebar:
 
 
 async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
-    tasks: list[Task[dict[str, CompletedScoreInfo]]] = []
+    tasks: list[Task[dict[str, CompletedSimpleScoreInfo]]] = []
     async with asyncio.TaskGroup() as tg:
         for user_id in ids:
-            tasks.append(tg.create_task(st.session_state.awa._get_user_beatmap_scores(beatmap, user_id)))
-    scores: dict[str, CompletedScoreInfo] = {}
+            tasks.append(tg.create_task(st.session_state.awa.a_get_user_beatmap_scores(beatmap, user_id)))
+    scores: dict[str, CompletedSimpleScoreInfo] = {}
     for task in tasks:
         scores = {**scores, **task.result()}
     return st.session_state.awa.create_scores_dataframe(scores)
@@ -37,7 +37,7 @@ async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame
 
 @st.cache_data
 def friends() -> dict[int, str]:
-    raw_friends: list[dict[str, Any]] = asyncio.run(st.session_state.awa._get_friends())
+    raw_friends: list[dict[str, Any]] = asyncio.run(st.session_state.awa.a_get_friends())
     ret_friends = {}
     for raw_friend in raw_friends:
         ret_friends[raw_friend["user_id"]] = raw_friend["username"]
@@ -47,9 +47,9 @@ def friends() -> dict[int, str]:
 def tosu_df_style(row) -> list[str]:
     if row["accuracy"] == 1.0:
         return ["background-color: lavenderblush"] * len(row)
-    elif row["accuracy"] >= 0.92 and row["max_combo"] == row["b_max_combo"]:
+    elif row["accuracy"] >= 0.95 and row["max_combo"] == row["b_max_combo"]:
         return ["background-color: aliceblue"] * len(row)
-    elif row["accuracy"] >= 0.85:
+    elif row["accuracy"] >= 0.80:
         return ["background-color: mintcream"] * len(row)
     elif not row["passed"]:
         return ["background-color: darkgray"] * len(row)
@@ -120,7 +120,7 @@ user_scores_current = asyncio.run(
 )
 st.write(user_scores_current)
 with threading.Lock():
-    with open(os.path.join(Path.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w") as fo:
+    with open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w") as fo:
         fo.write("\n".join([f"{score.beatmap_id}" for score in user_scores_current]))
 
 if st.button(_("clear all caches")):

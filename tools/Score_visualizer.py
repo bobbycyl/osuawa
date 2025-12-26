@@ -1,16 +1,15 @@
 import os
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from plotly import figure_factory as ff
 from scipy import stats
 
-from osuawa import Path
+from osuawa import C
 from osuawa.components import memorized_multiselect, memorized_selectbox
-from osuawa.utils import calc_bin_size
+from osuawa.utils import calc_bin_size, user_recent_scores_directory
 
 if "wide_layout" in st.session_state:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
@@ -18,17 +17,13 @@ else:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
 with st.sidebar:
     st.toggle(_("wide page layout"), key="wide_layout", value=False)
-all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value))]
+all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RECENT_SCORES.value))]
 user = st.selectbox(_("user"), all_users)
 
 THEME_COLOR_BLUE = "#4C95D9"
 THEME_COLOR_RED = "#FF6A6A"
-if st.session_state._uni_lang_value == "en_US":
-    CO = THEME_COLOR_BLUE
-    CC = THEME_COLOR_RED
-else:
-    CO = THEME_COLOR_RED
-    CC = THEME_COLOR_BLUE
+CO = THEME_COLOR_RED
+CC = THEME_COLOR_BLUE
 
 
 def calc_pp_overall_main(df: pd.DataFrame, tag: Optional[str] = None) -> str:
@@ -47,9 +42,9 @@ def calc_pp_overall_if(df: pd.DataFrame, tag: Optional[str] = None) -> str:
     got_pp = df_tag["pp"].sum()
     pp_100if = df_tag["b_pp_100if"].sum()
     pp_92if = df_tag["b_pp_92if"].sum()
-    pp_85if = df_tag["b_pp_85if"].sum()
+    pp_81if = df_tag["b_pp_81if"].sum()
     pp_67if = df_tag["b_pp_67if"].sum()
-    return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (got_pp / pp_100if * 100, got_pp / pp_92if * 100, got_pp / pp_85if * 100, got_pp / pp_67if * 100)
+    return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (got_pp / pp_100if * 100, got_pp / pp_92if * 100, got_pp / pp_81if * 100, got_pp / pp_67if * 100)
 
 
 def calc_pp_overall_count(df: pd.DataFrame, tag: Optional[str] = None) -> str:
@@ -115,11 +110,10 @@ def generate_stats_dataframe(df: pd.DataFrame, indexes: list[str]) -> pd.DataFra
     return df_stats
 
 
-np.seterr(divide="ignore")
-if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
+if not os.path.exists(user_recent_scores_directory(user)):
     st.error(_("user not found"))
     st.stop()
-df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts", "st"])
+df = pd.read_parquet(user_recent_scores_directory(user))
 if len(df) == 0:
     st.error(_("no scores found"))
     st.stop()
@@ -131,7 +125,7 @@ with st.container(border=True):
     st.markdown(
         f"""based on {len(df)} ({len(dfp)} passed) score(s)
 
-got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_92if"].sum():.2f}/{dfp["b_pp_85if"].sum():.2f}/{dfp["b_pp_67if"].sum():.2f}pp
+got/100/92/81/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_92if"].sum():.2f}/{dfp["b_pp_81if"].sum():.2f}/{dfp["b_pp_67if"].sum():.2f}pp
 
 | tag         | got (passed)                                  | if (passed)                                 | count (total)                                 |
 | ----------- | --------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
@@ -143,7 +137,7 @@ got/100/92/85/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
 | speed_down  | {calc_pp_overall_main(dfp, "is_speed_down")}  | {calc_pp_overall_if(dfp, "is_speed_down")}  | {calc_pp_overall_count(df, "is_speed_down")}  |
 | total       | {calc_pp_overall_main(dfp)}                   | {calc_pp_overall_if(dfp)}                   | {calc_pp_overall_count(df)}                   |
 
-"""
+""",
     )
 
 with st.expander(_("Filtering")):
@@ -184,7 +178,7 @@ df_o = apply_filter(df)
 with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("compared to"), all_users)
-    df_c = apply_filter(pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{comp_user}.csv"), index_col=0, parse_dates=["ts", "st"]))
+    df_c = apply_filter(pd.read_parquet(user_recent_scores_directory(user)))
     indexes = [
         "accuracy",
         "hit_window",
@@ -204,7 +198,7 @@ with st.container(border=True):
         "pp_speed_pct",
         "pp_accuracy_pct",
         "pp_92pct",
-        "pp_85pct",
+        "pp_81pct",
         "pp_67pct",
         "combo_pct",
         "density",
@@ -228,7 +222,7 @@ with st.container(border=True):
         {
             comp_user: df_c_stats.T[st.session_state.cat_comp_index],
             user: df_o_stats.T[st.session_state.cat_comp_index],
-        }
+        },
     )
     st.table(df_stats_ind_joined.round(2))
     can_show_chart_pr = True
@@ -243,7 +237,7 @@ with st.container(border=True):
             {
                 st.session_state.cat_comp_index: pd.concat([df_o_ind, df_c_ind], ignore_index=True),
                 "user": [user] * len(df_o_ind) + [comp_user] * len(df_c_ind),
-            }
+            },
         )
         fig_data = [list(df_o_ind), list(df_c_ind)]
         fig = ff.create_distplot(

@@ -1,6 +1,8 @@
 clayutil @ git+https://github.com/bobbycyl/ClayUtilities.git
+osupp @ git+https://github.com/bobbycyl/osupp.git
 babel
 fonttools
+matplotlib
 numpy
 orjson
 ossapi[async]
@@ -8,7 +10,8 @@ pandas
 pillow
 plotly
 py7zr
-rosu-pp-py
 scipy
+slider
+statsmodels
 streamlit
 websockets

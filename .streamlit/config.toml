@@ -10,4 +10,3 @@ sslKeyFile = '.streamlit/private.key'
 [theme]
 primaryColor = "#F062A1"
 textColor = "#303030"
-

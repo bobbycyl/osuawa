@@ -21,15 +21,15 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
     StringField as Str,
 )
-from clayutil.futil import Properties
 from ossapi import Domain, Scope
 from streamlit import logger
 from streamlit.components.v1 import html
 from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import Awapi, LANGUAGES, OsuPlaylist, Osuawa, Path
+from osuawa import Awapi, C, LANGUAGES, OsuPlaylist, Osuawa
 from osuawa.components import memorized_selectbox
+from osuawa.utils import user_recent_scores_directory
 
 st.set_page_config(page_title=_("Homepage") + " - osuawa")
 
@@ -46,7 +46,7 @@ def run(g):
         except StopIteration as e:
             st.success("%s done" % e.value)
             break
-        except Error as e:
+        except (Error, NotImplementedError) as e:
             logger.get_logger("streamlit").exception(e)
             # st.session_state.clear()
             break
@@ -58,13 +58,13 @@ def run(g):
 
 def register_awa(ci, cs, ru, s, d, oauth_token: Optional[str] = None, oauth_refresh_token: Optional[str] = None):
     with st.spinner(_("registering a client...")):
-        return Osuawa(ci, cs, ru, s, d, Path.OUTPUT_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token)
+        return Osuawa(ci, cs, ru, s, d, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token)
 
 
 def commands():
     return [
         Command(
-            "reg",
+            "register",
             _("register command parser"),
             [JsonStr("obj", True)],
             0,
@@ -90,8 +90,8 @@ def commands():
             [
                 Coll(
                     "user",
-                    [int(os.path.splitext(os.path.basename(x))[0]) for x in os.listdir(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RAW_RECENT_SCORES.value))],
-                )
+                    [int(os.path.splitext(os.path.basename(x))[0]) for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RAW_RECENT_SCORES.value))],
+                ),
             ],
             1,
             st.session_state.awa.save_recent_scores,
@@ -105,9 +105,9 @@ def commands():
             st.session_state.awa.get_user_beatmap_scores,
         ),
         Command(
-            "gen",
+            "generate",
             _("generate local playlists"),
-            [Bool("fast_gen", True), Bool("output_zip", True)],
+            [Bool("fast_mode", True), Bool("output_zip", True)],
             1,
             generate_all_playlists,
         ),
@@ -133,7 +133,7 @@ def register_commands(obj: Optional[dict] = None):
             st.session_state.token = token_hex(16)
             logger.get_logger("streamlit").info("%s -> %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
             ret = _("token generated")
-            st.toast(_("You need to ask the web admin for the session token to unlock the full features."))
+            st.toast(_("You need to ask the web admin for the session token to unlock full features."))
     else:
         # 冗余设计
         pass
@@ -141,7 +141,7 @@ def register_commands(obj: Optional[dict] = None):
     return ret
 
 
-def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
+def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
     original_playlist_pattern = re.compile(r"O\.(.*)\.properties")
     match_playlist_pattern = re.compile(r"M\.(.*)\.properties")
     community_playlist_pattern = re.compile(r"C\.(.*)\.properties")
@@ -155,7 +155,7 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
             suffix = " — community playlist"
         else:
             continue
-        if os.path.exists("./playlists/%s.html" % m.group(1)) and fast_gen:
+        if os.path.exists("./playlists/%s.html" % m.group(1)) and fast_mode:
             st.write(_("skipped %s") % m.group(1))
             continue
         try:
@@ -165,7 +165,7 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
                 for element in o.beatmap_list:
                     original_playlist_beatmaps[element["bid"]] = original_playlist_beatmaps.get(element["bid"], 0) + 1
             df = o.generate()
-            df.to_csv("./playlists/%s.csv" % m.group(1))
+            df.to_csv("./playlists/%s.csv" % m.group(1), index=False)
         except Exception as e:
             raise RuntimeError("%s (%s)" % (_("failed to generate %s") % m.group(1), str(e))) from e
         else:
@@ -177,9 +177,9 @@ def generate_all_playlists(fast_gen: bool = False, output_zip: bool = False):
 
 
 def cat(user: int):
-    if not os.path.exists(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv")):
+    if not os.path.exists(user_recent_scores_directory(user)):
         raise ValueError(_("user %d not found") % user)
-    df = pd.read_csv(os.path.join(str(Path.OUTPUT_DIRECTORY.value), Path.RECENT_SCORES.value, f"{user}.csv"), index_col=0, parse_dates=["ts", "st"])
+    df = pd.read_parquet(user_recent_scores_directory(user))
     return df
 
 
@@ -237,16 +237,14 @@ if "awa" in st.session_state:
 
     st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)
 else:
-    p = Properties(st.secrets.args.oauth_filename)
-    p.load()
-    client_id = p["client_id"]
-    client_secret = p["client_secret"]
-    redirect_url = p["redirect_url"]
+    client_id = st.secrets.args.client_id
+    client_secret = st.secrets.args.client_secret
+    redirect_url = st.secrets.args.redirect_url
     scopes = [Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]
     domain = Domain.OSU.value
     if "code" not in st.query_params:
         # check if ossapi token is pickled
-        if os.path.exists("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
+        if "ajs_anonymous_id" in st.context.cookies and os.path.exists("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
             awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
         else:
             st.info(_("Please click the button below to authorize the app."))
