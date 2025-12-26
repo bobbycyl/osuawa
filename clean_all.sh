@@ -1,5 +1,6 @@
 #!/bin/bash
-rm -r ./logs/
-rm -r ./output/
-rm -r ./static/
-rm -r ./*LCK
+rm -rf ./logs/
+rm -rf ./output/
+rm -rf ./static/
+rm -rf ./*LCK
+rm -rf ./streamlit/*.pickle

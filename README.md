@@ -10,11 +10,11 @@ current tools: Score Visualizer, Playlist Generator and Recorder
 
 ## Requirements
 
-Python 3.12, Rust (Optional, if you need to build [rosu-pp-py](https://github.com/MaxOhn/rosu-pp-py))
+Python 3.12, .NET 8.0
 
 ## Getting Started
 
-### Clone the repository
+### Clone this repository
 
 ```shell
 git clone https://github.com/bobbycyl/osuawa.git
@@ -33,37 +33,31 @@ source ./.venv/bin/activate  # replace with .\.venv\Scripts\activate on Windows
 
 Everytime you want to run the app, you need to activate the virtual environment first.
 
-### Install dependencies
+### Install some dependencies
 
-1. Use pip to install most of the dependencies.
+Firstly, install python packages.
 
-   ```shell
-   python -m pip install -r requirements.txt
-   ```
+```shell
+python -m pip install -r requirements.txt
+```
+
+Secondly, download and build `osu-tools`.
+
+```shell
+git clone https://github.com/ppy/osu-tools.git
+cd osu-tools/PerformanceCalculator
+dotnet build -c Release
+```
 
 ### Configure the settings
 
 1. Acquire your osu! OAuth client from [here](https://osu.ppy.sh/home/account/edit).
    The port should match which set in `./.streamlit/config.toml`.
 
-2. Create a file called `osu.properties` somewhere. The file should like as follows.
+2. Create a file named `./.streamlit/secrets.toml` and edit it.
+   You can find an example [here](./.streamlit/secrets.toml)
 
-   ```properties
-   client_id=<Client ID>
-   client_secret=<Client Secret>
-   redirect_url=<Application Callback URLs>
-
-   ```
-
-3. Edit `./.streamlit/secrets.toml`.
-
-   ```toml
-   [args]
-   oauth_filename = "/path/to/osu.properties"
-   admins = []  # user who match the id will auto gain the highest cmdparser permission without any need to pass the token
-   ```
-
-4. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
+3. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
 
 ### Run the app
 

@@ -9,7 +9,7 @@ from clayutil.futil import compress_as_zip
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import OsuPlaylist, Path
+from osuawa import C, OsuPlaylist
 
 st.set_page_config(page_title=_("Playlist generator") + " - osuawa")
 with st.sidebar:
@@ -18,7 +18,7 @@ with st.sidebar:
 
 @st.cache_data(show_spinner=False)
 def convert_df(df: pd.DataFrame, filename: str):
-    df.to_csv(filename, encoding="utf-8")
+    df.to_csv(filename, encoding="utf-8", index=False)
 
 
 @st.cache_data(show_spinner=False)
@@ -33,7 +33,7 @@ if uploaded_file is None:
 else:
     playlist_name = os.path.splitext(uploaded_file.name)[0]
     uid = UUID(get_script_run_ctx().session_id).hex
-    session_path = os.path.join(Path.UPLOADED_DIRECTORY.value, uid)
+    session_path = os.path.join(C.UPLOADED_DIRECTORY.value, uid)
     if not os.path.exists(session_path):
         os.mkdir(session_path)
     playlist_filename = str(os.path.join(session_path, "%s.properties" % playlist_name))
@@ -41,7 +41,7 @@ else:
     covers_dir = str(os.path.join(session_path, "%s.covers" % playlist_name))
     csv_filename = str(os.path.join(session_path, "%s.csv" % playlist_name))
     css_filename = str(os.path.join(session_path, "style.css"))
-    zip_filename = str(os.path.join(Path.UPLOADED_DIRECTORY.value, "%s.zip" % uid))
+    zip_filename = str(os.path.join(C.UPLOADED_DIRECTORY.value, "%s.zip" % uid))
     content = uploaded_file.getvalue()
 
     with open(playlist_filename, "wb") as fo_b:
