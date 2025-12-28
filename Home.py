@@ -44,14 +44,14 @@ def run(g):
             st.error(e)
             break  # use continue if you want to continue running the generator
         except StopIteration as e:
-            st.success("%s done" % e.value)
+            st.success(_("%s tasks done") % e.value)
             break
         except (Error, NotImplementedError) as e:
             logger.get_logger("streamlit").exception(e)
             # st.session_state.clear()
             break
         except Exception as e:
-            st.error(_("uncaught exception: %s") % str(e))
+            st.exception(e)
             logger.get_logger("streamlit").exception(e)
             break
 
@@ -64,7 +64,7 @@ def register_awa(ci, cs, ru, s, d, oauth_token: Optional[str] = None, oauth_refr
 def commands():
     return [
         Command(
-            "register",
+            "reg",
             _("register command parser"),
             [JsonStr("obj", True)],
             0,
@@ -105,7 +105,7 @@ def commands():
             st.session_state.awa.get_user_beatmap_scores,
         ),
         Command(
-            "generate",
+            "gen",
             _("generate local playlists"),
             [Bool("fast_mode", True), Bool("output_zip", True)],
             1,
@@ -242,32 +242,33 @@ else:
     redirect_url = st.secrets.args.redirect_url
     scopes = [Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]
     domain = Domain.OSU.value
-    if "code" not in st.query_params:
-        # check if ossapi token is pickled
-        if "ajs_anonymous_id" in st.context.cookies and os.path.exists("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
-            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
-        else:
-            st.info(_("Please click the button below to authorize the app."))
-            st.link_button(_("OAuth2 url"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)))
-            st.stop()
-    else:
-        code = st.query_params.code
-        r = requests.post(
-            Awapi.TOKEN_URL.format(domain=domain),
-            headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
-            data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
-        )
-        awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
-        awa.api._save_token(awa.api.session.token)
-    awa.tz = st.context.timezone
     try:
+        if "code" not in st.query_params:
+            # check if ossapi token is pickled
+            if "ajs_anonymous_id" in st.context.cookies and os.path.exists("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
+                awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
+            else:
+                st.info(_("Please click the button below to authorize the app."))
+                st.link_button(_("OAuth2 URL"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)))
+                st.stop()
+        else:
+            code = st.query_params.code
+            r = requests.post(
+                Awapi.TOKEN_URL.format(domain=domain),
+                headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+                data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
+            )
+            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
+            awa.api._save_token(awa.api.session.token)
+        awa.tz = st.context.timezone
         st.session_state.awa = awa
-        st.session_state.user_id, st.session_state.username = st.session_state.awa.user
+        st.session_state.user, st.session_state.username = st.session_state.awa.user
     except NotImplementedError:
-        os.remove("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"])
-        st.warning(_("OAuth2 token has expired. Please refresh the page to re-authorization."))
+        if os.path.exists("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
+            os.remove("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"])
+        st.warning(_("OAuth2 token or code has expired. Please remove the url parameter and refresh the page."))
         st.stop()
-    if st.session_state.user_id in admins:
+    if st.session_state.user in admins:
         st.session_state.token = ""
         register_commands({"token": ""})
     st.rerun()

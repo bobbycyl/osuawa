@@ -1,6 +1,6 @@
 import asyncio
 import os
-from collections.abc import Sequence
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, unique
@@ -10,13 +10,14 @@ from time import sleep
 from typing import Any, Optional
 
 import numpy as np
+import pandas as pd
 from clayutil.futil import Downloader
 from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
 from osupp.core import init_osu_tools
 
 init_osu_tools(os.path.join(os.path.dirname(__file__), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
 from osupp.difficulty import calculate_osu_difficulty
-from osupp.performance import Performance, calculate_osu_performance
+from osupp.performance import OsuPerformance, calculate_osu_performance
 
 assert calculate_osu_difficulty
 
@@ -77,12 +78,12 @@ async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
         "username": user.username,
         "user_id": user.id,
         "country": user.country,
-        "is_online": user.is_online,
-        "is_supporter": user.is_supporter,
+        "online": user.is_online,
+        "supporter": user.is_supporter,
         "team": user.team,
-        "stat_pp": user.statistics.pp,
-        "stat_global_rank": user.statistics.global_rank,
-        "stat_country_rank": user.statistics.country_rank,
+        "pp": user.statistics.pp,
+        "global_rank": user.statistics.global_rank,
+        "country_rank": user.statistics.country_rank,
     }
 
 
@@ -94,20 +95,16 @@ async def get_username(api: OssapiAsync, user: int) -> str:
     return (await api.user(user, key="id")).username
 
 
-async def a_get_beatmaps(api: OssapiAsync, cut_bids: Sequence[list[int]]) -> list[list[Beatmap]]:
+async def a_get_beatmaps_dict(api: OssapiAsync, bids: set[int]) -> dict[int, Beatmap]:
+    bids = tuple(bids)
+    cut_bids: list[list[int]] = []
+    for i in range(0, len(bids), 50):
+        cut_bids.append(list(bids[i : i + 50]))
     tasks = []
     async with asyncio.TaskGroup() as tg:
         for bids in cut_bids:
             tasks.append(tg.create_task(api.beatmaps(bids)))
-    return [task.result() for task in tasks]
-
-
-def get_beatmaps_dict(api: OssapiAsync, bids: set[int]) -> dict[int, Beatmap]:
-    bids = tuple(bids)
-    cut_bids = []
-    for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i : i + 50]))
-    results = asyncio.run(a_get_beatmaps(api, cut_bids))
+    results = [task.result() for task in tasks]
     return {b.id: b for bs in results for b in bs}
 
 
@@ -160,24 +157,19 @@ class SimpleOsuDifficultyAttribute(object):
     def set_mods(self, mods: list):
         mods_dict = {}  # {acronym, settings}
         for mod in mods:
-            mods_dict[mod["acronym"]] = mod["settings"] if mod.get("settings", None) else {}
+            _settings = mod.get("settings", {})
+            mods_dict[mod["acronym"]] = _settings
             self.osu_tool_mods.append(mod["acronym"])
-            for setting_name, setting_value in mod["settings"].items():
+            for setting_name, setting_value in _settings.items():
                 self.osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
         if "NF" in mods_dict:
             self.is_nf = True
         if "HD" in mods_dict:
             self.is_hd = True
         if "HR" in mods_dict:
-            self.cs = self.cs * 1.3
-            if self.cs > 10:
-                self.cs = 10.0
-            self.accuracy = self.accuracy * 1.4
-            if self.accuracy > 10:
-                self.accuracy = 10.0
-            self.ar = self.ar * 1.4
-            if self.ar > 10:
-                self.ar = 10.0
+            self.cs = min(self.cs * 1.3, 10.0)
+            self.accuracy = min(self.accuracy * 1.4, 10.0)
+            self.ar = min(self.ar * 1.4, 10.0)
         elif "EZ" in mods_dict:
             self.cs = self.cs * 0.5
             self.accuracy = self.accuracy * 0.5
@@ -220,43 +212,17 @@ class SimpleOsuDifficultyAttribute(object):
 
 @dataclass(slots=True)
 class SimpleScoreInfo(object):
-    """参数顺序
-
-    0  => bid
-
-    1  => user
-
-    2  => score
-
-    3  => accuracy
-
-    4  => max_combo
-
-    5  => passed
-
-    6  => pp
-
-    7  => _mods
-
-    8  => ts
-
-    9  => statistics
-
-    10 => st
-
-    """
-
-    beatmap_id: int
-    user_id: int
-    total_score: int
+    bid: int
+    user: int
+    score: int
     accuracy: float
     max_combo: int
     passed: bool
     pp: Optional[float]
-    mods: list[dict[str, str] | dict[str, dict[str, str]]]
-    ended_at: datetime
+    _mods: list[dict[str, str] | dict[str, dict[str, str]]]
+    ts: datetime
     statistics: dict[str, Optional[int]]
-    started_at: Optional[datetime]
+    st: Optional[datetime]
 
     @classmethod
     def from_score(cls, score: Score):
@@ -272,12 +238,12 @@ class SimpleScoreInfo(object):
             score.ended_at,
             {
                 "large_tick_hit": score.statistics.large_tick_hit,
-                "small_tick_hit": score.statistics.small_tick_hit,  # 这对 std 而言似乎是多余的
                 "slider_tail_hit": score.statistics.slider_tail_hit,
-                "great": score.statistics.great,
-                "ok": score.statistics.ok,
-                "meh": score.statistics.meh,
-                "miss": score.statistics.miss,
+                # 为了数据美观，300/100/50/0 的值如果为 None，则设置为 0
+                "great": score.statistics.great or 0,
+                "ok": score.statistics.ok or 0,
+                "meh": score.statistics.meh or 0,
+                "miss": score.statistics.miss or 0,
             },
             score.started_at,
         )
@@ -298,29 +264,29 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     is_speed_up: bool
     is_speed_down: bool
     info: str
-    difficulty_rating: float
-    rosu_stars: float
-    rosu_max_combo: int
-    rosu_aim: Optional[float]
-    rosu_aim_difficult_slider_count: Optional[float]
-    rosu_speed: Optional[float]
-    rosu_speed_note_count: Optional[float]
-    rosu_slider_factor: Optional[float]
+    original_difficulty: float
+    b_star_rating: float
+    b_max_combo: int
+    b_aim_difficulty: Optional[float]
+    b_aim_difficult_slider_count: Optional[float]
+    b_speed_difficulty: Optional[float]
+    b_speed_note_count: Optional[float]
+    b_slider_factor: Optional[float]
     # rosu_ar: Optional[float]
-    rosu_aim_top_weighted_slider_factor: Optional[float]
-    rosu_speed_top_weighted_slider_factor: Optional[float]
-    rosu_aim_difficult_strain_count: Optional[float]
-    rosu_speed_difficult_strain_count: Optional[float]
-    rosu_pp_aim: Optional[float]
-    rosu_pp_speed: Optional[float]
-    rosu_pp_accuracy: Optional[float]
-    rosu_pp100_aim: Optional[float]
-    rosu_pp100_speed: Optional[float]
-    rosu_pp100_accuracy: Optional[float]
-    rosu_pp100: float
-    rosu_pp92: float
-    rosu_pp81: float
-    rosu_pp67: float
+    b_aim_top_weighted_slider_factor: Optional[float]
+    b_speed_top_weighted_slider_factor: Optional[float]
+    b_aim_difficult_strain_count: Optional[float]
+    b_speed_difficult_strain_count: Optional[float]
+    pp_aim: Optional[float]
+    pp_speed: Optional[float]
+    pp_accuracy: Optional[float]
+    b_pp_100if_aim: Optional[float]
+    b_pp_100if_speed: Optional[float]
+    b_pp_100if_accuracy: Optional[float]
+    b_pp_100if: float
+    b_pp_92if: float
+    b_pp_81if: float
+    b_pp_67if: float
 
 
 def download_osu(beatmap: Beatmap):
@@ -339,54 +305,22 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     # 如果传递的 score 是完整的，那么截断为 SimpleScoreInfo，这里用 rosu_pp100 来检测
     if hasattr(score, "rosu_pp100"):
         score = SimpleScoreInfo(
-            score.beatmap_id,
-            score.user_id,
-            score.total_score,
+            score.bid,
+            score.user,
+            score.score,
             score.accuracy,
             score.max_combo,
             score.passed,
             None,
-            score.mods,
-            score.ended_at,
+            score._mods,
+            score.ts,
             score.statistics,
-            score.started_at,
+            score.st,
         )
-    mods = score.mods
+    mods = score._mods
     my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
     my_attr.set_mods(mods)
     download_osu(beatmap)
-    # rosu_map: rosu.Beatmap = rosu.Beatmap(path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id))
-    # rosu_diff: rosu.Difficulty = rosu.Difficulty(mods=mods)
-    # rosu_attr: rosu.DifficultyAttributes = rosu_diff.calculate(rosu_map)
-    # perf_got: rosu.Performance = rosu.Performance(
-    #     mods=mods,
-    #     combo=score.max_combo,
-    #     large_tick_hits=score.statistics.get("large_tick_hit", 0),
-    #     small_tick_hits=score.statistics.get("small_tick_hit", 0),
-    #     slider_end_hits=score.statistics.get("slider_tail_hit", 0),
-    #     n300=score.statistics.get("great", 0),
-    #     n100=score.statistics.get("ok", 0),
-    #     n50=score.statistics.get("meh", 0),
-    #     misses=score.statistics.get("miss", 0),
-    #     lazer=bool(score.started_at),
-    # )
-    # perf100: rosu.Performance = rosu.Performance(mods=mods, accuracy=100, hitresult_priority=rosu.HitResultPriority.BestCase)
-    # perf92: rosu.Performance = rosu.Performance(mods=mods, accuracy=92, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    # perf81: rosu.Performance = rosu.Performance(mods=mods, accuracy=81, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    # perf67: rosu.Performance = rosu.Performance(mods=mods, accuracy=67, hitresult_priority=rosu.HitResultPriority.WorstCase)
-    # pp_got_attr = perf_got.calculate(rosu_attr)
-    # pp_aim = pp_got_attr.pp_aim
-    # pp_speed = pp_got_attr.pp_speed
-    # pp_accuracy = pp_got_attr.pp_accuracy
-    # pp100_attr = perf100.calculate(rosu_attr)
-    # pp100_aim = pp100_attr.pp_aim
-    # pp100_speed = pp100_attr.pp_speed
-    # pp100_accuracy = pp100_attr.pp_accuracy
-    # pp100 = pp100_attr.pp
-    # pp92 = perf92.calculate(rosu_attr).pp
-    # pp81 = perf81.calculate(rosu_attr).pp
-    # pp67 = perf67.calculate(rosu_attr).pp
-    # osupp_attr = calculate_osu_difficulty(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
     calculator = calculate_osu_performance(
         beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
         mods=my_attr.osu_tool_mods,
@@ -394,7 +328,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     )
     osupp_attr = next(calculator)
     perf_got_attr = calculator.send(
-        Performance(
+        OsuPerformance(
             combo=score.max_combo,
             misses=score.statistics.get("miss", 0),
             mehs=score.statistics.get("meh"),
@@ -403,10 +337,10 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
             slider_tail_hits=score.statistics.get("slider_tail_hit"),
         ),
     )
-    perf100_attr = calculator.send(Performance())
-    pp92 = calculator.send(Performance(accuracy_percent=92.0))["pp"]
-    pp81 = calculator.send(Performance(accuracy_percent=81.0))["pp"]
-    pp67 = calculator.send(Performance(accuracy_percent=67.0))["pp"]
+    perf100_attr = calculator.send(OsuPerformance())
+    pp92 = calculator.send(OsuPerformance(accuracy_percent=92.0))["pp"]
+    pp81 = calculator.send(OsuPerformance(accuracy_percent=81.0))["pp"]
+    pp67 = calculator.send(OsuPerformance(accuracy_percent=67.0))["pp"]
     pp_got = perf_got_attr["pp"]
     pp_got_aim = perf_got_attr["aim"]
     pp_got_speed = perf_got_attr["speed"]
@@ -417,17 +351,17 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     pp100_accuracy = perf100_attr["accuracy"]
 
     return CompletedSimpleScoreInfo(
-        score.beatmap_id,
-        score.user_id,
-        score.total_score,
+        score.bid,
+        score.user,
+        score.score,
         score.accuracy,
         score.max_combo,
         score.passed,
         pp_got,  # 使用本地计算的 pp
-        score.mods,
-        score.ended_at,
+        score._mods,
+        score.ts,
         score.statistics,
-        score.started_at,
+        score.st,
         my_attr.cs,
         my_attr.hit_window,
         my_attr.preempt,
@@ -448,14 +382,6 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
             beatmap.version,
         ),
         beatmap.difficulty_rating,
-        # rosu_attr.stars,
-        # rosu_attr.max_combo,
-        # rosu_attr.aim,
-        # rosu_attr.aim_difficult_slider_count,
-        # rosu_attr.speed,
-        # rosu_attr.speed_note_count,
-        # rosu_attr.slider_factor,
-        # rosu_attr.ar,
         osupp_attr["star_rating"],
         osupp_attr["max_combo"],
         osupp_attr["aim_difficulty"],
@@ -501,3 +427,17 @@ def calc_star_rating_color(stars: float) -> str:
         interp_g = np.interp(stars, ColorBar.XP.value, ColorBar.YP_G.value)
         interp_b = np.interp(stars, ColorBar.XP.value, ColorBar.YP_B.value)
         return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))
+
+
+def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
+    """对某一列进行正则搜索，有匹配则输出匹配内容，无匹配输出 None"""
+
+    def search_func(text):
+        if pd.isna(text):
+            return None
+        m = re.search(pattern, str(text))
+        # 这里改成 .group(0) 显示匹配内容，或者直接返回 text 显示原行
+        return text if m else None
+
+    data[column] = data[column].apply(search_func)
+    return data
