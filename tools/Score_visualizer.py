@@ -60,9 +60,9 @@ def apply_filter(df: pd.DataFrame) -> pd.DataFrame:
     srl, srh = st.session_state.cat_sr_range
     df1: pd.DataFrame = df[(df["ts"].dt.date > begin_date) & (df["ts"].dt.date < end_date)]
     if srl == 0.0 and srh == 10.0:
-        df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["all_common_mods"])]
+        df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["only_common_mods"])]
     else:
-        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["all_common_mods"])]
+        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["only_common_mods"])]
     if st.session_state.cat_advanced_filter != "":
         df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
     else:

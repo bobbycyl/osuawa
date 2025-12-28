@@ -18,7 +18,7 @@ import numpy as np
 import orjson
 import pandas as pd
 
-assets_dir = os.path.join(os.path.dirname(__file__), "..")
+assets_dir = os.path.join(os.path.dirname(__file__))
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
@@ -35,7 +35,7 @@ from .utils import (
     calc_star_rating_color,
     download_osu,
     CompletedSimpleScoreInfo,
-    get_beatmaps_dict,
+    a_get_beatmaps_dict,
     get_username,
     to_readable_mods,
     SimpleScoreInfo,
@@ -102,6 +102,55 @@ class Osuawa(object):
         "CL",
         "SO",
     }
+    columns = (
+        "bid",
+        "user",
+        "score",
+        "accuracy",
+        "max_combo",
+        "passed",
+        "pp",
+        "_mods",
+        "ts",
+        "statistics",
+        "st",
+        "cs",
+        "hit_window",
+        "preempt",
+        "bpm",
+        "hit_length",
+        "is_nf",
+        "is_hd",
+        "is_high_ar",
+        "is_low_ar",
+        "is_very_low_ar",
+        "is_speed_up",
+        "is_speed_down",
+        "info",
+        "original_difficulty",
+        "b_star_rating",
+        "b_max_combo",
+        "b_aim_difficulty",
+        "b_aim_difficult_slider_count",
+        "b_speed_difficulty",
+        "b_speed_note_count",
+        "b_slider_factor",
+        # "b_approach_rate",
+        "b_aim_top_weighted_slider_factor",
+        "b_speed_top_weighted_slider_factor",
+        "b_aim_difficult_strain_count",
+        "b_speed_difficult_strain_count",
+        "pp_aim",
+        "pp_speed",
+        "pp_accuracy",
+        "b_pp_100if_aim",
+        "b_pp_100if_speed",
+        "b_pp_100if_accuracy",
+        "b_pp_100if",
+        "b_pp_92if",
+        "b_pp_81if",
+        "b_pp_67if",
+    )
 
     def __init__(self, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
         self.api = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
@@ -119,57 +168,8 @@ class Osuawa(object):
         df = pd.DataFrame.from_dict(
             scores,
             orient="index",
+            columns=self.columns,
         )
-        # rename columns
-        df.columns = [
-            "bid",
-            "user",
-            "score",
-            "accuracy",
-            "max_combo",
-            "passed",
-            "pp",
-            "_mods",
-            "ts",
-            "statistics",
-            "st",
-            "cs",
-            "hit_window",
-            "preempt",
-            "bpm",
-            "hit_length",
-            "is_nf",
-            "is_hd",
-            "is_high_ar",
-            "is_low_ar",
-            "is_very_low_ar",
-            "is_speed_up",
-            "is_speed_down",
-            "info",
-            "original_difficulty",
-            "b_star_rating",
-            "b_max_combo",
-            "b_aim_difficulty",
-            "b_aim_difficult_slider_count",
-            "b_speed_difficulty",
-            "b_speed_note_count",
-            "b_slider_factor",
-            # "b_approach_rate",
-            "b_aim_top_weighted_slider_factor",
-            "b_speed_top_weighted_slider_factor",
-            "b_aim_difficult_strain_count",
-            "b_speed_difficult_strain_count",
-            "pp_aim",
-            "pp_speed",
-            "pp_accuracy",
-            "b_pp_100if_aim",
-            "b_pp_100if_speed",
-            "b_pp_100if_accuracy",
-            "b_pp_100if",
-            "b_pp_92if",
-            "b_pp_81if",
-            "b_pp_67if",
-        ]
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["time"] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
         df["pp_pct"] = df["pp"] / df["b_pp_100if"]
@@ -184,19 +184,19 @@ class Osuawa(object):
         df["aim_density_ratio"] = df["b_aim_difficulty"] / np.log1p(df["density"])
         df["speed_density_ratio"] = df["b_speed_difficulty"] / np.log1p(df["density"])
         df["aim_speed_ratio"] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
-        df["score_nf"] = df.apply(lambda row: row["score"] * 2 if row["is_nf"] else row["score"], axis=1)
+        df["score_nf"] = np.where(df["is_nf"], df["score"] * 2, df["score"])
         df["mods"] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
-        df["mods_acronym"] = df["_mods"].apply(lambda x: {mod["acronym"] for mod in x})
-        df["all_common_mods"] = df["mods_acronym"].apply(lambda x: len(x | self.common_mods) == len(self.common_mods))  # if all mods are common mods, all_common_mods = True
-        df["_mods"] = df["_mods"].apply(lambda x: orjson.dumps(x).decode("utf-8"))
+        df["only_common_mods"] = df["_mods"].map(
+            lambda mods: ({m["acronym"] for m in mods} <= self.common_mods),
+        )
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
         return asyncio.run(a_get_user_info(self.api, username))
 
-    def complete_scores_compact(self, scores_compact: dict[str, SimpleScoreInfo]) -> dict[str, CompletedSimpleScoreInfo]:
-        beatmaps_dict = get_beatmaps_dict(self.api, {x.beatmap_id for x in scores_compact.values()})
-        return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].beatmap_id], scores_compact[score_id]) for score_id in scores_compact}
+    async def complete_scores_compact(self, scores_compact: dict[str, SimpleScoreInfo]) -> dict[str, CompletedSimpleScoreInfo]:
+        beatmaps_dict = await a_get_beatmaps_dict(self.api, {x.bid for x in scores_compact.values()})
+        return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
 
     async def a_get_friends(self) -> list[dict[str, Any]]:
         friends = await self.api.friends()
@@ -209,15 +209,15 @@ class Osuawa(object):
     async def a_get_score(self, score_id: int) -> dict[str, CompletedSimpleScoreInfo]:
         score = await self.api.score(score_id)
         score_compact = {str(score.id): SimpleScoreInfo.from_score(score)}
-        return self.complete_scores_compact(score_compact)
+        return await self.complete_scores_compact(score_compact)
 
     def get_score(self, score_id: int) -> pd.DataFrame:
-        return self.create_scores_dataframe(asyncio.run(self.a_get_score(score_id))).T
+        return self.create_scores_dataframe(asyncio.run(self.a_get_score(score_id)))
 
     async def a_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleScoreInfo]:
         user_scores = await self.api.beatmap_user_scores(beatmap, user)
         scores_compact = {str(x.id): SimpleScoreInfo.from_score(x) for x in user_scores}
-        return self.complete_scores_compact(scores_compact)
+        return await self.complete_scores_compact(scores_compact)
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
@@ -266,8 +266,6 @@ class Osuawa(object):
         len_diff = len(recent_scores_compact_diff)
 
         # calculate difficulty attributes
-        bids_diff: set[int] = {x.beatmap_id for x in recent_scores_compact_diff.values()}
-        beatmaps_dict_diff = get_beatmaps_dict(self.api, bids_diff)
         completed_recent_scores_compact_diff: dict[str, CompletedSimpleScoreInfo] = self.complete_scores_compact(recent_scores_compact_diff)
 
         # save
@@ -279,6 +277,8 @@ class Osuawa(object):
             fo_b.write(orjson.dumps({k: astuple(v) for k, v in recent_scores_compact.items()}))
         df_diff = self.create_scores_dataframe(completed_recent_scores_compact_diff)
         # 分块文件
+        if not os.path.exists(user_recent_scores_directory(user)):
+            os.mkdir(user_recent_scores_directory(user))
         df_diff.to_parquet(check_duplicate_filename(os.path.join(user_recent_scores_directory(user), "chunk.parquet")))
         return "%s: local/got/diff: %d/%d/%d" % (
             asyncio.run(get_username(self.api, user)),
@@ -460,7 +460,7 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = get_beatmaps_dict(self.awa.api, {int(x["bid"]) for x in parsed_beatmap_list})
+        beatmaps_dict = asyncio.run(a_get_beatmaps_dict(self.awa.api, {int(x["bid"]) for x in parsed_beatmap_list}))
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]

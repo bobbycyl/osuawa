@@ -12,7 +12,7 @@ from websockets.sync.client import connect
 
 import osuawa
 from osuawa import C
-from osuawa.utils import CompletedSimpleScoreInfo
+from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
 st.session_state.awa: osuawa.Osuawa  # type: ignore
 
@@ -71,7 +71,9 @@ def tosu_main() -> None:
 
         # apply filter
         if st.session_state.rec_tosu_mods != "":
-            df = df[df["mods"].str.contains(st.session_state.rec_tosu_mods)]
+            # df = df[df["mods"].str.contains(st.session_state.rec_tosu_mods)]
+            # 使用 re.search st.session_state.rec_tosu_mods，如果搜索得到，就显示
+            df = regex_search_column(df, "mods", st.session_state.rec_tosu_mods)
         if st.session_state.rec_tosu_best:
             # select scores with best pp by user_id
             df = df.groupby("user").first()
@@ -90,13 +92,13 @@ def tosu_main() -> None:
 st.markdown(_("## tosu Panel"))
 st.text_input("tosu URL", value="ws://127.0.0.1:24050/", key="rec_tosu_url")
 with st.expander(_("table options")):
-    st.text_input("mods contains", key="rec_tosu_mods")
+    st.text_input(_("mods filter (regex)"), key="rec_tosu_mods")
     st.toggle(_("best only"), key="rec_tosu_best")
     st.toggle(_("prettify"), value=True, key="rec_tosu_prettify")
 with st.form("quickly add friend ids"):
     quickly_selected_friend_usernames: list[str] = st.multiselect(_("friends"), list(friends().values()))
     st.form_submit_button(_("submit"))
-st.text_input(_("manually add user ids"), value="[%d]" % st.session_state.user_id, key="rec_user_ids")
+st.text_input(_("manually add user ids"), value="[%d]" % st.session_state.user, key="rec_user_ids")
 try:
     tosu_main()
 except ConnectionError:
@@ -111,17 +113,17 @@ st.number_input(_("Limit"), min_value=1, max_value=50, value=5, key="rec_limit")
 w = st.text("")
 user_scores_current = asyncio.run(
     st.session_state.awa.api.user_scores(
-        user_id=st.session_state.user_id,
+        user_id=st.session_state.user,
         type="recent",
         mode=st.session_state.rec_mode,
         include_fails=True,
         limit=st.session_state.rec_limit,
-    )
+    ),
 )
 st.write(user_scores_current)
 with threading.Lock():
     with open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w") as fo:
-        fo.write("\n".join([f"{score.beatmap_id}" for score in user_scores_current]))
+        fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
 
 if st.button(_("clear all caches")):
     st.cache_data.clear()
