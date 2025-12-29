@@ -10,6 +10,7 @@ pandas
 pillow
 plotly
 py7zr
+SQLAlchemy==1.4.0
 scipy
 slider
 statsmodels

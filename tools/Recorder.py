@@ -29,10 +29,10 @@ async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame
     async with asyncio.TaskGroup() as tg:
         for user_id in ids:
             tasks.append(tg.create_task(st.session_state.awa.a_get_user_beatmap_scores(beatmap, user_id)))
-    scores: dict[str, CompletedSimpleScoreInfo] = {}
+    scores_compact: dict[str, CompletedSimpleScoreInfo] = {}
     for task in tasks:
-        scores = {**scores, **task.result()}
-    return st.session_state.awa.create_scores_dataframe(scores)
+        scores_compact.update(task.result())
+    return st.session_state.awa.create_scores_dataframe(scores_compact, True)
 
 
 @st.cache_data

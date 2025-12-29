@@ -1,7 +1,7 @@
 import asyncio
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum, unique
 from math import log10, sqrt
@@ -212,6 +212,12 @@ class SimpleOsuDifficultyAttribute(object):
 
 @dataclass(slots=True)
 class SimpleScoreInfo(object):
+    """
+    从在线成绩简化而来，只保留感兴趣的字段，json 里保存这些基本字段
+
+    这里的 pp 在本地计算后应被覆盖
+    """
+
     bid: int
     user: int
     score: int
@@ -251,6 +257,14 @@ class SimpleScoreInfo(object):
 
 @dataclass(slots=True)
 class CompletedSimpleScoreInfo(SimpleScoreInfo):
+    """
+    用于记录获取完在线成绩后，需要本地补充计算的谱面、模组、成绩相关字段，parquet 里存储的就是这些字段，在必要的时候才需要重算
+
+    ⚠ 父类中的 pp 在重算时也需要考虑 ⚠
+
+    `calc_beatmap_attributes` 应该能够妥善处理这些情况
+    """
+
     cs: float
     hit_window: float
     preempt: float
@@ -272,7 +286,6 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     b_speed_difficulty: Optional[float]
     b_speed_note_count: Optional[float]
     b_slider_factor: Optional[float]
-    # rosu_ar: Optional[float]
     b_aim_top_weighted_slider_factor: Optional[float]
     b_speed_top_weighted_slider_factor: Optional[float]
     b_aim_difficult_strain_count: Optional[float]
@@ -287,6 +300,44 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     b_pp_92if: float
     b_pp_81if: float
     b_pp_67if: float
+
+
+@dataclass(slots=True)
+class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
+    """用于记录在生成 DataFrame 后计算的字段，使用向量化加速批量计算是个好选择
+
+    所有新增的参数都可以追加到这里
+
+    修改 `Osuawa.load_extended_scores_dataframe_with_timezone` 以匹配这些内容，或对父类字段进行二次处理（如时区显示等）
+    """
+
+    time: int
+    pp_pct: Optional[float]
+    pp_aim_pct: Optional[float]
+    pp_speed_pct: Optional[float]
+    pp_accuracy_pct: Optional[float]
+    pp_92pct: Optional[float]
+    pp_81pct: Optional[float]
+    pp_67pct: Optional[float]
+    combo_pct: Optional[float]
+    density: Optional[float]
+    aim_density_ratio: Optional[float]
+    speed_density_ratio: Optional[float]
+    aim_speed_ratio: Optional[float]
+    score_nf: int
+    mods: str
+    only_common_mods: bool
+
+
+def create_scores_dataframe(scores_compact: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
+    df = pd.DataFrame.from_dict(
+        scores_compact,
+        orient="index",
+        columns=[f.name for f in fields(CompletedSimpleScoreInfo)],
+    )
+    df.reset_index(inplace=True)
+    df.rename(columns={"index": "score_id"}, inplace=True)
+    return df
 
 
 def download_osu(beatmap: Beatmap):
@@ -317,9 +368,8 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
             score.statistics,
             score.st,
         )
-    mods = score._mods
     my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
-    my_attr.set_mods(mods)
+    my_attr.set_mods(score._mods)
     download_osu(beatmap)
     calculator = calculate_osu_performance(
         beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
@@ -351,6 +401,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     pp100_accuracy = perf100_attr["accuracy"]
 
     return CompletedSimpleScoreInfo(
+        # 父类字段，除了 pp 全部照抄
         score.bid,
         score.user,
         score.score,
@@ -362,6 +413,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
         score.ts,
         score.statistics,
         score.st,
+        # 追加字段
         my_attr.cs,
         my_attr.hit_window,
         my_attr.preempt,

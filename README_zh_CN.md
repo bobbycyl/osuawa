@@ -2,7 +2,7 @@
 
 ## 简介
 
-我用到的和 osu! 相关的工具（支持 Lazer 数据！）
+我用到的和 osu! 主模式相关的工具（支持 Lazer 数据！）
 
 现已上线工具：查成分、做课题和看记录
 
@@ -49,7 +49,7 @@ dotnet build -c Release
 
 ### 配置设置
 
-1. 从 [这里](https://osu.ppy.sh/home/account/edit) 获取你的 osu! 开放授权客户端。
+1. 从 [官网](https://osu.ppy.sh/home/account/edit) 获取你的 osu! 开放授权客户端。
    端口设置须与 `./.streamlit/config.toml` 中的保持一致。
 
 2. 创建并编辑 `./.streamlit/secrets.toml`，可参考 [示例文件](./.streamlit/secrets.toml)
@@ -59,7 +59,7 @@ dotnet build -c Release
 ### 开始使用吧
 
 ```shell
-# 第一次使用建议调用 run.py 以自动补全所需资源 
+# 第一次使用建议调用 run.py 以自动补全所需资源
 python run.py
 # 如果是经验丰富的老手，可以用 streamlit run app.py 以应用更多启动设置
 streamlit run --server.enableCORS=false --server.enableXsrfProtection=false app.py

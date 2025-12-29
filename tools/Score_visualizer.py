@@ -9,7 +9,7 @@ from scipy import stats
 
 from osuawa import C
 from osuawa.components import memorized_multiselect, memorized_selectbox
-from osuawa.utils import calc_bin_size, user_recent_scores_directory
+from osuawa.utils import calc_bin_size, regex_search_column, user_recent_scores_directory
 
 if "wide_layout" in st.session_state:
     st.set_page_config(page_title=_("Score visualizer") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
@@ -19,6 +19,7 @@ with st.sidebar:
     st.toggle(_("wide page layout"), key="wide_layout", value=False)
 all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RECENT_SCORES.value))]
 user = st.selectbox(_("user"), all_users)
+st.date_input(_("date range"), [pd.Timestamp.today() - pd.Timedelta(days=30), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
 
 THEME_COLOR_BLUE = "#4C95D9"
 THEME_COLOR_RED = "#FF6A6A"
@@ -56,10 +57,10 @@ def calc_pp_overall_count(df: pd.DataFrame, tag: Optional[str] = None) -> str:
 
 
 def apply_filter(df: pd.DataFrame) -> pd.DataFrame:
-    begin_date, end_date = st.session_state.cat_date_range
     srl, srh = st.session_state.cat_sr_range
-    df1: pd.DataFrame = df[(df["ts"].dt.date > begin_date) & (df["ts"].dt.date < end_date)]
+    df1 = regex_search_column(df, "mods", st.session_state.rec_tosu_mods)
     if srl == 0.0 and srh == 10.0:
+        # 0 - 10 视为无限制
         df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["only_common_mods"])]
     else:
         df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["only_common_mods"])]
@@ -113,7 +114,8 @@ def generate_stats_dataframe(df: pd.DataFrame, indexes: list[str]) -> pd.DataFra
 if not os.path.exists(user_recent_scores_directory(user)):
     st.error(_("user not found"))
     st.stop()
-df = pd.read_parquet(user_recent_scores_directory(user))
+begin_date, end_date = st.session_state.cat_date_range
+df = pd.read_parquet(user_recent_scores_directory(user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)])
 if len(df) == 0:
     st.error(_("no scores found"))
     st.stop()
@@ -141,7 +143,7 @@ got/100/92/81/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
     )
 
 with st.expander(_("Filtering")):
-    st.date_input(_("date range"), [df["ts"].min() - pd.Timedelta(days=1), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
+    st.text_input(_("mods filter (regex)"), key="cat_mods")
     st.slider(_("star rating"), 0.0, 10.0, (1.5, 8.5), key="cat_sr_range")
     st.checkbox(_("passed only"), key="cat_passed")
     st.checkbox(_("common mods only"), key="cat_acm")
@@ -178,7 +180,7 @@ df_o = apply_filter(df)
 with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("compared to"), all_users)
-    df_c = apply_filter(pd.read_parquet(user_recent_scores_directory(user)))
+    df_c = apply_filter(pd.read_parquet(user_recent_scores_directory(comp_user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)]))
     indexes = [
         "accuracy",
         "hit_window",
@@ -266,7 +268,7 @@ with st.container(border=True):
 
 with st.container(border=True):
     st.markdown(_("## Skills Analysis"))
-    enable_complex = st.checkbox(_("more complex charts"), key="cat_enable_complex")
+    enable_complex = st.checkbox(_("more complex charts"))
     try:
         if enable_complex:
             col1, col2 = st.columns(2)

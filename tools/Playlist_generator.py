@@ -52,7 +52,7 @@ else:
     else:
         table = generate_playlist(playlist_filename)
         for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
-            st.image(os.path.join(covers_dir, pic), caption=pic, use_container_width=True)
+            st.image(os.path.join(covers_dir, pic), caption=pic, width="stretch")
     st.divider()
     convert_df(table, csv_filename)
     if os.path.exists("./playlists/style.css"):
