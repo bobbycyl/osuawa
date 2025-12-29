@@ -4,7 +4,7 @@
 
 ## Introduction
 
-just some useful tools for osu! (Lazer data supported!)
+just some useful tools for osu! standard (Lazer data supported!)
 
 current tools: Score Visualizer, Playlist Generator and Recorder
 
@@ -51,11 +51,11 @@ dotnet build -c Release
 
 ### Configure the settings
 
-1. Acquire your osu! OAuth client from [here](https://osu.ppy.sh/home/account/edit).
+1. Acquire your osu! OAuth client from [the official site](https://osu.ppy.sh/home/account/edit).
    The port should match which set in `./.streamlit/config.toml`.
 
 2. Create a file named `./.streamlit/secrets.toml` and edit it.
-   You can find an example [here](./.streamlit/secrets.toml)
+   You can find [an example here](./.streamlit/secrets.toml)
 
 3. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
 

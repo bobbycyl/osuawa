@@ -45,6 +45,12 @@ if "translate" not in st.session_state:
     if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
         os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
     st.session_state._uni_lang_value = convert_locale(st.context.locale)
+    # 数据库需要以下表和字段
+    # 1. 表 BEATMAP，字段固定为 BID,SID,INFO,SLOT,SR,BPM,HIT_LENGTH,MAX_COMBO,CS,AR,OD,MODS,NOTES （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + Mods 作为主键
+    conn = st.connection("osuawa", type="sql")
+    with conn.session as s:
+        s.execute("CREATE TABLE IF NOT EXISTS BEATMAP(BID INT, SID INT, INFO TEXT, SLOT TEXT, SR REAL, BPM REAL, HIT_LENGTH INT, MAX_COMBO INT, CS REAL, AR REAL, OD REAL, MODS TEXT, NOTES TEXT, PRIMARY KEY (BID, MODS));")
+        s.commit()
 
 # noinspection PyUnresolvedReferences
 builtins.__dict__["_"] = gettext_translate

@@ -14,3 +14,4 @@
 /.streamlit/*.pickle
 /.streamlit/secrets.toml
 qodana.yaml
+osuawa.db

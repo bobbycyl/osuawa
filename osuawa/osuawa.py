@@ -8,7 +8,7 @@ import platform
 import threading
 import typing
 from asyncio import Task
-from dataclasses import astuple
+from dataclasses import astuple, fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
@@ -29,6 +29,7 @@ from fontfallback import writing
 from ossapi import Grant, OssapiAsync, Domain, Scope, Score, User, GameMode, Beatmap
 
 from .utils import (
+    ExtendedSimpleScoreInfo,
     SimpleOsuDifficultyAttribute,
     calc_beatmap_attributes,
     calc_positive_percent,
@@ -102,55 +103,6 @@ class Osuawa(object):
         "CL",
         "SO",
     }
-    columns = (
-        "bid",
-        "user",
-        "score",
-        "accuracy",
-        "max_combo",
-        "passed",
-        "pp",
-        "_mods",
-        "ts",
-        "statistics",
-        "st",
-        "cs",
-        "hit_window",
-        "preempt",
-        "bpm",
-        "hit_length",
-        "is_nf",
-        "is_hd",
-        "is_high_ar",
-        "is_low_ar",
-        "is_very_low_ar",
-        "is_speed_up",
-        "is_speed_down",
-        "info",
-        "original_difficulty",
-        "b_star_rating",
-        "b_max_combo",
-        "b_aim_difficulty",
-        "b_aim_difficult_slider_count",
-        "b_speed_difficulty",
-        "b_speed_note_count",
-        "b_slider_factor",
-        # "b_approach_rate",
-        "b_aim_top_weighted_slider_factor",
-        "b_speed_top_weighted_slider_factor",
-        "b_aim_difficult_strain_count",
-        "b_speed_difficult_strain_count",
-        "pp_aim",
-        "pp_speed",
-        "pp_accuracy",
-        "b_pp_100if_aim",
-        "b_pp_100if_speed",
-        "b_pp_100if_accuracy",
-        "b_pp_100if",
-        "b_pp_92if",
-        "b_pp_81if",
-        "b_pp_67if",
-    )
 
     def __init__(self, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
         self.api = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
@@ -164,29 +116,39 @@ class Osuawa(object):
         own_data: User = asyncio.run(self.api.get_me())
         return own_data.id, own_data.username
 
-    def create_scores_dataframe(self, scores: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
+    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo], compute_extended: bool = True) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
-            scores,
+            scores_compact,
             orient="index",
-            columns=self.columns,
+            columns=[f.name for f in fields(CompletedSimpleScoreInfo)],
         )
+        df.reset_index(inplace=True)
+        df.rename(columns={"index": "score_id"}, inplace=True)
+        if compute_extended:
+            df = self.compute_extended_scores_dataframe_with_timezone(df)
+        return df
+
+    def compute_extended_scores_dataframe_with_timezone(self, data: pd.DataFrame) -> pd.DataFrame:
+        df = data.copy()
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
-        df["time"] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
-        df["pp_pct"] = df["pp"] / df["b_pp_100if"]
-        df["pp_aim_pct"] = df["pp_aim"] / df["b_pp_100if_aim"]
-        df["pp_speed_pct"] = df["pp_speed"] / df["b_pp_100if_speed"]
-        df["pp_accuracy_pct"] = df["pp_accuracy"] / df["b_pp_100if_accuracy"]
-        df["pp_92pct"] = df["pp"] / df["b_pp_92if"]
-        df["pp_81pct"] = df["pp"] / df["b_pp_81if"]
-        df["pp_67pct"] = df["pp"] / df["b_pp_67if"]
-        df["combo_pct"] = df["max_combo"] / df["b_max_combo"]
-        df["density"] = df["b_max_combo"] / df["hit_length"]
-        df["aim_density_ratio"] = df["b_aim_difficulty"] / np.log1p(df["density"])
-        df["speed_density_ratio"] = df["b_speed_difficulty"] / np.log1p(df["density"])
-        df["aim_speed_ratio"] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
-        df["score_nf"] = np.where(df["is_nf"], df["score"] * 2, df["score"])
-        df["mods"] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
-        df["only_common_mods"] = df["_mods"].map(
+        df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
+        ec = ExtendedSimpleScoreInfo.__slots__
+        df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
+        df[ec[1]] = df["pp"] / df["b_pp_100if"]
+        df[ec[2]] = df["pp_aim"] / df["b_pp_100if_aim"]
+        df[ec[3]] = df["pp_speed"] / df["b_pp_100if_speed"]
+        df[ec[4]] = df["pp_accuracy"] / df["b_pp_100if_accuracy"]
+        df[ec[5]] = df["pp"] / df["b_pp_92if"]
+        df[ec[6]] = df["pp"] / df["b_pp_81if"]
+        df[ec[7]] = df["pp"] / df["b_pp_67if"]
+        df[ec[8]] = df["max_combo"] / df["b_max_combo"]
+        df[ec[9]] = df["b_max_combo"] / df["hit_length"]
+        df[ec[10]] = df["b_aim_difficulty"] / np.log1p(df["density"])
+        df[ec[11]] = df["b_speed_difficulty"] / np.log1p(df["density"])
+        df[ec[12]] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
+        df[ec[13]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
+        df[ec[14]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
+        df[ec[15]] = df["_mods"].map(
             lambda mods: ({m["acronym"] for m in mods} <= self.common_mods),
         )
         return df
@@ -266,7 +228,7 @@ class Osuawa(object):
         len_diff = len(recent_scores_compact_diff)
 
         # calculate difficulty attributes
-        completed_recent_scores_compact_diff: dict[str, CompletedSimpleScoreInfo] = self.complete_scores_compact(recent_scores_compact_diff)
+        completed_recent_scores_compact_diff: dict[str, CompletedSimpleScoreInfo] = asyncio.run(self.complete_scores_compact(recent_scores_compact_diff))
 
         # save
         # json 仅保存 SimpleScoreInfo 的信息，而 parquet 保存完整的 CompletedScoreInfo 的信息
@@ -275,7 +237,7 @@ class Osuawa(object):
             "wb",
         ) as fo_b:
             fo_b.write(orjson.dumps({k: astuple(v) for k, v in recent_scores_compact.items()}))
-        df_diff = self.create_scores_dataframe(completed_recent_scores_compact_diff)
+        df_diff = self.create_scores_dataframe(completed_recent_scores_compact_diff, False)
         # 分块文件
         if not os.path.exists(user_recent_scores_directory(user)):
             os.mkdir(user_recent_scores_directory(user))
