@@ -581,7 +581,7 @@ class OsuPlaylist(object):
           class="relative h-32 rounded-lg overflow-hidden shadow-lg transition-all duration-300 transform group-hover:rounded-b-none group-hover:h-64 group-hover:-translate-y-3">
           <img src="{"./" + (os.path.relpath(bg_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")}" alt="{html.escape(b.beatmapset().artist)} - {html.escape(b.beatmapset().title)} ({html.escape(b.beatmapset().creator)}) [{html.escape(b.version)}]"
             class="w-full h-full object-cover brightness-90 dark:brightness-50 blur-0 contrast-100 scale-100 group-hover:brightness-50 dark:group-hover:brightness-50 group-hover:blur-sm group-hover:contrast-125 group-hover:scale-105 transition-all duration-300" />
-          <div class="absolute inset-0 p-4 flex flex-col justify-between">
+          <div class="absolute top-0 left-0 right-0 p-4 flex flex-col">
             <div class="flex justify-between items-start">
               <div class="px-3 py-1 rounded-full text-white font-semibold shadow" style="background-color: {calc_star_rating_color(stars1)};">
                 <div style="color: {cover.stars_text_color}; opacity: {'1' if cover.is_high_stars else '0.8'}; text-shadow: 0px 0.5px 1.5px rgba(185, 185, 185, 0.5);"><i class="fas fa-star" {'' if cover.is_high_stars else 'style="color: #0f172a;"'}></i>{cover.stars.replace("󰓎", "")}</div>
@@ -635,7 +635,7 @@ class OsuPlaylist(object):
                     </div>
                   </div>
                 </div>
-                <div class="text-xs/6 w-full grid grid-cols-3 gap-6 pb-2">
+                <div class="text-xs/6 w-full grid grid-cols-3 gap-6">
                   <div>
                     <div class="flex items-center justify-between opacity-[88%]"><img src="./images/bpm.svg" class="w-4"/>
                       <div class="flex-1 font-semibold ml-2">{cover.bpm}</div>
@@ -656,7 +656,7 @@ class OsuPlaylist(object):
             </div>
           </div>
         </div>
-        <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-7 notes">
+        <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-10 notes">
           <p class="text-sm flex justify-between items-end">
             <span class="w-fit pr-2">{notes}{extra_notes}</span>
             <span class="w-12 justify-end items-end space-x-2">
