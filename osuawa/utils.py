@@ -1,10 +1,11 @@
 import asyncio
 import os
 import re
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, unique
 from math import log10, sqrt
+from random import randint
 from threading import BoundedSemaphore
 from time import sleep
 from typing import Any, Optional
@@ -16,10 +17,11 @@ from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 r
 from osupp.core import init_osu_tools
 
 init_osu_tools(os.path.join(os.path.dirname(__file__), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
-from osupp.difficulty import calculate_osu_difficulty
+from osupp.core import OsuRuleset
+from osupp.difficulty import calculate_osu_difficulty, get_all_mods
 from osupp.performance import OsuPerformance, calculate_osu_performance
 
-assert calculate_osu_difficulty
+assert calculate_osu_difficulty  # 避免自动优化 import 把这个去掉了
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",
@@ -28,6 +30,8 @@ headers = {
 sem = BoundedSemaphore()
 
 LANGUAGES = ["en_US", "zh_CN"]
+
+all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
 
 
 @unique
@@ -57,6 +61,45 @@ class ColorBar(Enum):
     YP_R = [66, 79, 79, 124, 246, 255, 255, 198, 101, 24, 0]
     YP_G = [144, 192, 255, 255, 240, 128, 78, 69, 99, 21, 0]
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
+
+
+def get_an_osu_meme() -> str:
+    memes = [
+        _("Loading... Keep your cursor steady."),
+        _("PP has gone."),
+        _("Attempting to parse a 400pp jump map.."),
+        _("Who moved my mouse sensitivity?"),
+        _("Don’t take it too seriously, this is just a toy."),
+        _("Re-timing the map... No wait, it’s perfectly aligned this time!"),
+        _("I've got a slider break!"),
+        _("Shh, don’t tell anyone what this tool is built with."),
+        _("Calculating how long your wrist can last."),
+        _("This loading bar moves slower than a 128 BPM song."),
+        _("Tip: You can nod your head to the beat even if the loading bar is stuck."),
+        _("I want a rhythm-pulsing progress bar like Lazer’s."),
+        _("Pooling is a headache."),
+        _("Loading Stellar Railway... Wait, I meant star rating."),
+        _("My ACC is expanding and contracting with temperature."),
+        _("Generating fake SS screenshots..."),
+        _("Loading miss hit sound... 404 Not Found."),
+        _("How is your HP thicker than MMORPG bosses?"),
+        _("I'm not a fan of DT. It's too fast."),
+        _("Calculating how much patience you need."),
+        _('Loading "my hand slipped" excuse generator'),
+        _('Generating fake "this is my first time playing" claims.'),
+        _("Loading C#, Rust, JavaScript and so on..."),
+        _("Calculating how much time you have wasted."),
+        _("Sleeping..."),
+        _("Refactoring spaghetti code? No, just piling it up."),
+        _("If you see this tip for more than 5 seconds, the thread is probably dead."),
+        _("There are no bugs, only undocumented features."),
+        _("The loading bar is actually random length, stop staring at it."),
+        _("If I told you it’s 99% loaded, would you believe me?"),
+        _("Analyzing your play history… seems you like Tech maps?"),
+        _("Stop looking at the Accuracy, enjoy the music!"),
+        _("Loading… (This tip is also part of the loading process)"),
+    ]
+    return memes[randint(0, len(memes) - 1)]
 
 
 def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
@@ -157,10 +200,28 @@ class SimpleOsuDifficultyAttribute(object):
     def set_mods(self, mods: list):
         mods_dict = {}  # {acronym, settings}
         for mod in mods:
+            acronym = mod["acronym"]
+            if acronym not in all_osu_mods:
+                raise ValueError("unknown mod '%s'" % acronym)
             _settings = mod.get("settings", {})
-            mods_dict[mod["acronym"]] = _settings
-            self.osu_tool_mods.append(mod["acronym"])
+            mods_dict[acronym] = _settings
+            self.osu_tool_mods.append(acronym)
             for setting_name, setting_value in _settings.items():
+                if setting_name not in all_osu_mods[acronym]:
+                    raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
+                expected_type: type[str | float | bool] = all_osu_mods[acronym][setting_name]
+                if not isinstance(setting_value, expected_type):
+                    raise ValueError(
+                        "setting '%s' for mod '%s' should be of type '%s' (got '%s')"
+                        % (
+                            setting_name,
+                            acronym,
+                            expected_type.__name__,
+                            type(setting_value).__name__,
+                        ),
+                    )
+                if expected_type is bool:
+                    setting_value = "true" if setting_value else "false"
                 self.osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
         if "NF" in mods_dict:
             self.is_nf = True
@@ -262,7 +323,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
 
     ⚠ 父类中的 pp 在重算时也需要考虑 ⚠
 
-    `calc_beatmap_attributes` 应该能够妥善处理这些情况
+    ``calc_beatmap_attributes`` 应该能够妥善处理这些情况
     """
 
     cs: float
@@ -308,7 +369,7 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
 
     所有新增的参数都可以追加到这里
 
-    修改 `Osuawa.load_extended_scores_dataframe_with_timezone` 以匹配这些内容，或对父类字段进行二次处理（如时区显示等）
+    修改 ``Osuawa.load_extended_scores_dataframe_with_timezone`` 以匹配这些内容，或对父类字段进行二次处理（如时区显示等）
     """
 
     time: int
@@ -329,17 +390,6 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     only_common_mods: bool
 
 
-def create_scores_dataframe(scores_compact: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
-    df = pd.DataFrame.from_dict(
-        scores_compact,
-        orient="index",
-        columns=[f.name for f in fields(CompletedSimpleScoreInfo)],
-    )
-    df.reset_index(inplace=True)
-    df.rename(columns={"index": "score_id"}, inplace=True)
-    return df
-
-
 def download_osu(beatmap: Beatmap):
     need_download = False
     if not "%s.osu" % beatmap.id in os.listdir(C.BEATMAPS_CACHE_DIRECTORY.value):
@@ -353,8 +403,8 @@ def download_osu(beatmap: Beatmap):
 
 def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
-    # 如果传递的 score 是完整的，那么截断为 SimpleScoreInfo，这里用 rosu_pp100 来检测
-    if hasattr(score, "rosu_pp100"):
+    # 如果传递的 score 是完整的，那么截断为 SimpleScoreInfo
+    if hasattr(score, "b_pp100"):
         score = SimpleScoreInfo(
             score.bid,
             score.user,
@@ -481,6 +531,30 @@ def calc_star_rating_color(stars: float) -> str:
         return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))
 
 
+def get_size_and_count(path):
+    """获取文件或目录的总大小和文件总数"""
+    if os.path.isfile(path):
+        return os.path.getsize(path), 1
+    elif os.path.isdir(path):
+        total_size = 0
+        total_count = 0
+        for root, dirs, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(root, filename)
+                total_size += os.path.getsize(filepath)
+                total_count += 1
+        return total_size, total_count
+    return 0, 0
+
+
+def format_size(size_bytes):
+    for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} PiB"
+
+
 def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
     """对某一列进行正则搜索，有匹配则输出匹配内容，无匹配输出 None"""
 
@@ -493,3 +567,41 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
 
     data[column] = data[column].apply(search_func)
     return data
+
+
+def generate_mods_from_lines(slot: str, lines: str):
+    # slot 本身自带一个 mod
+    auto_recognized_mod = slot[:2]
+    # mod_settings 是一个多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
+    # 最终期望得到：[{"acronym":<acronym>,"settings":{<mod_setting>:<value>}}]，如果不存在 settings，则不需要 settings 键
+    # 先转换为 {acronym: [{mod_setting: value}]}，最后检测如果 settings 为空则不要添加该键
+    mods_dict: dict[str, dict[str, Any]] = {auto_recognized_mod: {}}
+
+    for line in lines.splitlines():
+        if line.strip():
+            line_split = line.split("=", 1)
+            if len(line_split) == 1:  # mod only
+                mods_dict[line_split[0]] = mods_dict.get(line_split[0], {})
+            else:  # mod with settings
+                # 如果要设置 mod 参数，原则上要求 mod 本身已经加入
+                # 但是为了方便起见，如果 mod 不存在，但又要求设置参数，则自动添加该 mod
+                acronym_n_setting, value = line_split
+                acronym, mod_setting = acronym_n_setting.split("_", 1)
+                if acronym not in mods_dict:
+                    mods_dict[acronym] = {}
+                # 这里的 value 默认只是字符串
+                # 这里不对输入的 mod_setting 类型进行检查，只进行类型推断转换
+                # 实际上，mod_setting 一共有三种可能的类型，分别是字符串型、数字型、逻辑型
+                # 这里与 osu_tools 不同的是，强制要求逻辑型用全小写的 true 或 false 表示
+                if value == "true":
+                    value = True
+                elif value == "false":
+                    value = False
+                else:
+                    try:
+                        value = float(value)
+                    except ValueError:
+                        pass
+                mods_dict[acronym].update({mod_setting: value})
+
+    return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]

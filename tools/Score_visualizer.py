@@ -8,15 +8,10 @@ from plotly import figure_factory as ff
 from scipy import stats
 
 from osuawa import C
-from osuawa.components import memorized_multiselect, memorized_selectbox
+from osuawa.components import init_page_layout, memorized_multiselect, memorized_selectbox
 from osuawa.utils import calc_bin_size, regex_search_column, user_recent_scores_directory
 
-if "wide_layout" in st.session_state:
-    st.set_page_config(page_title=_("Score visualizer") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
-else:
-    st.set_page_config(page_title=_("Score visualizer") + " - osuawa")
-with st.sidebar:
-    st.toggle(_("wide page layout"), key="wide_layout", value=False)
+init_page_layout(_("Score visualizer") + " - osuawa")
 all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RECENT_SCORES.value))]
 user = st.selectbox(_("user"), all_users)
 st.date_input(_("date range"), [pd.Timestamp.today() - pd.Timedelta(days=30), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
@@ -27,19 +22,19 @@ CO = THEME_COLOR_RED
 CC = THEME_COLOR_BLUE
 
 
-def calc_pp_overall_main(df: pd.DataFrame, tag: Optional[str] = None) -> str:
+def calc_pp_overall_main(data: pd.DataFrame, tag: Optional[str] = None) -> str:
     if tag is None:
-        df_tag = df
+        df_tag = data
     else:
-        df_tag = df[df[tag]]
-    return "%.2f (%.2f%%)" % (df_tag["pp"].sum(), df_tag["pp"].sum() / df["pp"].sum() * 100)
+        df_tag = data[data[tag]]
+    return "%.2f (%.2f%%)" % (df_tag["pp"].sum(), df_tag["pp"].sum() / data["pp"].sum() * 100)
 
 
-def calc_pp_overall_if(df: pd.DataFrame, tag: Optional[str] = None) -> str:
+def calc_pp_overall_if(data: pd.DataFrame, tag: Optional[str] = None) -> str:
     if tag is None:
-        df_tag = df
+        df_tag = data
     else:
-        df_tag = df[df[tag]]
+        df_tag = data[data[tag]]
     got_pp = df_tag["pp"].sum()
     pp_100if = df_tag["b_pp_100if"].sum()
     pp_92if = df_tag["b_pp_92if"].sum()
@@ -48,22 +43,22 @@ def calc_pp_overall_if(df: pd.DataFrame, tag: Optional[str] = None) -> str:
     return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (got_pp / pp_100if * 100, got_pp / pp_92if * 100, got_pp / pp_81if * 100, got_pp / pp_67if * 100)
 
 
-def calc_pp_overall_count(df: pd.DataFrame, tag: Optional[str] = None) -> str:
+def calc_pp_overall_count(data: pd.DataFrame, tag: Optional[str] = None) -> str:
     if tag is None:
-        df_tag = df
+        df_tag = data
     else:
-        df_tag = df[df[tag]]
-    return "%d (%.2f%%)" % (len(df_tag), len(df_tag) / len(df) * 100)
+        df_tag = data[data[tag]]
+    return "%d (%.2f%%)" % (len(df_tag), len(df_tag) / len(data) * 100)
 
 
-def apply_filter(df: pd.DataFrame) -> pd.DataFrame:
+def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
     srl, srh = st.session_state.cat_sr_range
-    df1 = regex_search_column(df, "mods", st.session_state.rec_tosu_mods)
+    df1 = regex_search_column(data, "mods", st.session_state.rec_tosu_mods)
     if srl == 0.0 and srh == 10.0:
         # 0 - 10 视为无限制
-        df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["only_common_mods"])]
+        df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | data["passed"]) & ((not st.session_state.cat_acm) | data["only_common_mods"])]
     else:
-        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df["passed"]) & ((not st.session_state.cat_acm) | df["only_common_mods"])]
+        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | data["passed"]) & ((not st.session_state.cat_acm) | data["only_common_mods"])]
     if st.session_state.cat_advanced_filter != "":
         df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
     else:
@@ -71,8 +66,8 @@ def apply_filter(df: pd.DataFrame) -> pd.DataFrame:
     return df3
 
 
-def calc_statistics(df: pd.DataFrame, column: str) -> tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, int]:
-    data = df[column]
+def calc_statistics(data: pd.DataFrame, column: str) -> tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, int]:
+    data = data[column]
     # table: | index | min | Q1 | median | Q3 | max | mean | winsor_mean | std | var | CV | skew | kurtosis | 95% CI L | 95% CI U | N |
     data_se = data.sem()
     data_df = len(data) - 1
@@ -101,10 +96,10 @@ def calc_statistics(df: pd.DataFrame, column: str) -> tuple[float, float, float,
     )
 
 
-def generate_stats_dataframe(df: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
+def generate_stats_dataframe(data: pd.DataFrame, indexes: list[str]) -> pd.DataFrame:
     index_records = {}
     for index in indexes:
-        index_records[index] = calc_statistics(df, index)
+        index_records[index] = calc_statistics(data, index)
     df_stats = pd.DataFrame.from_dict(index_records, orient="index", columns=("min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "_CIL", "_CIU", "N"))
     df_stats["95% CI"] = df_stats.apply(lambda row: f"[{row['_CIL']:.2f}, {row['_CIU']:.2f}]", axis=1)
     df_stats = df_stats[["min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "95% CI", "N"]]
@@ -181,7 +176,7 @@ with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("compared to"), all_users)
     df_c = apply_filter(pd.read_parquet(user_recent_scores_directory(comp_user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)]))
-    indexes = [
+    stats_indexes = [
         "accuracy",
         "hit_window",
         "preempt",
@@ -209,13 +204,13 @@ with st.container(border=True):
         "aim_speed_ratio",
         "score_nf",
     ]
-    df_o_stats = generate_stats_dataframe(df_o, indexes)
-    df_c_stats = generate_stats_dataframe(df_c, indexes)
+    df_o_stats = generate_stats_dataframe(df_o, stats_indexes)
+    df_c_stats = generate_stats_dataframe(df_c, stats_indexes)
     with st.expander(_("Statistics")):
         st.dataframe(df_o_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
         st.dataframe(df_c_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
 
-    memorized_selectbox(_("index"), "cat_comp_index", indexes, "b_star_rating")
+    memorized_selectbox(_("index"), "cat_comp_index", stats_indexes, "b_star_rating")
 
     # 根据用户选择的指标，将两个玩家的数据放在同一张表与图中呈现
     df_o_ind = df_o[st.session_state.cat_comp_index]
