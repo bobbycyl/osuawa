@@ -12,16 +12,12 @@ from websockets.sync.client import connect
 
 import osuawa
 from osuawa import C
+from osuawa.components import init_page_layout
 from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
 st.session_state.awa: osuawa.Osuawa  # type: ignore
 
-if "wide_layout" in st.session_state:
-    st.set_page_config(page_title=_("Recorder") + " - osuawa", layout="wide" if st.session_state.wide_layout else "centered")
-else:
-    st.set_page_config(page_title=_("Recorder") + " - osuawa")
-with st.sidebar:
-    st.toggle(_("wide page layout"), key="wide_layout", value=False)
+init_page_layout(_("Recorder") + " - osuawa")
 
 
 async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:

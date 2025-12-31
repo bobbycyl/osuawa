@@ -72,7 +72,7 @@ class Awapi(OssapiAsync):
         *,
         grant: Optional[Grant | str] = None,
         strict: bool = False,
-        token_directory: str = "./.streamlit/",
+        token_directory: str = "./.streamlit/.oauth/",
         token_key: Optional[str] = None,
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
@@ -116,7 +116,7 @@ class Osuawa(object):
         own_data: User = asyncio.run(self.api.get_me())
         return own_data.id, own_data.username
 
-    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo], compute_extended: bool = True) -> pd.DataFrame:
+    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo], calculate_extended: bool = True) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
             scores_compact,
             orient="index",
@@ -124,11 +124,11 @@ class Osuawa(object):
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
-        if compute_extended:
-            df = self.compute_extended_scores_dataframe_with_timezone(df)
+        if calculate_extended:
+            df = self.calculate_extended_scores_dataframe_with_timezone(df)
         return df
 
-    def compute_extended_scores_dataframe_with_timezone(self, data: pd.DataFrame) -> pd.DataFrame:
+    def calculate_extended_scores_dataframe_with_timezone(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
@@ -221,9 +221,9 @@ class Osuawa(object):
                 recent_scores_compact_old = {str(k): SimpleScoreInfo(*v) for k, v in orjson.loads(fi_b.read()).items()}
             len_local = len(recent_scores_compact_old)
             if len_local > 0:
-                # 如果本地有数据，则重新计算 diff
+                # 如果本地有数据，则重新计算 diff。这会修改引用，因此是安全的
                 recent_scores_compact_diff = {k: recent_scores_compact[k] for k in recent_scores_compact.keys() - recent_scores_compact_old.keys()}
-                # 更新，以旧数据为准
+                # 更新，但不要覆盖旧数据
                 recent_scores_compact.update(recent_scores_compact_old)
         len_diff = len(recent_scores_compact_diff)
 
@@ -231,7 +231,7 @@ class Osuawa(object):
         completed_recent_scores_compact_diff: dict[str, CompletedSimpleScoreInfo] = asyncio.run(self.complete_scores_compact(recent_scores_compact_diff))
 
         # save
-        # json 仅保存 SimpleScoreInfo 的信息，而 parquet 保存完整的 CompletedScoreInfo 的信息
+        # json 仅保存 SimpleScoreInfo 的信息（每次完整读写），而 parquet 保存完整的 CompletedScoreInfo 的信息（只写入 diff）
         with open(
             user_raw_recent_scores_filename(user),
             "wb",
@@ -459,7 +459,6 @@ class OsuPlaylist(object):
         bid: int = element["bid"]
         b: Beatmap = element["beatmap"]
         raw_mods: list[dict[str, Any]] = element["mods"]
-        mods_ready: list[str] = []
         notes: str = element["notes"]
 
         # 处理NM, FM, TB
@@ -473,24 +472,17 @@ class OsuPlaylist(object):
                 if raw_mods[j]["acronym"] == "FM" or raw_mods[j]["acronym"] == "F+":
                     is_fm = True
                 mods.pop(j)
-            mods_ready = to_readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
+        mods_ready: list[str] = to_readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
 
         # 下载谱面与计算难度
         download_osu(b)
         my_attr = SimpleOsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
         my_attr.set_mods(mods)
-        # rosu_map = rosu.Beatmap(path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id))
-        # rosu_diff = rosu.Difficulty(mods=mods)
-        # rosu_attr = rosu_diff.calculate(rosu_map)
         osupp_attr = calculate_osu_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
-        # stars1 = rosu_attr.stars
         stars1 = osupp_attr["star_rating"]
         stars2 = None
         if is_fm:
-            # rosu_diff_fm = rosu.Difficulty(mods=[{"acronym": "HR"}])
-            # rosu_attr_fm = rosu_diff_fm.calculate(rosu_map)
-            osupp_attr_fm = calculate_osu_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=["HR"])
-            # stars2 = rosu_attr_fm.stars
+            osupp_attr_fm = calculate_osu_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods + ["HR"], mod_options=my_attr.osu_tool_mod_options)
             stars2 = osupp_attr_fm["star_rating"]
         cs = "%s" % round(my_attr.cs, 2)
         ar = "0" if my_attr.ar is None else "%s" % round(my_attr.ar, 2)
@@ -635,7 +627,7 @@ class OsuPlaylist(object):
             cover_filename = await cover.download(Downloader(self.covers_dir), "%d-%d.jpg" % (i, bid))
             img_src = "./" + (os.path.relpath(cover_filename, os.path.split(self.playlist_filename)[0])).replace("\\", "/")
             img_link = "https://osu.ppy.sh/b/%d" % b.id
-            beatmap_info = '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="90"/></a>' % (
+            beatmap_info = '<a href="%s"><img src="%s" alt="%s - %s (%s) [%s]" height="90" style="object-fit: cover;"/></a>' % (
                 img_link,
                 img_src,
                 html.escape(b.beatmapset().artist),

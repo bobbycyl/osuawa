@@ -10,9 +10,10 @@ pandas
 pillow
 plotly
 py7zr
-SQLAlchemy==1.4.0
+SQLAlchemy
 scipy
 slider
 statsmodels
 streamlit
+streamlit-aggrid
 websockets
