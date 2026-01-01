@@ -1,3 +1,4 @@
+import os.path
 import shelve
 from typing import Any, Optional
 
@@ -19,9 +20,18 @@ def load_value(key: str, default_value: Any) -> Any:
         if key not in st.session_state:
             # semi-persistent storage
             # ./.streamlit/.components/<ajs_anonymous_id>
-            with shelve.open("./.streamlit/.components/%s" % st.context.cookies["ajs_anonymous_id"]) as db:
-                st.session_state["_%s_value" % key] = db.get(key, default_value)
-        st.session_state["_%s_value" % key] = default_value
+            # 由于 load 可能发生在第一次访问（save 不会），所以还要检查 cookie 是否存在
+            if "ajs_anonymous_id" in st.context.cookies and (
+                os.path.exists("./.streamlit/.components/%s.bak" % st.context.cookies["ajs_anonymous_id"])
+                or os.path.exists("./.streamlit/.components/%s.dat" % st.context.cookies["ajs_anonymous_id"])
+                or os.path.exists("./.streamlit/.components/%s.dir" % st.context.cookies["ajs_anonymous_id"])
+            ):
+                with shelve.open("./.streamlit/.components/%s" % st.context.cookies["ajs_anonymous_id"], "r") as db:
+                    st.session_state["_%s_value" % key] = db.get(key, default_value)
+            else:
+                st.session_state["_%s_value" % key] = default_value
+        else:
+            raise RuntimeError("the key of memorized component is used: %s" % key)
     st.session_state[key] = st.session_state["_%s_value" % key]
 
 
