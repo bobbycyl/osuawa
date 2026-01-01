@@ -3,7 +3,8 @@ import os.path
 import shutil
 import time
 from functools import partial
-from typing import Literal, Optional
+from time import sleep
+from typing import Never, Optional
 from uuid import UUID
 
 import orjson
@@ -12,12 +13,12 @@ import streamlit as st
 from clayutil.futil import Properties, compress_as_zip
 from clayutil.validator import validate_type
 from sqlalchemy import text
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist
-from osuawa.components import init_page_layout, memorized_selectbox
+from osuawa.components import init_page_layout, load_value, memorized_selectbox, save_value
 from osuawa.utils import generate_mods_from_lines, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
@@ -29,19 +30,17 @@ with st.sidebar:
 conn = st.connection("osuawa", type="sql")
 uid = UUID(get_script_run_ctx().session_id).hex
 row_style_js = JsCode(
-    """
-        function(params) {
-            if (params.data._is_dup_bid) return { backgroundColor: 'crimson' };
-            if (params.data._is_dup_sid) return { backgroundColor: 'lemonchiffon' };
-            if (params.data.STATUS == 1) return { backgroundColor: 'darkseagreen' };
-            if (params.data.STATUS == 2) return { backgroundColor: 'powderblue' };
-            return {};
-        }
-    """,
+    """function(params) {
+    if (params.data._is_dup_bid) return { backgroundColor: 'crimson' };
+    if (params.data._is_dup_sid) return { backgroundColor: 'lemonchiffon' };
+    if (params.data.STATUS == 1) return { backgroundColor: 'darkseagreen' };
+    if (params.data.STATUS == 2) return { backgroundColor: 'powderblue' };
+    return {};
+}
+""",
 )
 slot_cell_style_js = JsCode(
-    f"""
-function(params) {{
+    f"""function(params) {{
     if (!params.value) return {{}};
 
     let prefix = params.value.toString().substring(0, 2).toUpperCase();
@@ -60,85 +59,102 @@ function(params) {{
 """,
 )
 copy_on_click_js = JsCode(
-    """
-function(event) {
+    """function(event) {
     let target = event.event.target;
-
-    // 向上查找真正的单元格容器
     while (target && !target.classList.contains('ag-cell')) {
         target = target.parentElement;
     }
 
     if (target && event.value !== undefined && event.value !== null) {
-
         navigator.clipboard.writeText(String(event.value))
             .then(() => {
-                console.log('Copied:', event.value);
+                const oldTip = target.querySelector('.copy-tip');
+                if (oldTip) oldTip.remove();
 
-                // --- 关键修改 1: 强制开启背景色过渡 ---
-                // !important 确保覆盖默认 CSS
-                target.style.transition = "background-color 0.3s ease";
+                const tip = document.createElement('span');
+                tip.className = 'copy-tip';
+                tip.innerText = 'Copied';
 
-                // --- 关键修改 2: 变色 ---
-                target.style.backgroundColor = '#90EE90'; 
+                Object.assign(tip.style, {
+                    position: 'absolute',
+                    left: '60%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                    color: 'white',
+                    fontSize: '9px',
+                    padding: '1px 5px',
+                    borderRadius: '2px',
+                    zIndex: '1000',
+                    pointerEvents: 'none',
+                    opacity: '0',
+                    transition: 'opacity 0.15s linear'
+                });
 
-                // --- 关键修改 3: 恢复 ---
+                target.appendChild(tip);
+
+                requestAnimationFrame(() => {
+                    tip.style.opacity = '1';
+                });
+
                 setTimeout(() => {
-                    // 设为透明，而不是空字符串！
-                    // 这样能透出你在 getRowStyle 里定义的颜色
-                    target.style.backgroundColor = 'transparent';
-
-                    // 0.3s 后移除 transition 属性，避免影响表格滚动性能或 hover 效果
-                    setTimeout(() => {
-                        target.style.removeProperty('transition');
-                    }, 300);
-
-                }, 300); // 保持高亮 600ms，让用户看得更清楚
+                    tip.style.opacity = '0';
+                    setTimeout(() => tip.remove(), 150);
+                }, 300);
             })
             .catch(err => {
                 console.error('Failed to copy:', err);
-                target.style.transition = "background-color 0.3s ease";
-                target.style.backgroundColor = '#FFB6C1';
-                setTimeout(() => {
-                    target.style.backgroundColor = 'transparent';
-                    setTimeout(() => target.style.removeProperty('transition'), 300);
-                }, 300);
             });
     }
 }
 """,
 )
-
 image_link_renderer = JsCode(
     """class ImageLinkRenderer {
-        init(params) {
-            this.eGui = document.createElement('a');
-            this.eGui.href = params.value;
-            this.eGui.target = '_blank';
-    
-            const img = document.createElement('img');
-            img.src = "%s" + params.data.BID + ".jpg"; 
-            img.style.height = "32px";
-            img.style.objectFit = "cover";
-            img.style.borderRadius = "0px";
-    
-            this.eGui.appendChild(img);
-        }
-        getGui() {
-            return this.eGui;
-        }
-        refresh(params) {
-            return false;
-        }
+    init(params) {
+        this.eGui = document.createElement('a');
+        this.eGui.href = params.value;
+        this.eGui.target = '_blank';
+
+        const img = document.createElement('img');
+        img.src = "%s" + params.data.BID + ".jpg"; 
+        img.style.height = "32px";
+        img.style.width = "70px";
+        img.style.objectFit = "cover";
+        img.style.borderRadius = "0px";
+
+        this.eGui.appendChild(img);
     }
-    """
+    getGui() {
+        return this.eGui;
+    }
+    refresh(params) {
+        return false;
+    }
+}
+"""
     % ("../../app/" + C.UPLOADED_DIRECTORY.value.strip("./") + "/online/darkened-backgrounds/"),
+)
+st.markdown(
+    """<style>
+    iframe[title="st_aggrid.ag_grid"] {
+    }
+
+    .ag-cell {
+        transition: background-color 0.2s;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
 
-@st.cache_data(show_spinner=False)
-def convert_df(data: pd.DataFrame, filename: str):
-    data.to_csv(filename, encoding="utf-8", index=False)
+def refresh(delay: Optional[float] = None) -> Never:
+    if delay:
+        sleep(delay)
+    st.cache_data.clear()
+    conn.reset()
+    st.rerun()
 
 
 @st.cache_data(show_spinner=False)
@@ -235,62 +251,90 @@ def check_beatmap_exists(bid: int, mods: str) -> bool:
     return res > 0
 
 
-def insert_beatmap(beatmap: dict) -> tuple[int, str]:
+def update_beatmap(beatmap: Optional[dict] = None, *, old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> None:
+    """更新课题谱面（包括删除）
+
+    如果 beatmap 不为 None，则 old_bid 必须为 None
+
+    :param beatmap: 欲更新课题谱面
+    :param old_bid: 欲删除 BID
+    :param old_mods: 欲删除 MODS
+    :return:
+    """
+    if beatmap is not None:
+        if old_bid is not None:
+            raise ValueError("cannot update a beatmap with a different old bid")
+        # 如果 beatmap 不为 None，old_bid 从 beatmap 中获取
+        old_bid = beatmap["BID"]
+
     with conn.session as s:
-        s.execute(
-            text(
-                """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS)
-                   VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS)
-                   ON CONFLICT (BID, MODS)
-                       DO UPDATE SET SKILL_SLOT = EXCLUDED.SKILL_SLOT,
-                                     SR         = EXCLUDED.SR,
-                                     BPM        = EXCLUDED.BPM,
-                                     HIT_LENGTH = EXCLUDED.HIT_LENGTH,
-                                     MAX_COMBO  = EXCLUDED.MAX_COMBO,
-                                     CS         = EXCLUDED.CS,
-                                     AR         = EXCLUDED.AR,
-                                     OD         = EXCLUDED.OD,
-                                     MODS       = EXCLUDED.MODS,
-                                     NOTES      = EXCLUDED.NOTES,
-                                     STATUS     = EXCLUDED.STATUS,
-                                     COMMENTS   = EXCLUDED.COMMENTS,
-                                     POOL       = EXCLUDED.POOL,
-                                     SUGGESTOR  = EXCLUDED.SUGGESTOR,
-                                     RAW_MODS   = EXCLUDED.RAW_MODS,
-                                     INFO       = EXCLUDED.INFO
--- 注意：ADD_TS 只会保留第一次创建记录时的值，后续不会被更新""",
-            ),
-            params=beatmap,
-        )
+        if old_bid is not None and old_mods is not None:
+            # 有可能传入的是 numpy 类型，需要强制转化为原生类型
+            old_bid = int(old_bid)
+            old_mods = str(old_mods)
+            s.execute(
+                text(
+                    """DELETE
+                       FROM BEATMAP
+                       WHERE BID = :bid
+                         AND MODS = :mods""",
+                ),
+                {"bid": old_bid, "mods": old_mods},
+            )
+        elif beatmap is not None:
+            s.execute(
+                text(
+                    """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS)
+                       VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS)
+                       ON CONFLICT (BID, MODS)
+                           DO UPDATE SET SKILL_SLOT = EXCLUDED.SKILL_SLOT,
+                                         SR         = EXCLUDED.SR,
+                                         BPM        = EXCLUDED.BPM,
+                                         HIT_LENGTH = EXCLUDED.HIT_LENGTH,
+                                         MAX_COMBO  = EXCLUDED.MAX_COMBO,
+                                         CS         = EXCLUDED.CS,
+                                         AR         = EXCLUDED.AR,
+                                         OD         = EXCLUDED.OD,
+                                         MODS       = EXCLUDED.MODS,
+                                         NOTES      = EXCLUDED.NOTES,
+                                         STATUS     = EXCLUDED.STATUS,
+                                         COMMENTS   = EXCLUDED.COMMENTS,
+                                         POOL       = EXCLUDED.POOL,
+                                         SUGGESTOR  = EXCLUDED.SUGGESTOR,
+                                         RAW_MODS   = EXCLUDED.RAW_MODS,
+                                         INFO       = EXCLUDED.INFO
+                    -- 注意：ADD_TS 只会保留第一次创建记录时的值，后续不会被更新""",
+                ),
+                params=beatmap,
+            )
+        else:
+            raise ValueError(_("no changes made"))
         s.commit()
-    return beatmap["BID"], beatmap["MODS"]
 
 
-def delete_beatmap(bid: int, mods: str) -> tuple[int, str]:
+def online_playlist_action_logger(bid: int | str, mods: str, action: int, old_mods: Optional[str] = None) -> None:
     bid = int(bid)
     mods = str(mods)
-    with conn.session as s:
-        s.execute(
-            text(
-                """DELETE
-                   FROM BEATMAP
-                   WHERE BID = :bid
-                     AND MODS = :mods""",
-            ),
-            {"bid": bid, "mods": mods},
-        )
-        s.commit()
-    return bid, mods
-
-
-def online_playlist_action_logger(bid: int | str, mods: str, action: Literal["submit", "update", "delete"]) -> None:
-    bid = int(bid)
-    mods = str(mods)
-    logger.get_logger(st.session_state.username).info("%sed (%d %s)" % (action.rstrip("e"), bid, mods))
+    verb_mapping = {
+        0: "added",
+        1: "deleted",
+        2: "updated",
+    }
+    msg = "%s (%d %s)" % (verb_mapping[action], bid, mods)
+    if old_mods is not None:
+        msg += " from %s" % old_mods
+    logger.get_logger(st.session_state.username).info(msg)
+    st.toast(msg)
 
 
 if st.session_state.perm >= 1:
     st.markdown(_("## Online Playlist Creator"))
+    available_pools = conn.query(
+        """SELECT DISTINCT POOL
+           FROM BEATMAP
+           ORDER BY POOL""",
+    )["POOL"].to_list()
+
     with st.form(_("Add beatmap")):
         col1, col2 = st.columns(2)
         with col1:
@@ -298,13 +342,23 @@ if st.session_state.perm >= 1:
             slot_input = st.text_input(_("Slot")).upper()
             notes_input = st.text_input(_("Notes"))
         with col2:
-            pool_input = st.text_input(_("Pool"), value="_DEFAULT_POOL")
+            # 由于 form 不允许组件设置 on_change，因此这里要手动实现记忆功能
+            load_value("gen_form_pool", "_DEFAULT_POOL")
+            _pool_index: Optional[int] = None
+            if len(available_pools) > 0:
+                try:
+                    _pool_index = available_pools.index(st.session_state.gen_form_pool)
+                except ValueError:
+                    _pool_index = 0
+            pool_input = st.selectbox(_("Pool"), available_pools, index=_pool_index, accept_new_options=True)
             mod_settings_input = st.text_area(_("Mod Settings"), height="stretch")
             # status_input = st.slider(_("Status"), 0, 2, 0)
         submitted = st.form_submit_button(_("Add"), use_container_width=True)
         if submitted:
+            st.session_state.gen_form_pool = pool_input
+            save_value("gen_form_pool")
             # 处理 BID
-            # SLOTS 和 MODS 均自动大写
+            # SLOTS 自动大写
             specs_input: list[tuple[int, list, str, str, str, int, str, str, float]] = []
             urls_input_split = urls_input.split()
             raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input)
@@ -314,19 +368,19 @@ if st.session_state.perm >= 1:
                 try:
                     mods_ready_input = to_readable_mods(raw_mods_input)
                 except (orjson.JSONDecodeError, ValueError, KeyError):
-                    st.error(_("Invalid mods: %s" % raw_mods_input))
+                    st.error(_("invalid mods: %s") % raw_mods_input)
                     continue
                 mods_input = "; ".join(mods_ready_input)
                 if check_beatmap_exists(bid_input, mods_input):
                     st.warning(_("(%d %s) already exists, skipped" % (bid_input, mods_input)))
                     continue
-                validate_restricted_identifier(pool_input)
+                validate_restricted_identifier(st.session_state.gen_form_pool)
                 specs_input.append(
                     (
                         bid_input,
                         raw_mods_input,
                         slot_input,
-                        pool_input,
+                        st.session_state.gen_form_pool,
                         notes_input,
                         0,
                         "",
@@ -334,23 +388,19 @@ if st.session_state.perm >= 1:
                         time.time(),
                     ),
                 )
-            playlist_beatmaps_recalculate = create_tmp_playlist(uid, specs_input)
-            for beatmap_to_insert in playlist_beatmaps_recalculate:
-                updated_bid, updated_mods = insert_beatmap(beatmap_to_insert)
-                online_playlist_action_logger(updated_bid, updated_mods, "submit")
+            playlist_beatmaps_input = create_tmp_playlist(uid, specs_input)
+            for beatmap_to_insert in playlist_beatmaps_input:
+                update_beatmap(beatmap_to_insert)
+                online_playlist_action_logger(beatmap_to_insert["BID"], beatmap_to_insert["MODS"], 0)
 
-    filter_col1, filter_col2, filter_col3 = st.columns([1, 1, 3])
-    with filter_col1:
-        available_pools = conn.query(
-            """SELECT DISTINCT POOL
-               FROM BEATMAP
-               ORDER BY POOL""",
-        )["POOL"].to_list()
-        memorized_selectbox(_("Pool"), "gen_filter_pool", ["-"] + available_pools, "-")
-    with filter_col2:
-        memorized_selectbox(_("Status"), "gen_filter_status", [-1, 0, 1, 2], -1)
-    with filter_col3:
-        st.text_input(_("Search"), key="gen_filter_search")
+    with st.container(border=True):
+        filter_col1, filter_col2, filter_col3 = st.columns([1, 1, 3])
+        with filter_col1:
+            memorized_selectbox(_("Pool"), "gen_filter_pool", ["-"] + available_pools, "-")
+        with filter_col2:
+            memorized_selectbox(_("Status"), "gen_filter_status", [-1, 0, 1, 2], -1)
+        with filter_col3:
+            st.text_input(_("Search"), key="gen_filter_search")
 
     # 查询重复的 BID 与 SID，用于后期查询结果表格渲染。BID 与 SID 要分开表示，重复的 BID 行要标记为红色，重复的 SID 行要标记为黄色
     duplicate_bids = conn.query(
@@ -389,22 +439,6 @@ if st.session_state.perm >= 1:
     # 新增 JS 辅助列
     df["_is_dup_bid"] = df["BID"].isin(duplicate_bids)
     df["_is_dup_sid"] = df["SID"].isin(duplicate_sids)
-
-    # 以下是弃用的 DataFrame Styler
-    # def playlist_df_style(row) -> list[str]:
-    #     # BID 重复: crimson
-    #     # SID 重复: lemonchiffon
-    #     # STATUS 1: darkseagreen
-    #     # STATUS 2: powderblue
-    #     if row["BID"] in duplicate_bids:
-    #         return ["crimson"] * len(row)
-    #     if row["SID"] in duplicate_sids:
-    #         return ["lemonchiffon"] * len(row)
-    #     if row["STATUS"] == 1:
-    #         return ["darkseagreen"] * len(row)
-    #     if row["STATUS"] == 2:
-    #         return ["powderblue"] * len(row)
-    #     return [""] * len(row)
 
     # 使用 streamlit-aggrid 实现可交互表格
     # 创建 LINK 列
@@ -445,46 +479,58 @@ if st.session_state.perm >= 1:
             domLayout="normal",
             rowHeight=32,
             getRowStyle=row_style_js,
+            # autoSizeStrategy={'type': 'fitCellContents'},
+            suppressSizeToFit=True,
+            shouldPanelSectionsBeVisible=True,
+            enableCellTextSelection=True,
+            ensureDomOrder=True,
         ),
     )
+    gb.configure_default_column(cellStyle={"padding-left": "4px", "padding-right": "4px"}, resizable=True, suppressSizeToFit=True)
     gb.configure_column(
         field="LINK",
         header_name="Cover",
         cellRenderer=image_link_renderer,
-        width=30,
+        cellStyle={"padding": "0px"},
+        width=70,
         pinned="left",
         editable=False,
+        suppressSizeToFit=True,
     )
     # 由于 MODS 列使用的是 readable_mods 的表示，是不可变的
     # 因此用户可以更改的是与 mods_input 对应的 RAW_MODS 列
     # 共可可修改列: SKILL_SLOT, STATUS, COMMENTS, POOL, NOTES, RAW_MODS,
-    gb.configure_column("BID", width=100, onCellClicked=copy_on_click_js)
-    gb.configure_column("SKILL_SLOT", header_name="Slot", editable=True, cellStyle=slot_cell_style_js, width=50)
-    gb.configure_column("MODS", header_name="Mods", width=30)
-    gb.configure_column("INFO", header_name="Beatmap", wrapText=True, width=250)
-    gb.configure_column("SR", width=65)
+    cell_rules = {"clickable-cell-style": "true"}  # 这里的 'true' 是 JS 表达式，表示始终应用
+    gb.configure_column("BID", header_name="BID", width=88, cellClassRules=cell_rules, cellStyle={"cursor": "copy"}, onCellClicked=copy_on_click_js)
+    gb.configure_column("SKILL_SLOT", header_name="Slot", editable=True, cellStyle=slot_cell_style_js, width=48)
+    gb.configure_column("MODS", header_name="Mods", width=68)
+    gb.configure_column("INFO", header_name="Beatmap", width=350)
+    gb.configure_column("SR", width=88)
     gb.configure_column("BPM", width=50)
-    gb.configure_column("HIT_LENGTH", header_name="Drain", width=45)
-    gb.configure_column("MAX_COMBO", header_name="Combo", width=50)
-    gb.configure_column("CS", width=20)
-    gb.configure_column("AR", width=20)
-    gb.configure_column("OD", width=20)
-    gb.configure_column("POOL", header_name="Pool", editable=True, width=55)
-    gb.configure_column("SUGGESTOR", header_name="Suggestor", editable=True, width=35)
-    gb.configure_column("NOTES", header_name="Notes", editable=True, width=50)
-    gb.configure_column("ADD_DATETIME", width=80)
-    gb.configure_column("COMMENTS", editable=True, wrapText=True, width=120)
+    gb.configure_column("HIT_LENGTH", header_name="Drain", width=50)
+    gb.configure_column("MAX_COMBO", header_name="Combo", width=52)
+    gb.configure_column("CS", width=38)
+    gb.configure_column("AR", width=38)
+    gb.configure_column("OD", width=38)
+    gb.configure_column("POOL", header_name="Pool", editable=True, width=70)
+    gb.configure_column("SUGGESTOR", header_name="Suggestor", width=85)
+    gb.configure_column("NOTES", header_name="Notes", editable=True, width=138)
+    gb.configure_column("ADD_DATETIME", header_name="Added at", width=118)
+    gb.configure_column("COMMENTS", header_name="Comments", editable=True, wrapText=True, width=250, cellStyle={"white-space": "pre-wrap"}, autoHeight=False, cellEditor="agLargeTextCellEditor", cellEditorPopup=True)
     gb.configure_column(
         "RAW_MODS",
+        header_name="Raw Mods",
         editable=True,
         wrapText=True,
-        width=250,
+        width=288,
         cellStyle={
             "font-family": "monospace",
             "white-space": "pre-wrap",  # 这一步关键：保留空格和换行，否则会被挤成一行
         },
+        cellEditor="agLargeTextCellEditor",
+        cellEditorPopup=True,
     )
-    gb.configure_column("STATUS", editable=True, cellEditor="agSelectCellEditor", cellEditorParams={"values": [0, 1, 2]}, width=20)
+    gb.configure_column("STATUS", header_name="Status", editable=True, cellEditor="agSelectCellEditor", cellEditorParams={"values": [0, 1, 2]}, width=25)
 
     # 隐藏列 _is_dup_bid、_is_dup_sid、ADD_TS
     gb.configure_column("_is_dup_bid", hide=True)
@@ -497,72 +543,77 @@ if st.session_state.perm >= 1:
     grid_response = AgGrid(
         df,
         gridOptions=grid_options,
+        columns_auto_size_mode=ColumnsAutoSizeMode.NO_AUTOSIZE,
         update_on=[
             "cellValueChanged",  # 单元格值改变时触发 (编辑)
             "selectionChanged",  # 选择行改变时触发 (删除)
         ],
-        height=1000,
+        height=800,
+        width="100%",
         allow_unsafe_jscode=True,
-        fit_columns_on_grid_load=False,
         key="gen_playlist_grid",
     )
-    edited_df = pd.DataFrame(grid_response["data"])
+    try:
+        edited_df = pd.DataFrame(grid_response["data"])
+    except ValueError:
+        refresh(1)
 
     selected_rows = grid_response["selected_rows"]
 
     col_save_n_refresh, col_blank, col_del = st.columns(spec=[0.5, 0.15, 0.35], gap="large")
     with col_save_n_refresh:
-        col_save, col_refresh = st.columns(2, gap="small")
-        with col_save:
+        with st.container(border=False, horizontal=True):
             if st.button(_("Modify"), use_container_width=True):
                 if edited_df.empty:
                     st.toast(_("no changes made"))
                 else:
-                    affected_original_beatmaps: set[tuple[int, str]] = set()
                     specs_recalculate: list[tuple[int, list, str, str, str, int, str, str, float]] = []
+                    olds_to_drop: list[tuple[str, bool]] = []  # (old MODS, RAW_MODS changed)
                     for index, row in edited_df.iterrows():
-                        edited_bid, edited_raw_mods = row["BID"], orjson.loads(row["RAW_MODS"])
+                        edited_bid, edited_mods = row["BID"], row["MODS"]
                         # 由于 MODS 在这里尚未更改，因此还是可以根据 BID + MODS 的组合定位原始表格中的对应行
-                        original_row = df.loc[(df["BID"] == edited_bid) & (df["MODS"] == row["MODS"])]
+                        original_row = df.loc[(df["BID"] == edited_bid) & (df["MODS"] == edited_mods)]
                         if original_row.empty:
-                            st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_raw_mods))
+                            st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_mods))
                             continue
                         original_row = original_row.iloc[0]
                         # 在可修改列中如果有任意一项被修改了，那么就添加到重算列表中
-                        if any([row[editable_col] != original_row[editable_col] for editable_col in ["RAW_MODS", "SKILL_SLOT", "POOL", "NOTES", "STATUS", "COMMENTS"]]):
-                            specs_recalculate.append((edited_bid, edited_raw_mods, row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
-                            # 由于 BID 不可变，RAW_MODS 修改后可能会导致 MODS 改变，从而使得这次不是单纯的原地更新，而是新增了一条记录
-                            # 因此要保存原始的 BID 与 MODS，在 insert_beatmap 后进行比对
-                            # 若 BID + MODS 的组合变化了，那么原始记录理应被丢弃
-                            affected_original_beatmaps.add((original_row["BID"], original_row["MODS"]))
-                    playlist_beatmaps_recalculate = create_tmp_playlist(uid, specs_recalculate)
-                    for beatmap_to_upsert in playlist_beatmaps_recalculate:
-                        upserted_bid, upserted_mods = insert_beatmap(beatmap_to_upsert)
-                        # 查找 upserted_bid + upserted_mods 在 affected_original_beatmaps 中是否存在
-                        # 如果存在，说明是原地更新，那 insert_beatmap 已设置 ON CONFLICT DO NOTHING，无需删除，logger 记为 update
-                        # 如果不存在，说明本次更新更新了 MODS，属于新增记录，需要删除原始记录，logger 记为 submit 与 delete
-                        if (upserted_bid, upserted_mods) in affected_original_beatmaps:
-                            online_playlist_action_logger(upserted_bid, upserted_mods, "update")
-                            affected_original_beatmaps.remove((upserted_bid, upserted_mods))
+                        new_primary = False
+                        for editable_col in ["RAW_MODS", "SKILL_SLOT", "POOL", "NOTES", "STATUS", "COMMENTS"]:
+                            if pd.isna(row[editable_col]) and pd.isna(original_row[editable_col]):
+                                continue
+                            if row[editable_col] != original_row[editable_col]:
+                                # 如果 RAW_MODS 修改了，那么就认为需要先删除原始记录，然后再添加新记录
+                                if editable_col == "RAW_MODS":
+                                    new_primary = True
+                                break
                         else:
-                            online_playlist_action_logger(upserted_bid, upserted_mods, "submit")
-                    for orphan_bid, orphan_mods in affected_original_beatmaps:
-                        deleted_bid, deleted_mods = delete_beatmap(orphan_bid, orphan_mods)
-                        online_playlist_action_logger(deleted_bid, deleted_mods, "delete")
-        with col_refresh:
+                            continue
+                        specs_recalculate.append((edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
+                        olds_to_drop.append((original_row["MODS"], new_primary))
+                    playlist_beatmaps_recalculate = create_tmp_playlist(uid, specs_recalculate)
+                    for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, playlist_beatmaps_recalculate):
+                        if old_to_drop[1]:
+                            update_beatmap(beatmap_to_upsert, old_mods=old_to_drop[0])
+                            online_playlist_action_logger(beatmap_to_upsert["BID"], beatmap_to_upsert["MODS"], 2, old_to_drop[0])
+                        else:
+                            update_beatmap(beatmap_to_upsert)
+                            online_playlist_action_logger(beatmap_to_upsert["BID"], beatmap_to_upsert["MODS"], 2)
+                refresh(1.5)
             if st.button(_("Refresh"), use_container_width=True):
-                conn.reset()
-                st.cache_data.clear()
-                st.rerun()
+                refresh()
+
     with col_del:
-        if st.button(_("Delete"), type="primary", width=200):
-            if len(selected_rows) == 0:
-                st.toast(_("no beatmaps selected"))
-            else:
-                for index, row in selected_rows.iterrows():
-                    selected_bid, selected_mods = row["BID"], row["MODS"]
-                    deleted_bid, deleted_mods = delete_beatmap(selected_bid, selected_mods)
-                    online_playlist_action_logger(deleted_bid, deleted_mods, "delete")
+        with st.container(border=False, horizontal_alignment="right"):
+            if st.button(_("Delete"), type="primary", use_container_width=True):
+                if len(selected_rows) == 0:
+                    st.toast(_("no beatmaps selected"))
+                else:
+                    for index, row in selected_rows.iterrows():
+                        selected_bid, selected_mods = row["BID"], row["MODS"]
+                        update_beatmap(old_bid=selected_bid, old_mods=selected_mods)
+                        online_playlist_action_logger(selected_bid, selected_mods, 1)
+                refresh(1.5)
 
 st.divider()
 
@@ -591,7 +642,7 @@ if uploaded_file is not None:
         for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
             st.image(os.path.join(covers_dir, pic), caption=pic, width="stretch")
     st.divider()
-    convert_df(table, csv_filename)
+    table.to_csv(csv_filename, encoding="utf-8", index=False)
     if os.path.exists("./playlists/style.css"):
         shutil.copy("./playlists/style.css", css_filename)
     st.dataframe(table, hide_index=True)
