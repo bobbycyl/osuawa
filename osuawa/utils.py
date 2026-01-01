@@ -17,21 +17,20 @@ from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 r
 from osupp.core import init_osu_tools
 
 init_osu_tools(os.path.join(os.path.dirname(__file__), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
+# noinspection PyUnresolvedReferences
 from osupp.core import OsuRuleset
+
+# noinspection PyUnusedImports
 from osupp.difficulty import calculate_osu_difficulty, get_all_mods
 from osupp.performance import OsuPerformance, calculate_osu_performance
-
-assert calculate_osu_difficulty  # 避免自动优化 import 把这个去掉了
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",
     "User-Agent": "osuawa",
 }
-sem = BoundedSemaphore()
-
 LANGUAGES = ["en_US", "zh_CN"]
-
 all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
+sem = BoundedSemaphore()
 
 
 @unique
@@ -106,7 +105,12 @@ def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
     readable_mods: list[str] = []
     for i in range(len(mods)):
         if "settings" in mods[i]:
-            readable_mods.append("%s(%s)" % (mods[i]["acronym"], ",".join(["%s=%s" % it for it in mods[i]["settings"].items()])))
+            settings_str = []
+            for setting_name, setting_value in mods[i]["settings"].items():
+                if isinstance(setting_value, bool):
+                    setting_value = "true" if setting_value else "false"
+                settings_str.append("%s=%s" % (setting_name, setting_value))
+            readable_mods.append("%s(%s)" % (mods[i]["acronym"], ",".join(settings_str)))
         else:
             readable_mods.append(mods[i]["acronym"])
     return readable_mods
