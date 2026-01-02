@@ -303,7 +303,7 @@ def submit():
 
 
 with st.sidebar:
-    memorized_selectbox("lang", "uni_lang", LANGUAGES, None)
+    memorized_selectbox(":material/language: lang", "uni_lang", LANGUAGES, None)
 
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
@@ -341,6 +341,15 @@ if "awa" in st.session_state:
     if y:
         st.text(y)
 
+    #################################
+    ### DEBUGGING COMPONENTS AREA ###
+    #################################
+    if st.session_state._debugging_mode:
+        from osuawa.components import memorized_selectbox, memorized_multiselect
+
+        memorized_selectbox("Memorized Selectbox Test", "test_memorized_selectbox", list("abcde"), "c")
+        memorized_multiselect("Memorized Multiselect Test", "test_memorized_multiselect", list("abcde"), ["c", "e"])
+
     st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)
 else:
     client_id = st.secrets.args.client_id
@@ -358,24 +367,30 @@ else:
             else:
                 home_bar.progress(55, text=get_an_osu_meme())
                 st.info(_("Please click the button below to authorize the app."))
-                st.link_button(_("OAuth2 URL"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)))
+                st.link_button(_("OAuth2 URL"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)), icon=":material/login:")
                 home_bar.progress(100, text=get_an_osu_meme())
                 home_bar.empty()
                 st.stop()
         else:
             code = st.query_params.code
-            home_bar.progress(50, text=get_an_osu_meme())
+            home_bar.progress(45, text=get_an_osu_meme())
             r = requests.post(
                 Awapi.TOKEN_URL.format(domain=domain),
                 headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
                 data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
             )
-            home_bar.progress(67, text=get_an_osu_meme())
+            home_bar.progress(55, text=get_an_osu_meme())
             awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
             awa.api._save_token(awa.api.session.token)
+            home_bar.progress(67, text=get_an_osu_meme())
         awa.tz = st.context.timezone
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
+        if st.session_state._debugging_mode:  # 启用随机用户名
+            from random import randint
+
+            st.session_state.username = "".join([chr(randint(ord("a"), ord("z"))) for _ in range(8)])
+            logger.get_logger("streamlit").info("renamed %s to %s" % (st.session_state.awa.user[1], st.session_state.username))
     except NotImplementedError:
         if os.path.exists("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
             os.remove("./.streamlit/%s.pickle" % st.context.cookies["ajs_anonymous_id"])

@@ -575,6 +575,8 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
 
 def generate_mods_from_lines(slot: str, lines: str):
     # slot 本身自带一个 mod
+    if len(slot) < 3:
+        raise ValueError("slot too short")
     auto_recognized_mod = slot[:2]
     # mod_settings 是一个多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
     # 最终期望得到：[{"acronym":<acronym>,"settings":{<mod_setting>:<value>}}]，如果不存在 settings，则不需要 settings 键

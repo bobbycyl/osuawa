@@ -7,6 +7,9 @@ from babel import Locale
 from sqlalchemy import text
 
 from osuawa import C, LANGUAGES
+from osuawa.components import load_value
+
+st.session_state._debugging_mode = False
 
 
 def convert_locale(accept_language: str):
@@ -32,6 +35,11 @@ def gettext_translate(text):
     return st.session_state.translate(text)
 
 
+def toggle_immersive():
+    st.session_state.immersive_active = not st.session_state.immersive_active
+    st.session_state.immersive_toggled = True
+
+
 if "translate" not in st.session_state:
     if not os.path.exists(C.LOGS.value):
         os.mkdir(C.LOGS.value)
@@ -45,7 +53,7 @@ if "translate" not in st.session_state:
         os.mkdir(C.UPLOADED_DIRECTORY.value)
     if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
         os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
-    st.session_state._uni_lang_value = convert_locale(st.context.locale)
+    load_value("uni_lang", convert_locale(st.context.locale))
     # 半持久化保存
     if not os.path.exists("./.streamlit/.oauth"):
         os.mkdir("./.streamlit/.oauth")
@@ -81,12 +89,7 @@ if "immersive_toggled" not in st.session_state:
     st.session_state.immersive_toggled = False
 
 with st.sidebar:
-
-    def toggle_immersive():
-        st.session_state.immersive_active = not st.session_state.immersive_active
-        st.session_state.immersive_toggled = True
-
-    st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon="🖥️")
+    st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:")
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
 
 IMMERSIVE_CSS = """
@@ -116,7 +119,7 @@ IMMERSIVE_CSS = """
 if st.session_state.immersive_active:
     st.markdown(IMMERSIVE_CSS, unsafe_allow_html=True)
     if st.session_state.immersive_toggled:
-        st.toast(_("Press `F` to exit immersive mode."), icon="🖥️")
+        st.toast(_("Press `F` to exit immersive mode."), icon=":material/collapse_content:")
         st.session_state.immersive_toggled = False
 
 pg.run()

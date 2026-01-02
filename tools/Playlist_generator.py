@@ -197,8 +197,12 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
         tmp_playlist_p[str(a[0])] = orjson.dumps({"mods": a[1], "slot": a[2]}).decode()
         tmp_playlist_p["#%i" % (i * 2 - 1)] = "# %s\n" % a[4]
     tmp_playlist_p.dump()
-    tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
-    playlist_beatmaps_raw: list[dict] = asyncio.run(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
+    try:
+        tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
+        playlist_beatmaps_raw: list[dict] = asyncio.run(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
+    except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup
+        st.error(_("failed to parse the spec(s): %s") % beatmap_specs)
+        st.stop()
     # playlist_beatmaps_raw 的顺序可能和传入的 specs 顺序不一致
     # 原始 beatmap 的键应包含如下
     # # BID, SID, Artist - Title (Creator) [Version], Stars, SR, BPM, Hit Length, Max Combo, CS, AR, OD, Mods, Notes, slot
@@ -400,7 +404,7 @@ if st.session_state.perm >= 1:
         with filter_col2:
             memorized_selectbox(_("Status"), "gen_filter_status", [-1, 0, 1, 2], -1)
         with filter_col3:
-            st.text_input(_("Search"), key="gen_filter_search")
+            st.text_input(_("Search"), key="gen_filter_search", placeholder=_("Search in BID, slot, notes and so on..."))
 
     # 查询重复的 BID 与 SID，用于后期查询结果表格渲染。BID 与 SID 要分开表示，重复的 BID 行要标记为红色，重复的 SID 行要标记为黄色
     duplicate_bids = conn.query(
@@ -433,7 +437,7 @@ if st.session_state.perm >= 1:
     if st.session_state.gen_filter_search:
         keyword_lower = st.session_state.gen_filter_search.lower()
         target_cols = ["BID", "SID", "INFO", "SKILL_SLOT", "MODS", "NOTES"]
-        mask = df[target_cols].apply(lambda x: x.str.lower().str.contains(keyword_lower, na=False).any(), axis=1)
+        mask = df[target_cols].apply(lambda x: x.astype(str).str.lower().str.contains(keyword_lower, na=False).any(), axis=1)
         df = df[mask]
 
     # 新增 JS 辅助列
@@ -550,20 +554,18 @@ if st.session_state.perm >= 1:
         ],
         height=800,
         width="100%",
+        # show_toolbar=True,
         allow_unsafe_jscode=True,
         key="gen_playlist_grid",
     )
-    try:
-        edited_df = pd.DataFrame(grid_response["data"])
-    except ValueError:
-        refresh(1)
+    edited_df = pd.DataFrame(grid_response["data"])
 
     selected_rows = grid_response["selected_rows"]
 
     col_save_n_refresh, col_blank, col_del = st.columns(spec=[0.5, 0.15, 0.35], gap="large")
     with col_save_n_refresh:
         with st.container(border=False, horizontal=True):
-            if st.button(_("Modify"), use_container_width=True):
+            if st.button(_("Commit"), use_container_width=True, icon=":material/database_upload:"):
                 if edited_df.empty:
                     st.toast(_("no changes made"))
                 else:
@@ -600,12 +602,12 @@ if st.session_state.perm >= 1:
                             update_beatmap(beatmap_to_upsert)
                             online_playlist_action_logger(beatmap_to_upsert["BID"], beatmap_to_upsert["MODS"], 2)
                 refresh(1.5)
-            if st.button(_("Refresh"), use_container_width=True):
+            if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh()
 
     with col_del:
         with st.container(border=False, horizontal_alignment="right"):
-            if st.button(_("Delete"), type="primary", use_container_width=True):
+            if st.button(_("Delete"), type="primary", use_container_width=True, icon=":material/delete:"):
                 if len(selected_rows) == 0:
                     st.toast(_("no beatmaps selected"))
                 else:
