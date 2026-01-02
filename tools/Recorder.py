@@ -121,5 +121,5 @@ with threading.Lock():
     with open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w") as fo:
         fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
 
-if st.button(_("clear all caches")):
+if st.button(_("clear all caches"), icon=":material/cleaning_services:"):
     st.cache_data.clear()

@@ -11,7 +11,8 @@
 /.venv/
 /.streamlit/private.key
 /.streamlit/full_chain.pem
-/.streamlit/*.pickle
+/.streamlit/.oauth/
+/.streamlit/.components/
 /.streamlit/secrets.toml
 qodana.yaml
 osuawa.db
