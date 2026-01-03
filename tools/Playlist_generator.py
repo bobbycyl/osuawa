@@ -3,7 +3,7 @@ import os.path
 import shutil
 import time
 from functools import partial
-from time import sleep
+from time import sleep, time_ns
 from typing import Never, Optional
 from uuid import UUID
 
@@ -17,13 +17,13 @@ from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import C, OsuPlaylist
-from osuawa.components import init_page_layout, load_value, memorized_selectbox, save_value
+from osuawa import C, OsuPlaylist, Osuawa
+from osuawa.components import init_page, load_value, memorized_selectbox, save_value
 from osuawa.utils import generate_mods_from_lines, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
-init_page_layout(_("Playlist generator") + " - osuawa")
+init_page(_("Playlist generator") + " - osuawa")
 with st.sidebar:
     st.toggle(_("new style"), key="new_style", value=True)
 
@@ -141,7 +141,7 @@ st.markdown(
     }
 
     .ag-cell {
-        transition: background-color 0.2s;
+        transition: background-color 0.3s;
     }
 </style>
 """,
@@ -163,10 +163,30 @@ def generate_playlist(filename: str, css_style: Optional[int] = None):
     return playlist.generate()
 
 
+def _create_tmp_playlist_p(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> str:
+    # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
+    pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
+    if not os.path.exists(pool_path):
+        os.mkdir(pool_path)
+    # 创建一个临时谱面文件，以 name + time 为谱面名
+    tmp_playlist_filename = str(os.path.join(pool_path, "%s_%d.properties" % (name, time_ns() // 1_000_000)))
+    tmp_playlist_p = Properties(tmp_playlist_filename)
+    tmp_playlist_p["custom_columns"] = '["mods", "slot"]'  # 一定要启用自定义列功能，不然不支持 slot
+    # playlist Properties 文件格式如下：
+    # bid = {"mods": mods, "slot": slot}
+    # # notes
+    # Properties 是一个 OrderedDict，往后依次添加内容即可。要注意 notes 必须以 \n 结尾，因为对于注释的解析是完整行
+    for i, a in enumerate(beatmap_specs, start=1):
+        tmp_playlist_p[str(a[0])] = orjson.dumps({"mods": a[1], "slot": a[2]}).decode()
+        tmp_playlist_p["#%i" % (i * 2 - 1)] = "# %s\n" % a[4]
+    tmp_playlist_p.dump()
+    return tmp_playlist_filename
+
+
 def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> list[dict]:
     """创建临时课题。仅创建，不生成
 
-    status: 0=未审核 1=已审核，2=已提名
+    status: 0=未审核, 1=已审核, 2=已提名
 
     OsuPlaylist beatmap 与 beatmap_specs、数据库字段对应关系如下：
 
@@ -181,22 +201,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
     :param beatmap_specs: bid, raw_mods, slot, pool, notes, status, comments, suggestor, add_ts
     :return: 一个谱面列表，为数据库字段优化了键名
     """
-    # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
-    pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
-    if not os.path.exists(pool_path):
-        os.mkdir(pool_path)
-    # 创建一个临时谱面文件，以 name 为谱面名
-    tmp_playlist_filename = str(os.path.join(pool_path, "%s.properties" % name))
-    tmp_playlist_p = Properties(tmp_playlist_filename)
-    tmp_playlist_p["custom_columns"] = '["mods", "slot"]'  # 一定要启用自定义列功能，不然不支持 slot
-    # playlist Properties 文件格式如下：
-    # bid = {"mods": mods, "slot": slot}
-    # # notes（notes 为 None 则不加这行注释）
-    # Properties 是一个 OrderedDict，往后依次添加内容即可。要注意 notes 必须以 \n 结尾，因为对于注释的解析是完整行
-    for i, a in enumerate(beatmap_specs, start=1):
-        tmp_playlist_p[str(a[0])] = orjson.dumps({"mods": a[1], "slot": a[2]}).decode()
-        tmp_playlist_p["#%i" % (i * 2 - 1)] = "# %s\n" % a[4]
-    tmp_playlist_p.dump()
+    tmp_playlist_filename = _create_tmp_playlist_p(name, beatmap_specs)
     try:
         tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
         playlist_beatmaps_raw: list[dict] = asyncio.run(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
@@ -331,6 +336,23 @@ def online_playlist_action_logger(bid: int | str, mods: str, action: int, old_mo
     st.toast(msg)
 
 
+@st.dialog(_("Export selected as a playlist"))
+def export_filtered_playlist():
+    parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
+    specs_x = [
+        (bid, mods, skill, "", note, 0, "", "", 0.0)
+        for bid, mods, skill, note in zip(
+            selected_rows["BID"],
+            parsed_mods_list,  # 直接用解析好的列表
+            selected_rows["SKILL_SLOT"],
+            selected_rows["NOTES"]
+        )
+    ]
+    tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
+    st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
+    with open(tmp_playlist_filename_x, "r") as fi:
+        st.code(fi.read(), language="properties")
+
 if st.session_state.perm >= 1:
     st.markdown(_("## Online Playlist Creator"))
     available_pools = conn.query(
@@ -338,6 +360,8 @@ if st.session_state.perm >= 1:
            FROM BEATMAP
            ORDER BY POOL""",
     )["POOL"].to_list()
+    if len(available_pools) == 0:
+        available_pools.append("_DEFAULT_POOL")
 
     with st.form(_("Add beatmap")):
         col1, col2 = st.columns(2)
@@ -562,7 +586,7 @@ if st.session_state.perm >= 1:
 
     selected_rows = grid_response["selected_rows"]
 
-    col_save_n_refresh, col_blank, col_del = st.columns(spec=[0.5, 0.15, 0.35], gap="large")
+    col_save_n_refresh, col_blank, col_del = st.columns(spec=[0.6, 0.12, 0.28], gap="large")
     with col_save_n_refresh:
         with st.container(border=False, horizontal=True):
             if st.button(_("Commit"), use_container_width=True, icon=":material/database_upload:"):
@@ -604,6 +628,8 @@ if st.session_state.perm >= 1:
                 refresh(1.5)
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh()
+            if st.button(_("Export"), use_container_width=True, icon=":material/file_download:"):
+                export_filtered_playlist()
 
     with col_del:
         with st.container(border=False, horizontal_alignment="right"):
@@ -611,10 +637,10 @@ if st.session_state.perm >= 1:
                 if len(selected_rows) == 0:
                     st.toast(_("no beatmaps selected"))
                 else:
-                    for index, row in selected_rows.iterrows():
-                        selected_bid, selected_mods = row["BID"], row["MODS"]
-                        update_beatmap(old_bid=selected_bid, old_mods=selected_mods)
-                        online_playlist_action_logger(selected_bid, selected_mods, 1)
+                    required_rows_tuple = selected_rows[["BID", "MODS"]]
+                    for row in required_rows_tuple.itertuples(index=False):
+                        update_beatmap(old_bid=row.BID, old_mods=row.MODS)
+                        online_playlist_action_logger(row.BID, row.MODS, 1)
                 refresh(1.5)
 
 st.divider()

@@ -146,7 +146,7 @@ async def a_get_beatmaps_dict(api: OssapiAsync, bids: set[int]) -> dict[int, Bea
     bids = tuple(bids)
     cut_bids: list[list[int]] = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i : i + 50]))
+        cut_bids.append(list(bids[i: i + 50]))
     tasks = []
     async with asyncio.TaskGroup() as tg:
         for bids in cut_bids:
@@ -573,7 +573,7 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
     return data
 
 
-def generate_mods_from_lines(slot: str, lines: str):
+def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
     # slot 本身自带一个 mod
     if len(slot) < 3:
         raise ValueError("slot too short")
