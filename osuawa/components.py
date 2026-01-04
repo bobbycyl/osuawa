@@ -155,12 +155,12 @@ def commands():
             4,
             generate_all_playlists,
         ),
-        Command("cat", _("show user recent scores"), [Int("user")], 0, cat),
+        Command("cat", _("show user recent scores (only saved scores are available)"), [Int("user")], 0, cat),
     ]
 
 
 def files_action(action: Literal["show", "clean"], filename: str = None) -> str:
-    if ".." in filename:
+    if filename is not None and ".." in os.path.relpath(filename, project_dir):
         raise ValueError("parent directory access is not allowed")
     ret_md = ""
     match action:
@@ -170,34 +170,34 @@ def files_action(action: Literal["show", "clean"], filename: str = None) -> str:
                 ret_md += "# Show Files\n\n"
                 # 三个主要文件夹
                 ret_md += "## Storage\n\n"
-                for path in [C.OUTPUT_DIRECTORY.value, C.UPLOADED_DIRECTORY, C.BEATMAPS_CACHE_DIRECTORY]:
-                    action_path = os.path.join(project_dir, path)
+                for _path in [C.OUTPUT_DIRECTORY.value, C.UPLOADED_DIRECTORY.value, C.BEATMAPS_CACHE_DIRECTORY.value]:
+                    action_path = os.path.join(project_dir, _path)
                     size, count = get_size_and_count(action_path)
                     size = format_size(size)
-                    # - **path**: size, count
-                    ret_md += f"- **{path}**: {size}, {count}\n\n"
+                    # - **_path**: size, count
+                    ret_md += f"- **{_path}**: {size}, {count}\n\n"
                 # 检查 *LCK ./*LCK
                 ret_md += "## Lock Files\n\n"
-                for path in os.listdir(os.path.join(project_dir)):
-                    if path.endswith(".LCK"):
-                        ret_md += f"- {path}\n\n"
+                for _path in os.listdir(os.path.join(project_dir)):
+                    if _path.endswith(".LCK"):
+                        ret_md += f"- {_path}\n\n"
                 # 检查 token pickle ./.streamlit/.oauth/*.pickle
                 ret_md += "## Token Pickles\n\n"
-                for path in os.listdir(os.path.join(project_dir, ".streamlit", ".oauth")):
-                    if path.endswith(".pickle"):
-                        ret_md += f"- {path}\n\n"
+                for _path in os.listdir(os.path.join(project_dir, ".streamlit", ".oauth")):
+                    if _path.endswith(".pickle"):
+                        ret_md += f"- {_path}\n\n"
             else:
-                path = os.path.join(project_dir, filename)
-                if os.path.exists(path):
-                    if os.path.isfile(path):
+                _path = os.path.join(project_dir, filename)
+                if os.path.exists(_path):
+                    if os.path.isfile(_path):
                         # cat 前 10000 个字符
-                        with open(path, "r", encoding="utf-8") as fi:
+                        with open(_path, "r", encoding="utf-8") as fi:
                             ret_md += fi.read(10000)
                             ret_md += "(truncated)\n\n"
                     else:
-                        size, count = get_size_and_count(path)
+                        size, count = get_size_and_count(_path)
                         size = format_size(size)
-                        ret_md += f"- **{path}**: {size}, {count}\n\n"
+                        ret_md += f"- **{filename}**: {size}, {count}\n\n"
         case "clean":
             if filename is None:
                 # 本来打算是清理相关文件夹，但为了安全考虑，如果不给定 filename，则不执行任何操作
@@ -205,16 +205,16 @@ def files_action(action: Literal["show", "clean"], filename: str = None) -> str:
             else:
                 # 删除文件或文件夹
                 ret_md += "# Clean Files\n\n"
-                path = os.path.join(project_dir, filename)
-                if os.path.exists(path):
-                    if os.path.isfile(path):
-                        os.remove(path)
-                        ret_md += f"cleaned the file: {path}"
+                _path = os.path.join(project_dir, filename)
+                if os.path.exists(_path):
+                    if os.path.isfile(_path):
+                        os.remove(_path)
+                        ret_md += f"cleaned the file: {filename}"
                     else:
-                        shutil.rmtree(path)
-                        ret_md += f"cleaned the whole directory: {path}"
+                        shutil.rmtree(_path)
+                        ret_md += f"cleaned the whole directory: {filename}"
                 else:
-                    ret_md += f"{path} not found"
+                    ret_md += f"{filename} not found"
     return ret_md
 
 
@@ -227,7 +227,7 @@ def log_action(n: int = 100, keyword: Optional[str] = None) -> str:
 
     results = []
     if keyword is not None:
-        ret_md += f'with keyword "{keyword}".\n\n'
+        ret_md += f' with keyword "{keyword}".\n\n'
         for line in last_lines:
             if keyword in line:
                 results.append(line)
@@ -235,7 +235,7 @@ def log_action(n: int = 100, keyword: Optional[str] = None) -> str:
         ret_md += ".\n\n"
         results = list(last_lines)
     # 使用代码块包裹日志内容，防止 Markdown 格式错乱
-    ret_md += "```text\n"
+    ret_md += "```log\n"
     # strip() 防止末尾多余空行
     ret_md += "".join(results).strip()
     ret_md += "\n```"
@@ -280,7 +280,7 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
 def cat(user: int):
     if not os.path.exists(user_recent_scores_directory(user)):
         raise ValueError(_("user %d not found") % user)
-    df = pd.read_parquet(user_recent_scores_directory(user))
+    df = st.session_state.awa.calculate_extended_scores_dataframe_with_timezone(pd.read_parquet(user_recent_scores_directory(user)))
     return df
 
 
