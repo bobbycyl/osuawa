@@ -66,7 +66,7 @@ def get_an_osu_meme() -> str:
     memes = [
         _("Loading... Keep your cursor steady."),
         _("PP has gone."),
-        _("Attempting to parse a 400pp jump map.."),
+        _("Attempting to parse a 400pp jump map..."),
         _("Who moved my mouse sensitivity?"),
         _("Don’t take it too seriously, this is just a toy."),
         _("Re-timing the map... No wait, it’s perfectly aligned this time!"),
@@ -82,21 +82,21 @@ def get_an_osu_meme() -> str:
         _("Generating fake SS screenshots..."),
         _("Loading miss hit sound... 404 Not Found."),
         _("How is your HP thicker than MMORPG bosses?"),
-        _("I'm not a fan of DT. It's too fast."),
-        _("Calculating how much patience you need."),
-        _('Loading "my hand slipped" excuse generator'),
-        _('Generating fake "this is my first time playing" claims.'),
+        _("I'm not a fan of DT."),
+        _("Calculating how much patience you need..."),
+        _('Loading "my hand slipped" excuse generator...'),
+        _('Generating fake "this is my first time playing" claims...'),
         _("Loading C#, Rust, JavaScript and so on..."),
-        _("Calculating how much time you have wasted."),
+        _("Calculating how much time you have wasted..."),
         _("Sleeping..."),
         _("Refactoring spaghetti code? No, just piling it up."),
         _("If you see this tip for more than 5 seconds, the thread is probably dead."),
         _("There are no bugs, only undocumented features."),
         _("The loading bar is actually random length, stop staring at it."),
-        _("If I told you it’s 99% loaded, would you believe me?"),
-        _("Analyzing your play history… seems you like Tech maps?"),
+        _("If I told you it’s 99%% loaded, would you believe me?") % (),
+        _("Analyzing your play history... seems you like Tech maps?"),
         _("Stop looking at the Accuracy, enjoy the music!"),
-        _("Loading… (This tip is also part of the loading process)"),
+        _("Loading... (This tip is also part of the loading process)"),
     ]
     return memes[randint(0, len(memes) - 1)]
 
@@ -146,7 +146,7 @@ async def a_get_beatmaps_dict(api: OssapiAsync, bids: set[int]) -> dict[int, Bea
     bids = tuple(bids)
     cut_bids: list[list[int]] = []
     for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i: i + 50]))
+        cut_bids.append(list(bids[i : i + 50]))
     tasks = []
     async with asyncio.TaskGroup() as tg:
         for bids in cut_bids:

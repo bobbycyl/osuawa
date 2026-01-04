@@ -17,7 +17,7 @@ from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import C, OsuPlaylist, Osuawa
+from osuawa import C, OsuPlaylist
 from osuawa.components import init_page, load_value, memorized_selectbox, save_value
 from osuawa.utils import generate_mods_from_lines, to_readable_mods
 
@@ -339,19 +339,12 @@ def online_playlist_action_logger(bid: int | str, mods: str, action: int, old_mo
 @st.dialog(_("Export selected as a playlist"))
 def export_filtered_playlist():
     parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
-    specs_x = [
-        (bid, mods, skill, "", note, 0, "", "", 0.0)
-        for bid, mods, skill, note in zip(
-            selected_rows["BID"],
-            parsed_mods_list,  # 直接用解析好的列表
-            selected_rows["SKILL_SLOT"],
-            selected_rows["NOTES"]
-        )
-    ]
+    specs_x = [(bid, mods, skill, "", note, 0, "", "", 0.0) for bid, mods, skill, note in zip(selected_rows["BID"], parsed_mods_list, selected_rows["SKILL_SLOT"], selected_rows["NOTES"])]  # 直接用解析好的列表
     tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
     st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
     with open(tmp_playlist_filename_x, "r") as fi:
         st.code(fi.read(), language="properties")
+
 
 if st.session_state.perm >= 1:
     st.markdown(_("## Online Playlist Creator"))
@@ -628,7 +621,7 @@ if st.session_state.perm >= 1:
                 refresh(1.5)
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh()
-            if st.button(_("Export"), use_container_width=True, icon=":material/file_download:"):
+            if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
                 export_filtered_playlist()
 
     with col_del:
@@ -645,7 +638,7 @@ if st.session_state.perm >= 1:
 
 st.divider()
 
-st.markdown(_("## Generate from a File"))
+st.markdown(_("## Generate from a file"))
 uploaded_file = st.file_uploader(_("choose a file"), type=["properties"])
 if uploaded_file is not None:
     playlist_name = os.path.splitext(uploaded_file.name)[0]
