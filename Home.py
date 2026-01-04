@@ -11,7 +11,6 @@ from streamlit.errors import Error
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import LANGUAGES
-from osuawa import Osuawa
 from osuawa.components import init_page, memorized_selectbox
 
 init_page(_("Homepage") + " - osuawa")
@@ -25,7 +24,7 @@ def run(g):
             st.error(e)
             break  # use continue if you want to continue running the generator
         except StopIteration as e:
-            st.success(_("%s tasks done") % e.value)
+            st.success(_("%d tasks done") % e.value)
             break
         except (Error, NotImplementedError) as e:
             logger.get_logger("streamlit").exception(e)

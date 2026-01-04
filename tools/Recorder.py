@@ -10,8 +10,7 @@ import streamlit as st
 from streamlit import logger
 from websockets.sync.client import connect
 
-from osuawa import Osuawa
-from osuawa import C
+from osuawa import C, Osuawa
 from osuawa.components import init_page
 from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
