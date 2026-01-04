@@ -543,7 +543,7 @@ class OsuPlaylist(object):
               <div class="flex gap-2 has-tooltip">
                 {"".join([f'<span class="card-main px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}{"<sup>*</sup>" if mod.get("settings") and mod["acronym"] not in self.custom_mods_acronym else ""}</span>' for mod in raw_mods])}
                 <div class="tooltip flex">
-                  <div class="flex-initial rounded text-xs shadow-xl mt-6 px-2 py-1 mx-4 w-auto h-auto break-all notes" style="opacity: 88%;">{"; ".join(mods_ready)}</div>
+                  <div class="flex-initial rounded text-xs shadow-xl mt-6 px-2 py-1 mx-4 w-auto h-auto break-all notes" style="opacity: 88%; white-space: pre-line;">{";\n".join(mods_ready)}</div>
                 </div>
               </div>
             </div>

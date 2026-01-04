@@ -10,14 +10,12 @@ import streamlit as st
 from streamlit import logger
 from websockets.sync.client import connect
 
-import osuawa
-from osuawa import C
-from osuawa.components import init_page_layout
+from osuawa import C, Osuawa
+from osuawa.components import init_page
 from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
-st.session_state.awa: osuawa.Osuawa  # type: ignore
-
-init_page_layout(_("Recorder") + " - osuawa")
+assert isinstance(st.session_state.awa, Osuawa)
+init_page(_("Recorder") + " - osuawa")
 
 
 async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
@@ -28,10 +26,10 @@ async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame
     scores_compact: dict[str, CompletedSimpleScoreInfo] = {}
     for task in tasks:
         scores_compact.update(task.result())
-    return st.session_state.awa.create_scores_dataframe(scores_compact, True)
+    return st.session_state.awa.create_scores_dataframe(scores_compact)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def friends() -> dict[int, str]:
     raw_friends: list[dict[str, Any]] = asyncio.run(st.session_state.awa.a_get_friends())
     ret_friends = {}
@@ -61,9 +59,15 @@ def tosu_main() -> None:
         logger.get_logger(st.session_state.username).info("getting records of %d" % bid)
         reversed_friends = {v: k for k, v in friends().items()}
         quickly_selected_friend_ids = [reversed_friends[username] for username in quickly_selected_friend_usernames]
-        ids = sorted(list(set(orjson.loads(st.session_state.rec_user_ids) + quickly_selected_friend_ids)))
+        try:
+            ids = sorted(list(set(orjson.loads(st.session_state.rec_user_ids) + quickly_selected_friend_ids)))
+        except orjson.JSONDecodeError:
+            st.error(_("invalid user ids"))
+            st.stop()
         df = asyncio.run(get_users_beatmap_scores(ids, bid))
         df["username"] = df["user"].map(friends())
+        # sort by score
+        df = df.sort_values(by="score", ascending=False)
 
         # apply filter
         if st.session_state.rec_tosu_mods != "":
@@ -74,8 +78,6 @@ def tosu_main() -> None:
             # select scores with best pp by user_id
             df = df.groupby("user").first()
         if st.session_state.rec_tosu_prettify:
-            # sort by pp
-            df = df.sort_values(by="pp", ascending=False)
             # row background color by rank
             column_order = ("username", "pp", "accuracy", "max_combo", "total_score", "mods", "ts")
             st.dataframe(df.style.apply(tosu_df_style, axis=1), column_order=column_order, hide_index=True)
@@ -97,7 +99,7 @@ with st.form("quickly add friend ids"):
 st.text_input(_("manually add user ids"), value="[%d]" % st.session_state.user, key="rec_user_ids")
 try:
     tosu_main()
-except ConnectionError:
+except (ConnectionError, ConnectionRefusedError, TimeoutError):
     st.error(_("failed to connect to tosu"))
     st.stop()
 

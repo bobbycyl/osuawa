@@ -8,18 +8,16 @@ from plotly import figure_factory as ff
 from scipy import stats
 
 from osuawa import C
-from osuawa.components import init_page_layout, memorized_multiselect, memorized_selectbox
+from osuawa.components import init_page, memorized_multiselect, memorized_selectbox
 from osuawa.utils import calc_bin_size, regex_search_column, user_recent_scores_directory
 
-init_page_layout(_("Score visualizer") + " - osuawa")
+init_page(_("Score visualizer") + " - osuawa")
 all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RECENT_SCORES.value))]
 user = st.selectbox(_("user"), all_users)
 st.date_input(_("date range"), [pd.Timestamp.today() - pd.Timedelta(days=30), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
 
-THEME_COLOR_BLUE = "#4C95D9"
-THEME_COLOR_RED = "#FF6A6A"
-CO = THEME_COLOR_RED
-CC = THEME_COLOR_BLUE
+CO = "#FF6A6A"
+CC = "#4C95D9"
 
 
 def calc_pp_overall_main(data: pd.DataFrame, tag: Optional[str] = None) -> str:
@@ -53,12 +51,12 @@ def calc_pp_overall_count(data: pd.DataFrame, tag: Optional[str] = None) -> str:
 
 def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
     srl, srh = st.session_state.cat_sr_range
-    df1 = regex_search_column(data, "mods", st.session_state.rec_tosu_mods)
+    df1 = regex_search_column(data, "mods", st.session_state.cat_mods)
     if srl == 0.0 and srh == 10.0:
         # 0 - 10 视为无限制
-        df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | data["passed"]) & ((not st.session_state.cat_acm) | data["only_common_mods"])]
+        df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     else:
-        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | data["passed"]) & ((not st.session_state.cat_acm) | data["only_common_mods"])]
+        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     if st.session_state.cat_advanced_filter != "":
         df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
     else:
@@ -100,7 +98,7 @@ def generate_stats_dataframe(data: pd.DataFrame, indexes: list[str]) -> pd.DataF
     index_records = {}
     for index in indexes:
         index_records[index] = calc_statistics(data, index)
-    df_stats = pd.DataFrame.from_dict(index_records, orient="index", columns=("min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "_CIL", "_CIU", "N"))
+    df_stats = pd.DataFrame.from_dict(index_records, orient="index", columns=("min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "_CIL", "_CIU", "N")).round(2)
     df_stats["95% CI"] = df_stats.apply(lambda row: f"[{row['_CIL']:.2f}, {row['_CIU']:.2f}]", axis=1)
     df_stats = df_stats[["min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "95% CI", "N"]]
     return df_stats
@@ -110,7 +108,7 @@ if not os.path.exists(user_recent_scores_directory(user)):
     st.error(_("user not found"))
     st.stop()
 begin_date, end_date = st.session_state.cat_date_range
-df = pd.read_parquet(user_recent_scores_directory(user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)])
+df = st.session_state.awa.calculate_extended_scores_dataframe_with_timezone(pd.read_parquet(user_recent_scores_directory(user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)]))
 if len(df) == 0:
     st.error(_("no scores found"))
     st.stop()
@@ -175,7 +173,7 @@ df_o = apply_filter(df)
 with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("compared to"), all_users)
-    df_c = apply_filter(pd.read_parquet(user_recent_scores_directory(comp_user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)]))
+    df_c = apply_filter(st.session_state.awa.calculate_extended_scores_dataframe_with_timezone(pd.read_parquet(user_recent_scores_directory(comp_user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)])))
     stats_indexes = [
         "accuracy",
         "hit_window",
@@ -221,7 +219,7 @@ with st.container(border=True):
             user: df_o_stats.T[st.session_state.cat_comp_index],
         },
     )
-    st.table(df_stats_ind_joined.round(2))
+    st.table(df_stats_ind_joined)
     can_show_chart_pr = True
     if df_o_stats.at[st.session_state.cat_comp_index, "std"] == 0:
         st.error(_("%s of user %s is constant (%s)") % (st.session_state.cat_comp_index, user, df_o_stats.at[st.session_state.cat_comp_index, "mean"]))

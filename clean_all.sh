@@ -5,3 +5,4 @@ rm -rf ./static/
 rm -rf ./*LCK
 rm -rf ./.streamlit/.oauth/
 rm -rf ./.streamlit/.components/
+rm -rf ./osuawa.db
