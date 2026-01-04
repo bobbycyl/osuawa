@@ -52,8 +52,10 @@ def gettext_translate(text):
 def init_logger():
     fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
     fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
-    logger.get_logger("streamlit").addHandler(fh)
-    logger.get_logger(st.session_state.username).addHandler(fh)
+    if "streamlit" not in logger.get_logger("streamlit").handlers:
+        logger.get_logger("streamlit").addHandler(fh)
+    if st.session_state.username not in logger.get_logger("streamlit").handlers:
+        logger.get_logger(st.session_state.username).addHandler(fh)
 
 
 def register_awa(ci, cs, ru, sc, dm, oauth_token: Optional[str] = None, oauth_refresh_token: Optional[str] = None):

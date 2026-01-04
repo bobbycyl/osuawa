@@ -26,7 +26,7 @@ async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame
     scores_compact: dict[str, CompletedSimpleScoreInfo] = {}
     for task in tasks:
         scores_compact.update(task.result())
-    return st.session_state.awa.create_scores_dataframe(scores_compact, True)
+    return st.session_state.awa.create_scores_dataframe(scores_compact)
 
 
 @st.cache_data(ttl=60)

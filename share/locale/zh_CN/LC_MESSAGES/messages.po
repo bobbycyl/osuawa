@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-01-04 14:50+0800\n"
-"PO-Revision-Date: 2026-01-04 14:57+0800\n"
+"POT-Creation-Date: 2026-01-04 15:58+0800\n"
+"PO-Revision-Date: 2026-01-04 15:26+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -19,7 +19,7 @@ msgstr ""
 "Generated-By: Babel 2.14.0\n"
 "X-Generator: Poedit 3.8\n"
 
-#: Home.py:16 app.py:103
+#: Home.py:16 app.py:105
 msgid "Homepage"
 msgstr "主页"
 
@@ -45,41 +45,41 @@ msgstr "键入“help”以开始。"
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:102
+#: app.py:104
 msgid "Loading necessary objects..."
 msgstr "正在加载必要对象……"
 
-#: app.py:104 tools/Score_visualizer.py:14
+#: app.py:106 tools/Score_visualizer.py:14
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:105 tools/Playlist_generator.py:26
+#: app.py:107 tools/Playlist_generator.py:26
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:106 tools/Recorder.py:18
+#: app.py:108 tools/Recorder.py:18
 msgid "Recorder"
 msgstr "看记录"
 
-#: app.py:126
+#: app.py:128
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: app.py:127
+#: app.py:129
 msgid "OAuth2 URL"
 msgstr "授权链接"
 
-#: app.py:157
+#: app.py:159
 msgid ""
 "OAuth2 token or code has expired. Please remove the url parameter and "
 "refresh the page."
 msgstr "授权已过期，请移除查询参数并刷新页面。"
 
-#: app.py:209
+#: app.py:211
 msgid "Press `F` to exit immersive mode."
 msgstr "按 `F` 退出沉浸模式。"
 
-#: app.py:213
+#: app.py:215
 msgid "Immersive Mode"
 msgstr "沉浸模式"
 
@@ -116,8 +116,8 @@ msgid "generate local playlists"
 msgstr "生成本地课题"
 
 #: osuawa/components.py:158
-msgid "show user recent scores"
-msgstr "展示用户最近分数"
+msgid "show user recent scores (only saved scores are available)"
+msgstr "展示用户最近分数（需要先保存分数）"
 
 #: osuawa/components.py:260
 #, python-format
@@ -315,7 +315,7 @@ msgstr "将选中行导出为课题"
 
 #: tools/Playlist_generator.py:350
 msgid "## Online Playlist Creator"
-msgstr "在线课题制作器"
+msgstr "## 在线课题制作器"
 
 #: tools/Playlist_generator.py:359
 msgid "Add beatmap"
@@ -394,7 +394,7 @@ msgstr "未选中任何谱面"
 
 #: tools/Playlist_generator.py:641
 msgid "## Generate from a file"
-msgstr "从文件中生成"
+msgstr "## 使用课题源文件生成"
 
 #: tools/Playlist_generator.py:642
 msgid "choose a file"
