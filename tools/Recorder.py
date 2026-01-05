@@ -2,7 +2,7 @@ import asyncio
 import os.path
 import threading
 from asyncio import Task
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import orjson
 import pandas as pd
@@ -10,11 +10,15 @@ import streamlit as st
 from streamlit import logger
 from websockets.sync.client import connect
 
-from osuawa import C, Osuawa
+from osuawa import C
 from osuawa.components import init_page
 from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
-assert isinstance(st.session_state.awa, Osuawa)
+if TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
+
+
 init_page(_("Recorder") + " - osuawa")
 
 

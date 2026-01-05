@@ -1,4 +1,5 @@
 from time import sleep
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import streamlit as st
@@ -12,6 +13,11 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import LANGUAGES
 from osuawa.components import init_page, memorized_selectbox
+
+if TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
+
 
 init_page(_("Homepage") + " - osuawa")
 

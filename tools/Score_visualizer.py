@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import pandas as pd
 import plotly.express as px
@@ -10,6 +10,11 @@ from scipy import stats
 from osuawa import C
 from osuawa.components import init_page, memorized_multiselect, memorized_selectbox
 from osuawa.utils import calc_bin_size, regex_search_column, user_recent_scores_directory
+
+if TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
+
 
 init_page(_("Score visualizer") + " - osuawa")
 all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RECENT_SCORES.value))]
@@ -56,7 +61,7 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
         # 0 - 10 视为无限制
         df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     else:
-        df2: pd.DataFrame = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
+        df2 = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     if st.session_state.cat_advanced_filter != "":
         df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
     else:

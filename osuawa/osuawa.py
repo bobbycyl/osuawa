@@ -17,6 +17,7 @@ from typing import Any, Optional
 import numpy as np
 import orjson
 import pandas as pd
+import typing_extensions
 
 assets_dir = os.path.join(os.path.dirname(__file__))
 if platform.system() == "Windows":
@@ -44,13 +45,15 @@ from .utils import (
     headers,
     a_get_user_info,
     simple_user_dict,
-    calculate_osu_difficulty,
+    calculate_difficulty,
     user_raw_recent_scores_filename,
     user_recent_scores_directory,
 )
 
-assert typing
 assert datetime
+if typing.TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
 
 
 def strip_quotes(text: str) -> str:
@@ -157,7 +160,7 @@ class Osuawa(object):
         return asyncio.run(a_get_user_info(self.api, username))
 
     async def complete_scores_compact(self, scores_compact: dict[str, SimpleScoreInfo]) -> dict[str, CompletedSimpleScoreInfo]:
-        beatmaps_dict = await a_get_beatmaps_dict(self.api, {x.bid for x in scores_compact.values()})
+        beatmaps_dict = await a_get_beatmaps_dict(self.api, [x.bid for x in scores_compact.values()])
         return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
 
     async def a_get_friends(self) -> list[dict[str, Any]]:
@@ -298,7 +301,7 @@ class BeatmapCover(object):
         # 下载 cover 原图，若无 cover 则使用默认图片
         cover_filename = await d.async_start(self.beatmap.beatmapset().covers.cover_2x, filename, headers)
         try:
-            im = Image.open(cover_filename)
+            im: Image.Image = Image.open(cover_filename)
         except UnidentifiedImageError:
             try:
                 im = Image.open(await d.async_start(self.beatmap.beatmapset().covers.slimcover_2x, filename, headers))
@@ -403,10 +406,17 @@ class OsuPlaylist(object):
                 % banner_img_src
             )
         self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
-        parsed_beatmap_list: list[dict[str, str | int | list[dict[str, Any]] | Beatmap | None]] = []
+
+        class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):  # type: ignore[call-arg]
+            bid: int
+            mods: list[dict[str, Any]]
+            notes: str
+            beatmap: Beatmap
+
+        parsed_beatmap_list: list[ParsedPlaylistBeatmap] = []
 
         # pop p from end until empty
-        current_parsed_beatmap: dict[str, str | int | list[dict[str, Any]] | Beatmap | None] = {"notes": ""}
+        current_parsed_beatmap: ParsedPlaylistBeatmap = {"notes": ""}
         while p:
             k, v = p.popitem()
             if k[0] == "#":  # notes
@@ -416,13 +426,13 @@ class OsuPlaylist(object):
                 obj_v = orjson.loads(v)
                 if self.custom_columns:
                     for column in self.custom_columns:
-                        current_parsed_beatmap[column] = obj_v.get(column)
+                        current_parsed_beatmap[column] = obj_v.get(column)  # type: ignore[literal-required]
                 else:
                     current_parsed_beatmap["mods"] = obj_v
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = asyncio.run(a_get_beatmaps_dict(self.awa.api, {int(x["bid"]) for x in parsed_beatmap_list}))
+        beatmaps_dict = asyncio.run(a_get_beatmaps_dict(self.awa.api, [int(x["bid"]) for x in parsed_beatmap_list]))
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]
@@ -478,11 +488,11 @@ class OsuPlaylist(object):
         download_osu(b)
         my_attr = SimpleOsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
         my_attr.set_mods(mods)
-        osupp_attr = calculate_osu_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
+        osupp_attr = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
         stars1 = osupp_attr["star_rating"]
         stars2 = None
         if is_fm:
-            osupp_attr_fm = calculate_osu_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods + ["HR"], mod_options=my_attr.osu_tool_mod_options)
+            osupp_attr_fm = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods + ["HR"], mod_options=my_attr.osu_tool_mod_options)
             stars2 = osupp_attr_fm["star_rating"]
         cs = "%s" % round(my_attr.cs, 2)
         ar = "0" if my_attr.ar is None else "%s" % round(my_attr.ar, 2)
@@ -505,7 +515,7 @@ class OsuPlaylist(object):
                 bg_filename = await bg_d.async_start(f"https://assets.ppy.sh/beatmaps/%d/covers/fullsize.jpg" % b.beatmapset_id, "%d" % bid, headers)
                 # bg_filename = await bg_d.async_start(f"https://beatconnect.io/bg/%d/%d" % (b.beatmapset_id, bid), "%d" % bid, headers)
                 try:
-                    im = Image.open(bg_filename)
+                    im: Image.Image = Image.open(bg_filename)
                 except UnidentifiedImageError:
                     im = Image.open(os.path.join(assets_dir, "bg1.jpg"))
                     im = im.filter(ImageFilter.BLUR)
@@ -521,7 +531,7 @@ class OsuPlaylist(object):
                 if column == "mods":
                     continue
                 else:
-                    extra_notes += "<br />%s: %s" % (column, element[column])
+                    extra_notes += "<br />%s: %s" % (column, element[column])  # type: ignore[literal-required]
 
             if root_mod != last_root_mod and last_root_mod != "":
                 beatmap_info = """    </div>
@@ -659,7 +669,7 @@ class OsuPlaylist(object):
             if column == "mods":
                 continue
             else:
-                completed_beatmap[column] = element[column]
+                completed_beatmap[column] = element[column]  # type: ignore[literal-required]
         return completed_beatmap
 
     async def playlist_task(self) -> list[dict]:
