@@ -6,7 +6,7 @@ import shutil
 from collections import deque
 from secrets import token_hex
 from shutil import copyfile
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, TYPE_CHECKING
 from uuid import UUID
 
 import pandas as pd
@@ -24,6 +24,10 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
 from osuawa.utils import format_size, get_size_and_count, user_recent_scores_directory
+
+if TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
 
 
 def save_value(key: str) -> None:
@@ -159,7 +163,7 @@ def commands():
     ]
 
 
-def files_action(action: Literal["show", "clean"], filename: str = None) -> str:
+def files_action(action: Literal["show", "clean"], filename: Optional[str] = None) -> str:
     if filename is not None and ".." in os.path.relpath(filename, project_dir):
         raise ValueError("parent directory access is not allowed")
     ret_md = ""

@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import typing
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, unique
@@ -21,7 +22,7 @@ init_osu_tools(os.path.join(os.path.dirname(__file__), "..", "osu-tools", "Perfo
 from osupp.core import OsuRuleset
 
 # noinspection PyUnusedImports
-from osupp.difficulty import calculate_osu_difficulty, get_all_mods
+from osupp.difficulty import calculate_difficulty, get_all_mods
 from osupp.performance import OsuPerformance, calculate_osu_performance
 
 headers = {
@@ -31,6 +32,9 @@ headers = {
 LANGUAGES = ["en_US", "zh_CN"]
 all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
 sem = BoundedSemaphore()
+if typing.TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
 
 
 @unique
@@ -142,8 +146,8 @@ async def get_username(api: OssapiAsync, user: int) -> str:
     return (await api.user(user, key="id")).username
 
 
-async def a_get_beatmaps_dict(api: OssapiAsync, bids: set[int]) -> dict[int, Beatmap]:
-    bids = tuple(bids)
+async def a_get_beatmaps_dict(api: OssapiAsync, bids: list[int]) -> dict[int, Beatmap]:
+    bids = list(set(bids))
     cut_bids: list[list[int]] = []
     for i in range(0, len(bids), 50):
         cut_bids.append(list(bids[i : i + 50]))
@@ -198,8 +202,8 @@ class SimpleOsuDifficultyAttribute(object):
         self.is_very_low_ar = False
         self.is_speed_up = False
         self.is_speed_down = False
-        self.osu_tool_mods = []  # [acronym]
-        self.osu_tool_mod_options = []  # [acronym_setting_name=setting_value]
+        self.osu_tool_mods: list[str] = []  # [acronym]
+        self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
 
     def set_mods(self, mods: list):
         mods_dict = {}  # {acronym, settings}
@@ -591,6 +595,7 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
             else:  # mod with settings
                 # 如果要设置 mod 参数，原则上要求 mod 本身已经加入
                 # 但是为了方便起见，如果 mod 不存在，但又要求设置参数，则自动添加该 mod
+                value: str | float | bool
                 acronym_n_setting, value = line_split
                 acronym, mod_setting = acronym_n_setting.split("_", 1)
                 if acronym not in mods_dict:

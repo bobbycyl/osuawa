@@ -3,7 +3,7 @@ import gettext
 import logging
 import os
 from html import escape as html_escape
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from uuid import UUID
 
 import requests
@@ -23,6 +23,9 @@ from osuawa.utils import get_an_osu_meme
 
 st.session_state._debugging_mode = False
 admins = st.secrets.args.admins
+if TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
 
 
 def convert_locale(accept_language: str):

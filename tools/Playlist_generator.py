@@ -4,7 +4,7 @@ import shutil
 import time
 from functools import partial
 from time import sleep, time_ns
-from typing import Never, Optional
+from typing import Never, Optional, TYPE_CHECKING
 from uuid import UUID
 
 import orjson
@@ -22,6 +22,11 @@ from osuawa.components import init_page, load_value, memorized_selectbox, save_v
 from osuawa.utils import generate_mods_from_lines, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
+
+if TYPE_CHECKING:
+
+    def _(text: str) -> str: ...
+
 
 init_page(_("Playlist generator") + " - osuawa")
 with st.sidebar:
@@ -155,6 +160,7 @@ def refresh(delay: Optional[float] = None) -> Never:
     st.cache_data.clear()
     conn.reset()
     st.rerun()
+    raise  # 给 mypy 看的补丁
 
 
 @st.cache_data(show_spinner=False)
