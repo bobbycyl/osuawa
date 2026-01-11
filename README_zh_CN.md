@@ -52,7 +52,7 @@ dotnet build -c Release
 1. 从 [官网](https://osu.ppy.sh/home/account/edit) 获取你的 osu! 开放授权客户端。
    端口设置须与 `./.streamlit/config.toml` 中的保持一致。
 
-2. 创建并编辑 `./.streamlit/secrets.toml`，可参考 [示例文件](./.streamlit/secrets.toml)
+2. 创建并编辑 `./.streamlit/secrets.toml`，可参考 [示例文件](./.streamlit/secrets.example.toml)
 
 3. 如果你用不到 SSL，或者使用反向代理实现了这个功能，在 `./.streamlit/config.toml` 中删除与 SSL 相关的配置即可。
 

@@ -55,7 +55,7 @@ dotnet build -c Release
    The port should match which set in `./.streamlit/config.toml`.
 
 2. Create a file named `./.streamlit/secrets.toml` and edit it.
-   You can find [an example here](./.streamlit/secrets.toml)
+   You can find [an example here](./.streamlit/secrets.example.toml)
 
 3. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
 
