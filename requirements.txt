@@ -9,6 +9,7 @@ ossapi[async]
 pandas
 pillow
 plotly
+psycopg2-binary
 py7zr
 SQLAlchemy
 scipy

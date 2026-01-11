@@ -1,14 +1,18 @@
+import asyncio
 import os
 import os.path
 import re
 import shelve
 import shutil
 from collections import deque
+from dataclasses import asdict
+from datetime import date, datetime, time
 from secrets import token_hex
 from shutil import copyfile
 from typing import Any, Literal, Optional, TYPE_CHECKING
 from uuid import UUID
 
+import orjson
 import pandas as pd
 import streamlit as st
 from clayutil.cmdparse import (
@@ -19,15 +23,21 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
     StringField as Str,
 )
+from ossapi import Score
+from sqlalchemy import text
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import format_size, get_size_and_count, user_recent_scores_directory
+from osuawa.utils import CompletedSimpleScoreInfo, SimpleScoreInfo, _make_query_uppercase, format_size, get_size_and_count, get_username
 
 if TYPE_CHECKING:
 
     def _(text: str) -> str: ...
+
+
+_conn = st.connection("osuawa", type="sql", ttl=60)
+_conn.query = _make_query_uppercase(_conn.query)
 
 
 def save_value(key: str) -> None:
@@ -130,7 +140,7 @@ def commands():
             _("save user recent scores"),
             [Int("user"), Bool("include_fails", True)],
             1,
-            st.session_state.awa.save_recent_scores,
+            save_recent_scores,
         ),
         Command(
             "update",
@@ -138,11 +148,11 @@ def commands():
             [
                 Coll(
                     "user",
-                    [int(os.path.splitext(os.path.basename(x))[0]) for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RAW_RECENT_SCORES.value))],
+                    get_all_score_users(),
                 ),
             ],
             1,
-            st.session_state.awa.save_recent_scores,
+            save_recent_scores,
         ),
         Command("score", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
         Command(
@@ -281,11 +291,20 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
     st.write(["%s(%s) " % (k, v) for k, v in original_playlist_beatmaps.items() if v > 1])
 
 
+def get_all_score_users() -> list[int]:
+    return _conn.query(
+        """
+        SELECT DISTINCT USER_ID
+        FROM SCORE
+        ORDER BY USER_ID""",
+        ttl=0,
+    )["USER_ID"].to_list()
+
+
 def cat(user: int):
-    if not os.path.exists(user_recent_scores_directory(user)):
+    if user not in get_all_score_users():
         raise ValueError(_("user %d not found") % user)
-    df = st.session_state.awa.calculate_extended_scores_dataframe_with_timezone(pd.read_parquet(user_recent_scores_directory(user)))
-    return df
+    return get_scores_dataframe(user)
 
 
 def register_commands(obj: Optional[dict] = None):
@@ -312,3 +331,128 @@ def register_commands(obj: Optional[dict] = None):
         pass
     st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
     return ret
+
+
+def save_recent_scores(user: int, include_fails: bool = True) -> str:
+    user_scores: list[Score] = asyncio.run(st.session_state.awa.a_get_recent_scores(user, include_fails))
+    recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
+    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = asyncio.run(st.session_state.awa.complete_scores_compact(recent_scores_compact))
+    with _conn.session as s:
+        # 插入到表 SCORE，如果遇到冲突，则放弃
+        # 准备数据
+        scores = []
+        for pk, _v in completed_recent_scores_compact.items():
+            score = asdict(
+                _v,
+                dict_factory=lambda items: {k.lstrip("_"): None if v is None else v.timestamp() if isinstance(v, datetime) else int(v) if isinstance(v, bool) else orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v for k, v in items},
+            )
+            score["score_id"] = pk
+            scores.append(score)
+        res = s.execute(
+            text(
+                """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP, IS_SPEED_DOWN,
+                                      INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
+                                      B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
+                                      B_PP_81IF, B_PP_67IF)
+                   VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
+                           :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
+                           :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
+                           :b_pp_81if, :b_pp_67if)
+                   ON CONFLICT DO NOTHING;""",
+            ),
+            params=scores,
+        )
+
+        len_diff = res.rowcount
+        s.commit()
+    return "%s: got/diff: %d/%d" % (
+        asyncio.run(get_username(st.session_state.awa.api, user)),
+        len(recent_scores_compact),
+        len_diff,
+    )
+
+
+def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = None) -> pd.DataFrame:
+    with _conn.session as s:
+        if date_range is None:
+            res = s.execute(
+                text(
+                    """
+                    SELECT *
+                    FROM SCORE
+                    WHERE USER_ID = :user
+                    ORDER BY TS""",
+                ),
+                params={"user": user},
+            )
+        else:
+            begin_date_ts = datetime.combine(date_range[0], time.min).timestamp()
+            end_date_ts = datetime.combine(date_range[1], time.max).timestamp()
+            res = s.execute(
+                text(
+                    """
+                    SELECT *
+                    FROM SCORE
+                    WHERE USER_ID = :user
+                      AND TS >= :begin_date
+                      AND TS <= :end_date
+                    ORDER BY TS""",
+                ),
+                params={"user": user, "begin_date": begin_date_ts, "end_date": end_date_ts},
+            )
+        rows = res.fetchall()
+    # 处理 bool 和 datetime
+    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {
+        str(row[0]): CompletedSimpleScoreInfo(
+            # 基础字段
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            bool(row[6]),
+            row[7],
+            orjson.loads(row[8]) if row[8] is not None else [],
+            datetime.fromtimestamp(row[9]),
+            orjson.loads(row[10]) if row[10] is not None else {},
+            datetime.fromtimestamp(row[11]) if row[11] is not None else None,
+            # 扩展字段
+            row[12],
+            row[13],
+            row[14],
+            row[15],
+            row[16],
+            bool(row[17]),
+            bool(row[18]),
+            bool(row[19]),
+            bool(row[20]),
+            bool(row[21]),
+            bool(row[22]),
+            bool(row[23]),
+            row[24],
+            row[25],
+            row[26],
+            row[27],
+            row[28],
+            row[29],
+            row[30],
+            row[31],
+            row[32],
+            row[33],
+            row[34],
+            row[35],
+            row[36],
+            row[37],
+            row[38],
+            row[39],
+            row[40],
+            row[41],
+            row[42],
+            row[43],
+            row[44],
+            row[45],
+            row[46],
+        )
+        for row in rows
+    }
+    return st.session_state.awa.create_scores_dataframe(completed_recent_scores_compact)

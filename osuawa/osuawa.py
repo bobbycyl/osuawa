@@ -6,13 +6,12 @@ import os
 import os.path
 import platform
 import threading
-import typing
 from asyncio import Task
-from dataclasses import astuple, fields
+from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 import numpy as np
 import orjson
@@ -23,7 +22,7 @@ assets_dir = os.path.join(os.path.dirname(__file__))
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
-from clayutil.futil import Downloader, Properties, check_duplicate_filename, filelock
+from clayutil.futil import Downloader, Properties
 from clayutil.validator import Integer
 
 from fontfallback import writing
@@ -38,7 +37,6 @@ from .utils import (
     download_osu,
     CompletedSimpleScoreInfo,
     a_get_beatmaps_dict,
-    get_username,
     to_readable_mods,
     SimpleScoreInfo,
     C,
@@ -46,12 +44,10 @@ from .utils import (
     a_get_user_info,
     simple_user_dict,
     calculate_difficulty,
-    user_raw_recent_scores_filename,
-    user_recent_scores_directory,
 )
 
 assert datetime
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
 
     def _(text: str) -> str: ...
 
@@ -127,12 +123,6 @@ class Osuawa(object):
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
-        if calculate_extended:
-            df = self.calculate_extended_scores_dataframe_with_timezone(df)
-        return df
-
-    def calculate_extended_scores_dataframe_with_timezone(self, data: pd.DataFrame) -> pd.DataFrame:
-        df = data.copy()
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
         ec = ExtendedSimpleScoreInfo.__slots__
@@ -207,50 +197,6 @@ class Osuawa(object):
             offset += 50
 
         return user_scores
-
-    @filelock(1)
-    def save_recent_scores(self, user: int, include_fails: bool = True) -> str:
-        # get
-        user_scores = asyncio.run(self.a_get_recent_scores(user, include_fails))
-
-        recent_scores_compact: dict[str, SimpleScoreInfo] = {str(x.id): SimpleScoreInfo.from_score(x) for x in user_scores}
-        len_got = len(recent_scores_compact)
-
-        # concatenate
-        len_local = 0
-        recent_scores_compact_diff = recent_scores_compact  # 初始化时直接引用，无需 copy
-        if os.path.exists(user_raw_recent_scores_filename(user)):
-            with open(user_raw_recent_scores_filename(user), "rb") as fi_b:
-                recent_scores_compact_old = {str(k): SimpleScoreInfo(*v) for k, v in orjson.loads(fi_b.read()).items()}
-            len_local = len(recent_scores_compact_old)
-            if len_local > 0:
-                # 如果本地有数据，则重新计算 diff。这会修改引用，因此是安全的
-                recent_scores_compact_diff = {k: recent_scores_compact[k] for k in recent_scores_compact.keys() - recent_scores_compact_old.keys()}
-                # 更新，但不要覆盖旧数据
-                recent_scores_compact.update(recent_scores_compact_old)
-        len_diff = len(recent_scores_compact_diff)
-
-        # calculate difficulty attributes
-        completed_recent_scores_compact_diff: dict[str, CompletedSimpleScoreInfo] = asyncio.run(self.complete_scores_compact(recent_scores_compact_diff))
-
-        # save
-        # json 仅保存 SimpleScoreInfo 的信息（每次完整读写），而 parquet 保存完整的 CompletedScoreInfo 的信息（只写入 diff）
-        with open(
-            user_raw_recent_scores_filename(user),
-            "wb",
-        ) as fo_b:
-            fo_b.write(orjson.dumps({k: astuple(v) for k, v in recent_scores_compact.items()}))
-        df_diff = self.create_scores_dataframe(completed_recent_scores_compact_diff, False)
-        # 分块文件
-        if not os.path.exists(user_recent_scores_directory(user)):
-            os.mkdir(user_recent_scores_directory(user))
-        df_diff.to_parquet(check_duplicate_filename(os.path.join(user_recent_scores_directory(user), "chunk.parquet")))
-        return "%s: local/got/diff: %d/%d/%d" % (
-            asyncio.run(get_username(self.api, user)),
-            len_local,
-            len_got,
-            len_diff,
-        )
 
 
 def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
@@ -382,7 +328,7 @@ class BeatmapCover(object):
 
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
-    custom_mods_acronym = {"NM", "TB", "FM", "F+"}
+    custom_mods_acronym = {"NM", "TB", "FM", "F+", "SP"}
     mod_color = {"NM": "#107fb9", "HD": "#b97f10", "HR": "#b91010", "EZ": "#10b97f", "DT": "#7f10b9", "NC": "#b9107f", "HT": "#7f7f7f", "FM": "#40507f", "TB": "#7f4050", "F+": "#507f40"}
 
     # osz_type = OneOf("full", "novideo", "mini")
@@ -664,6 +610,8 @@ class OsuPlaylist(object):
             "OD": cover.od,
             "Mods": "; ".join(mods_ready),
             "Notes": notes,
+            "_Artist": b.beatmapset().artist_unicode,
+            "_Title": b.beatmapset().title_unicode,
         }
         for column in self.custom_columns:
             if column == "mods":
