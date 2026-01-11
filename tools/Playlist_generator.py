@@ -19,7 +19,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import init_page, load_value, memorized_selectbox, save_value
-from osuawa.utils import generate_mods_from_lines, to_readable_mods
+from osuawa.utils import _make_query_uppercase, generate_mods_from_lines, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -32,12 +32,22 @@ init_page(_("Playlist generator") + " - osuawa")
 with st.sidebar:
     st.toggle(_("new style"), key="new_style", value=True)
 
+SLOT_MAX_LEN = 5
 conn = st.connection("osuawa", type="sql")
+conn.query = _make_query_uppercase(conn.query)
 uid = UUID(get_script_run_ctx().session_id).hex
-row_style_js = JsCode(
+row_style_js_with_dup = JsCode(
     """function(params) {
     if (params.data._is_dup_bid) return { backgroundColor: 'crimson' };
-    if (params.data._is_dup_sid) return { backgroundColor: 'lemonchiffon' };
+    if (params.data._is_dup_song) return { backgroundColor: 'lemonchiffon' };
+    if (params.data.STATUS == 1) return { backgroundColor: 'darkseagreen' };
+    if (params.data.STATUS == 2) return { backgroundColor: 'powderblue' };
+    return {};
+}
+""",
+)
+row_style_js = JsCode(
+    """function(params) {
     if (params.data.STATUS == 1) return { backgroundColor: 'darkseagreen' };
     if (params.data.STATUS == 2) return { backgroundColor: 'powderblue' };
     return {};
@@ -48,18 +58,22 @@ slot_cell_style_js = JsCode(
     f"""function(params) {{
     if (!params.value) return {{}};
 
-    let prefix = params.value.toString().substring(0, 2).toUpperCase();
+    let rootMod = params.value.toString().substring(0, 2).toUpperCase();
     let colorMap = {orjson.dumps(OsuPlaylist.mod_color).decode()};
 
-    if (colorMap[prefix]) {{
+    if (colorMap.hasOwnProperty(rootMod) && colorMap[rootMod]) {{
         return {{
-            "backgroundColor": colorMap[prefix],
+            "backgroundColor": colorMap[rootMod],
+            "color": "white",
+            "fontWeight": "bold"
+        }};
+    }} else {{
+        return {{
+            "backgroundColor": "#eb50eb",
             "color": "white",
             "fontWeight": "bold"
         }};
     }}
-
-    return {{}};
 }}
 """,
 )
@@ -154,11 +168,12 @@ st.markdown(
 )
 
 
-def refresh(delay: Optional[float] = None) -> Never:
+def refresh(delay: Optional[float] = None, clear_cache: bool = False) -> Never:
     if delay:
         sleep(delay)
-    st.cache_data.clear()
     conn.reset()
+    if clear_cache:
+        st.cache_data.clear()
     st.rerun()
     raise  # 给 mypy 看的补丁
 
@@ -221,6 +236,12 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
     playlist_beatmaps_raw.sort(key=lambda x: int(x["#"]))
     playlist_beatmaps_db = []
     for i, playlist_beatmap_raw in enumerate(playlist_beatmaps_raw):
+        if len(playlist_beatmap_raw["slot"]) < 3:
+            st.error(_("slot too short: %s") % playlist_beatmap_raw["slot"])
+            st.stop()
+        if len(playlist_beatmap_raw["slot"]) > SLOT_MAX_LEN:
+            st.error(_("slot too long: %s") % playlist_beatmap_raw["slot"])
+            st.stop()
         playlist_beatmaps_db.append(
             {
                 "BID": int(playlist_beatmap_raw["BID"]),
@@ -242,6 +263,8 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
                 "SUGGESTOR": beatmap_specs[i][7],
                 "RAW_MODS": orjson.dumps(beatmap_specs[i][1]).replace(b" ", b"").decode(),
                 "ADD_TS": float(beatmap_specs[i][8]),
+                "U_ARTIST": playlist_beatmap_raw["_Artist"],
+                "U_TITLE": playlist_beatmap_raw["_Title"],
             },
         )
     # 删除临时文件
@@ -277,9 +300,10 @@ def update_beatmap(beatmap: Optional[dict] = None, *, old_bid: Optional[int] = N
     :return:
     """
     if beatmap is not None:
-        if old_bid is not None:
-            raise ValueError("cannot update a beatmap with a different old bid")
         # 如果 beatmap 不为 None，old_bid 从 beatmap 中获取
+        if old_bid is not None:
+            # 提供 beatmap 意味着更新/修改，此时不允许删除操作
+            raise ValueError("cannot update a beatmap with a different old bid")
         old_bid = beatmap["BID"]
 
     with conn.session as s:
@@ -296,11 +320,11 @@ def update_beatmap(beatmap: Optional[dict] = None, *, old_bid: Optional[int] = N
                 ),
                 {"bid": old_bid, "mods": old_mods},
             )
-        elif beatmap is not None:
+        if beatmap is not None:
             s.execute(
                 text(
-                    """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS)
-                       VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS)
+                    """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE)
+                       VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)
                        ON CONFLICT (BID, MODS)
                            DO UPDATE SET SKILL_SLOT = EXCLUDED.SKILL_SLOT,
                                          SR         = EXCLUDED.SR,
@@ -348,7 +372,7 @@ def export_filtered_playlist():
     specs_x = [(bid, mods, skill, "", note, 0, "", "", 0.0) for bid, mods, skill, note in zip(selected_rows["BID"], parsed_mods_list, selected_rows["SKILL_SLOT"], selected_rows["NOTES"])]  # 直接用解析好的列表
     tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
     st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
-    with open(tmp_playlist_filename_x, "r") as fi:
+    with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
         st.code(fi.read(), language="properties")
 
 
@@ -358,6 +382,7 @@ if st.session_state.perm >= 1:
         """SELECT DISTINCT POOL
            FROM BEATMAP
            ORDER BY POOL""",
+        ttl=0,
     )["POOL"].to_list()
     if len(available_pools) == 0:
         available_pools.append("_DEFAULT_POOL")
@@ -421,27 +446,34 @@ if st.session_state.perm >= 1:
                 online_playlist_action_logger(beatmap_to_insert["BID"], beatmap_to_insert["MODS"], 0)
 
     with st.container(border=True):
-        filter_col1, filter_col2, filter_col3 = st.columns([1, 1, 3])
+        filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
         with filter_col1:
             memorized_selectbox(_("Pool"), "gen_filter_pool", ["-"] + available_pools, "-")
         with filter_col2:
             memorized_selectbox(_("Status"), "gen_filter_status", [-1, 0, 1, 2], -1)
         with filter_col3:
             st.text_input(_("Search"), key="gen_filter_search", placeholder=_("Search in BID, slot, notes and so on..."))
+        with ctrl_col1:
+            highlight_dup = st.checkbox(_("Highlight duplicates"), value=True)
+            match_slot_sort = st.checkbox(_("Sort as match"), value=False)
 
-    # 查询重复的 BID 与 SID，用于后期查询结果表格渲染。BID 与 SID 要分开表示，重复的 BID 行要标记为红色，重复的 SID 行要标记为黄色
+    # 查询重复的 BID 与曲目，用于后期查询结果表格渲染。重复的 BID 行要标记为红色，重复的曲目行要标记为黄色
+    # U_ARTIST + U_TITLE 用于曲目识别
     duplicate_bids = conn.query(
         """SELECT BID
            FROM BEATMAP
            GROUP BY BID
            HAVING COUNT(*) > 1""",
-    )["BID"].tolist()
-    duplicate_sids = conn.query(
-        """SELECT SID
+        ttl=0,
+    )["BID"].to_list()
+    duplicate_songs_raw = conn.query(
+        """SELECT U_ARTIST, U_TITLE
            FROM BEATMAP
-           GROUP BY SID
+           GROUP BY U_ARTIST, U_TITLE
            HAVING COUNT(*) > 1""",
-    )["SID"].tolist()
+        ttl=0,
+    )
+    duplicate_songs = (duplicate_songs_raw["U_ARTIST"] + " " + duplicate_songs_raw["U_TITLE"]).to_list()
 
     # pool 和 status 的查询使用 SQL 完成
     filter_query = """SELECT *
@@ -454,7 +486,7 @@ if st.session_state.perm >= 1:
     if st.session_state.gen_filter_status != -1:
         filter_query += " AND STATUS = :status"
         filter_params["status"] = st.session_state.gen_filter_status
-    df = conn.query(filter_query, params=filter_params)
+    df: pd.DataFrame = conn.query(filter_query, ttl=0, params=filter_params)
 
     # keywords 的筛选用 pandas 完成，从 bid、sid、info、slot、mods、notes 中查找包含输入内容的条目
     if st.session_state.gen_filter_search:
@@ -465,7 +497,29 @@ if st.session_state.perm >= 1:
 
     # 新增 JS 辅助列
     df["_is_dup_bid"] = df["BID"].isin(duplicate_bids)
-    df["_is_dup_sid"] = df["SID"].isin(duplicate_sids)
+    df["_is_dup_song"] = (df["U_ARTIST"] + " " + df["U_TITLE"]).isin(duplicate_songs)
+
+    if match_slot_sort:
+        # 新增 SLOT 排序辅助列
+        # 拆分 SKILL_SLOT 列为 _slot_name (:2) 和 _slot_index (2:) 两列，
+        # _slot_name 向左填充 0，直至达到 SLOT_MAX_LEN - 2 位
+        # 排序方式：
+        # 1. 首先按照 _slot_name 排序，顺序为 NM -> HD -> HR -> DT -> FM -> F+ -> 其他未列明字段 -> TB
+        # 2. 然后按照 _slot_index 排序，因为向左填充 0 了所以直接按 alphabet 排序即可
+        df["_slot_name"] = df["SKILL_SLOT"].str[:2]
+        df["_slot_index"] = df["SKILL_SLOT"].str[2:].str.zfill(SLOT_MAX_LEN - 2)
+        custom_order = ["NM", "HD", "HR", "DT", "FM", "F+"]
+        last_special = "TB"
+        other_names = sorted(
+            set(df["_slot_name"].unique()) - set(custom_order) - {last_special},
+        )
+        category_order = custom_order + other_names + [last_special]
+        df["_slot_name_cat"] = pd.Categorical(
+            df["_slot_name"],
+            categories=category_order,
+            ordered=True,
+        )
+        df.sort_values(by=["_slot_name_cat", "_slot_index", "ADD_TS"], inplace=True)
 
     # 使用 streamlit-aggrid 实现可交互表格
     # 创建 LINK 列
@@ -494,8 +548,6 @@ if st.session_state.perm >= 1:
         "STATUS",
         "SID",
         "ADD_TS",
-        "_is_dup_bid",
-        "_is_dup_sid",
     ]
     df = df[desired_col_order]
 
@@ -505,7 +557,7 @@ if st.session_state.perm >= 1:
         **dict(
             domLayout="normal",
             rowHeight=32,
-            getRowStyle=row_style_js,
+            getRowStyle=row_style_js_with_dup if highlight_dup else row_style_js,
             # autoSizeStrategy={'type': 'fitCellContents'},
             suppressSizeToFit=True,
             shouldPanelSectionsBeVisible=True,
@@ -559,9 +611,7 @@ if st.session_state.perm >= 1:
     )
     gb.configure_column("STATUS", header_name="Status", editable=True, cellEditor="agSelectCellEditor", cellEditorParams={"values": [0, 1, 2]}, width=25)
 
-    # 隐藏列 _is_dup_bid、_is_dup_sid、ADD_TS
-    gb.configure_column("_is_dup_bid", hide=True)
-    gb.configure_column("_is_dup_sid", hide=True)
+    # 隐藏列
     gb.configure_column("SID", hide=True)
     gb.configure_column("ADD_TS", hide=True)
 
@@ -614,7 +664,11 @@ if st.session_state.perm >= 1:
                                 break
                         else:
                             continue
-                        specs_recalculate.append((edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
+                        try:
+                            specs_recalculate.append((edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
+                        except orjson.JSONDecodeError as e:
+                            st.toast(_("invalid JSON: %s") % row["RAW_MODS"])
+                            st.stop()
                         olds_to_drop.append((original_row["MODS"], new_primary))
                     playlist_beatmaps_recalculate = create_tmp_playlist(uid, specs_recalculate)
                     for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, playlist_beatmaps_recalculate):
@@ -626,7 +680,7 @@ if st.session_state.perm >= 1:
                             online_playlist_action_logger(beatmap_to_upsert["BID"], beatmap_to_upsert["MODS"], 2)
                 refresh(1.5)
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
-                refresh()
+                refresh(clear_cache=True)
             if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
                 export_filtered_playlist()
 

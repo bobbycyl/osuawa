@@ -1,19 +1,19 @@
 import asyncio
 import os
 import re
-import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum, unique
 from math import log10, sqrt
 from random import randint
 from threading import BoundedSemaphore
 from time import sleep
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING, Union, get_args, get_origin
 
 import numpy as np
 import pandas as pd
 from clayutil.futil import Downloader
+from clayutil.sutil import md5sum
 from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
 from osupp.core import init_osu_tools
 
@@ -32,9 +32,18 @@ headers = {
 LANGUAGES = ["en_US", "zh_CN"]
 all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
 sem = BoundedSemaphore()
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
 
     def _(text: str) -> str: ...
+
+
+TYPE_MAP = {
+    int: "INT",
+    float: "REAL",
+    bool: "INT",
+    str: "TEXT",
+    bytes: "BLOB",
+}
 
 
 @unique
@@ -45,16 +54,6 @@ class C(Enum):
     STATIC_DIRECTORY = "./static/"
     UPLOADED_DIRECTORY = "./static/uploaded/"
     BEATMAPS_CACHE_DIRECTORY = "./static/beatmaps/"
-    RAW_RECENT_SCORES = "raw_recent_scores/"
-    RECENT_SCORES = "recent_scores/"
-
-
-def user_raw_recent_scores_filename(user) -> str:
-    return os.path.join(C.OUTPUT_DIRECTORY.value, C.RAW_RECENT_SCORES.value, f"{user}.json")
-
-
-def user_recent_scores_directory(user) -> str:
-    return os.path.join(C.OUTPUT_DIRECTORY.value, C.RECENT_SCORES.value, f"{user}")
 
 
 @unique
@@ -103,6 +102,32 @@ def get_an_osu_meme() -> str:
         _("Loading... (This tip is also part of the loading process)"),
     ]
     return memes[randint(0, len(memes) - 1)]
+
+
+def get_simple_sql_type(py_type: type) -> str:
+    # 处理 Optional (例如 Optional[int] 或 Union[int, None])
+    if get_origin(py_type) is Union:
+        # 获取 Union 里的参数列表
+        args = get_args(py_type)
+        # 遍历找到 NoneType 以外的那个类型
+        for arg in args:
+            if arg is not type(None):
+                py_type = arg
+                break
+
+    # 查表，默认 TEXT
+    return TYPE_MAP.get(py_type, "TEXT")
+
+
+def generate_columns_sql(dataclass_cls, name_mapping: Optional[dict] = None):
+    parts = []
+    for f in fields(dataclass_cls):
+        sql_type = get_simple_sql_type(f.type)
+        if f.name in name_mapping:
+            parts.append(f"{name_mapping[f.name]} {sql_type}")
+        else:
+            parts.append(f"{f.name.upper()} {sql_type}")
+    return ", ".join(parts)
 
 
 def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
@@ -377,7 +402,7 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
 
     所有新增的参数都可以追加到这里
 
-    修改 ``Osuawa.load_extended_scores_dataframe_with_timezone`` 以匹配这些内容，或对父类字段进行二次处理（如时区显示等）
+    修改 ``Osuawa.calculate_extended_scores_dataframe_with_timezone`` 以匹配这些内容，或对父类字段进行二次处理（如时区显示等）
     """
 
     time: int
@@ -400,8 +425,12 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
 
 def download_osu(beatmap: Beatmap):
     need_download = False
-    if not "%s.osu" % beatmap.id in os.listdir(C.BEATMAPS_CACHE_DIRECTORY.value):
+    if not os.path.exists(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id)):
         need_download = True
+    else:
+        with open(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), "rb") as fi_b:
+            if beatmap.checksum != md5sum(fi_b.read()):
+                need_download = True
     if need_download:
         with sem:
             sleep(1)
@@ -411,21 +440,6 @@ def download_osu(beatmap: Beatmap):
 
 def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
-    # 如果传递的 score 是完整的，那么截断为 SimpleScoreInfo
-    if hasattr(score, "b_pp100"):
-        score = SimpleScoreInfo(
-            score.bid,
-            score.user,
-            score.score,
-            score.accuracy,
-            score.max_combo,
-            score.passed,
-            None,
-            score._mods,
-            score.ts,
-            score.statistics,
-            score.st,
-        )
     my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
     my_attr.set_mods(score._mods)
     download_osu(beatmap)
@@ -579,8 +593,6 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
 
 def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
     # slot 本身自带一个 mod
-    if len(slot) < 3:
-        raise ValueError("slot too short")
     auto_recognized_mod = slot[:2]
     # mod_settings 是一个多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
     # 最终期望得到：[{"acronym":<acronym>,"settings":{<mod_setting>:<value>}}]，如果不存在 settings，则不需要 settings 键
@@ -616,3 +628,14 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]
+
+
+def _make_query_uppercase(original_query_func):
+    """一个补丁，用于解决从数据库获取数据时列名小写的问题，使其与原始设计（使用 sqlite）保持一致"""
+
+    def wrapper(sql, ttl=None, **kwargs):
+        df = original_query_func(sql, ttl=ttl, **kwargs)
+        df.columns = df.columns.str.upper()
+        return df
+
+    return wrapper

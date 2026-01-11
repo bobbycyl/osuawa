@@ -1,4 +1,3 @@
-import os
 from typing import Optional, TYPE_CHECKING
 
 import pandas as pd
@@ -7,9 +6,8 @@ import streamlit as st
 from plotly import figure_factory as ff
 from scipy import stats
 
-from osuawa import C
-from osuawa.components import init_page, memorized_multiselect, memorized_selectbox
-from osuawa.utils import calc_bin_size, regex_search_column, user_recent_scores_directory
+from osuawa.components import get_all_score_users, get_scores_dataframe, init_page, memorized_multiselect, memorized_selectbox
+from osuawa.utils import calc_bin_size, regex_search_column
 
 if TYPE_CHECKING:
 
@@ -17,7 +15,7 @@ if TYPE_CHECKING:
 
 
 init_page(_("Score visualizer") + " - osuawa")
-all_users = [os.path.splitext(os.path.basename(x))[0] for x in os.listdir(os.path.join(str(C.OUTPUT_DIRECTORY.value), C.RECENT_SCORES.value))]
+all_users = get_all_score_users()
 user = st.selectbox(_("user"), all_users)
 st.date_input(_("date range"), [pd.Timestamp.today() - pd.Timedelta(days=30), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
 
@@ -109,11 +107,8 @@ def generate_stats_dataframe(data: pd.DataFrame, indexes: list[str]) -> pd.DataF
     return df_stats
 
 
-if not os.path.exists(user_recent_scores_directory(user)):
-    st.error(_("user not found"))
-    st.stop()
 begin_date, end_date = st.session_state.cat_date_range
-df = st.session_state.awa.calculate_extended_scores_dataframe_with_timezone(pd.read_parquet(user_recent_scores_directory(user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)]))
+df = get_scores_dataframe(user, (begin_date, end_date))
 if len(df) == 0:
     st.error(_("no scores found"))
     st.stop()
@@ -178,7 +173,7 @@ df_o = apply_filter(df)
 with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("compared to"), all_users)
-    df_c = apply_filter(st.session_state.awa.calculate_extended_scores_dataframe_with_timezone(pd.read_parquet(user_recent_scores_directory(comp_user), filters=[("ts", ">=", begin_date), ("ts", "<=", end_date)])))
+    df_c = get_scores_dataframe(comp_user, (begin_date, end_date))
     stats_indexes = [
         "accuracy",
         "hit_window",

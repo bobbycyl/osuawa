@@ -15,7 +15,7 @@ from clayutil.cmdparse import (
 from ossapi import Domain, Scope
 from sqlalchemy import text
 from streamlit import logger
-from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import load_value, register_commands
@@ -75,8 +75,6 @@ if "translate" not in st.session_state:
         os.mkdir(C.LOGS.value)
     if not os.path.exists(C.OUTPUT_DIRECTORY.value):
         os.mkdir(C.OUTPUT_DIRECTORY.value)
-        os.mkdir(os.path.join(C.OUTPUT_DIRECTORY.value, C.RAW_RECENT_SCORES.value))
-        os.mkdir(os.path.join(C.OUTPUT_DIRECTORY.value, C.RECENT_SCORES.value))
     if not os.path.exists(C.STATIC_DIRECTORY.value):
         os.mkdir(C.STATIC_DIRECTORY.value)
     if not os.path.exists(C.UPLOADED_DIRECTORY.value):
@@ -90,12 +88,19 @@ if "translate" not in st.session_state:
     if not os.path.exists("./.streamlit/.components"):
         os.mkdir("./.streamlit/.components")
     # 数据库需要以下表和字段
-    # 1. 表 BEATMAP，字段固定为 BID,SID,INFO,SKILL_SLOT,SR,BPM,HIT_LENGTH,MAX_COMBO,CS,AR,OD,MODS,NOTES,STATUS,COMMENTS,POOL,SUGGESTOR,RAW_MODS,ADD_TS （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
+    # 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
+    # 2. 表 SCORE，字段与 CompletedSimpleScoreInfo 大体一致，另附加 SCORE_ID 字段作为主键
     conn = st.connection("osuawa", type="sql", ttl=0)
     with conn.session as s:
         s.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS BEATMAP(BID INT, SID INT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS TEXT, NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, PRIMARY KEY (BID, MODS));",
+                "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS TEXT, NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, U_ARTIST TEXT, U_TITLE TEXT, PRIMARY KEY (BID, MODS));",
+            ),
+        )
+        s.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS SCORE(SCORE_ID BIGINT, BID BIGINT, USER_ID BIGINT, SCORE INT, ACCURACY REAL, MAX_COMBO INT, PASSED INT, PP REAL, MODS TEXT, TS REAL, STATISTICS TEXT, ST REAL, \
+                 CS REAL, HIT_WINDOW REAL, PREEMPT REAL, BPM REAL, HIT_LENGTH INT, IS_NF INT, IS_HD INT, IS_HIGH_AR INT, IS_LOW_AR INT, IS_VERY_LOW_AR INT, IS_SPEED_UP INT, IS_SPEED_DOWN INT, INFO TEXT, ORIGINAL_DIFFICULTY REAL, B_STAR_RATING REAL, B_MAX_COMBO INT, B_AIM_DIFFICULTY REAL, B_AIM_DIFFICULT_SLIDER_COUNT REAL, B_SPEED_DIFFICULTY REAL, B_SPEED_NOTE_COUNT REAL, B_SLIDER_FACTOR REAL, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_AIM_DIFFICULT_STRAIN_COUNT REAL, B_SPEED_DIFFICULT_STRAIN_COUNT REAL, PP_AIM REAL, PP_SPEED REAL, PP_ACCURACY REAL, B_PP_100IF_AIM REAL, B_PP_100IF_SPEED REAL, B_PP_100IF_ACCURACY REAL, B_PP_100IF REAL, B_PP_92IF REAL, B_PP_81IF REAL, B_PP_67IF REAL, PRIMARY KEY (SCORE_ID));",
             ),
         )
         s.commit()
@@ -104,7 +109,6 @@ if "translate" not in st.session_state:
 builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)
 
-prepare_bar = st.progress(0, text=_("Loading necessary objects..."))
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
 pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist generator"))
@@ -114,6 +118,7 @@ if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
 if "awa" not in st.session_state:
+    prepare_bar = st.progress(0, text=_("Loading necessary objects..."))
     client_id = st.secrets.args.client_id
     client_secret = st.secrets.args.client_secret
     redirect_url = st.secrets.args.redirect_url
@@ -127,24 +132,21 @@ if "awa" not in st.session_state:
                 awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
                 prepare_bar.progress(67, text=get_an_osu_meme())
             else:
-                prepare_bar.progress(55, text=get_an_osu_meme())
                 st.info(_("Please click the button below to authorize the app."))
                 st.link_button(_("OAuth2 URL"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)), icon=":material/login:")
-                prepare_bar.progress(100, text=get_an_osu_meme())
                 prepare_bar.empty()
                 st.stop()
         else:
             code = st.query_params.code
-            prepare_bar.progress(45, text=get_an_osu_meme())
+            prepare_bar.progress(50, text=get_an_osu_meme())
             r = requests.post(
                 Awapi.TOKEN_URL.format(domain=domain),
                 headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
                 data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
             )
-            prepare_bar.progress(55, text=get_an_osu_meme())
             awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
             awa.api._save_token(awa.api.session.token)
-            # st.query_params.clear()
+            st.query_params.pop("code")
             prepare_bar.progress(67, text=get_an_osu_meme())
         awa.tz = st.context.timezone
         st.session_state.awa = awa
@@ -160,24 +162,21 @@ if "awa" not in st.session_state:
         if os.path.exists("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
             os.remove("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"])
         st.warning(_("OAuth2 token or code has expired. Please remove the url parameter and refresh the page."))
-        prepare_bar.progress(100, text=get_an_osu_meme())
         prepare_bar.empty()
         st.stop()
-    prepare_bar.progress(81, text=get_an_osu_meme())
+    prepare_bar.progress(100, text=get_an_osu_meme())
     if st.session_state.user in admins:
         st.session_state.token = ""
         register_commands({"token": ""})
         st.session_state.perm = 4
+    prepare_bar.empty()
 
-prepare_bar.progress(92, text=get_an_osu_meme())
 if st.session_state.perm < 4:
     pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder])
 else:
     pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
 init_logger()
 register_commands({"simple": True})
-prepare_bar.progress(100, text=get_an_osu_meme())
-prepare_bar.empty()
 
 if "immersive_active" not in st.session_state:
     st.session_state.immersive_active = False
