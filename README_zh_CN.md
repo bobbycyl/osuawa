@@ -42,8 +42,16 @@ python -m pip install -r requirements.txt
 然后，下载并编译 `osu-tools`。
 
 ```shell
+# 确保位于 osuawa 文件夹内
+git clone https://github.com/ppy/osu.git
 git clone https://github.com/ppy/osu-tools.git
-cd osu-tools/PerformanceCalculator
+git clone https://github.com/bobbycyl/osu-patch.git
+cd osu
+git checkout 2025.1007.0
+git apply ../osu-patch/strain_timeline.patch
+cd ../osu-tools
+./UseLocalOsu.sh  # Windows 系统下请使用 .\UseLocalOsu.ps1
+cd PerformanceCalculator
 dotnet build -c Release
 ```
 
