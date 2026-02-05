@@ -14,22 +14,26 @@ from uuid import UUID
 
 import orjson
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
     CollectionField as Coll,
     Command,
+    CommandError,
     IntegerField as Int,
     JSONStringField as JsonStr,
     StringField as Str,
 )
-from ossapi import Score
+from ossapi import Beatmap, GameMode, Score
+from osupp.performance import calculate_osu_performance
+from plotly.graph_objs import Figure
 from sqlalchemy import text
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, SimpleScoreInfo, _make_query_uppercase, format_size, get_size_and_count, get_username
+from osuawa.utils import CompletedSimpleScoreInfo, SimpleOsuDifficultyAttribute, SimpleScoreInfo, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, get_username
 
 if TYPE_CHECKING:
 
@@ -170,6 +174,7 @@ def commands():
             generate_all_playlists,
         ),
         Command("cat", _("show user recent scores (only saved scores are available)"), [Int("user")], 0, cat),
+        Command("prev", _("draw strain graph of an osu! standard beatmap"), [Int("beatmap"), Str("mod_settings", True)], 0, draw_strain_graph),
     ]
 
 
@@ -456,3 +461,41 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
         for row in rows
     }
     return st.session_state.awa.create_scores_dataframe(completed_recent_scores_compact)
+
+
+def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
+    beatmap: Beatmap = asyncio.run(st.session_state.awa.api.beatmap(bid))
+    if beatmap.mode != GameMode.OSU:
+        raise CommandError(_("only osu! standard beatmap supported"))
+    download_osu(beatmap)
+
+    if mod_settings is not None:
+        mods = generate_mods_from_lines("SP", mod_settings.replace(" ", "\n"))
+        # 剔除 SP
+        mods.remove({"acronym": "SP"})
+    else:
+        mods = []
+    # 生成 osu_tools 所能接受的样式
+    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
+    my_attr.set_mods(mods)
+    calculator = calculate_osu_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
+    osupp_attr = next(calculator)
+    aim_strain_timeline: list[tuple[float, float]] = osupp_attr["__ek_aim_strain_timeline"]
+    speed_strain_timeline: list[tuple[float, float]] = osupp_attr["__ek_speed_strain_timeline"]
+    # strain_timeline: [(time, strain)]
+    # 二者的 time 理论上都是一样的，选择一个即可
+    df_strain = pd.DataFrame(
+        {
+            "time": [x[0] for x in aim_strain_timeline],
+            "aim": [x[1] for x in aim_strain_timeline],
+            "speed": [x[1] for x in speed_strain_timeline],
+        },
+    )
+
+    # 横坐标为 time，纵坐标为 strain，在一张折线图中同时绘制 aim strain 和 speed strain
+    fig = px.line(df_strain, x="time", y=["aim", "speed"], title="Difficulty Graph of %d" % beatmap.id)
+    fig.update_layout(
+        xaxis_title="Start Time",
+        yaxis_title="Strain",
+    )
+    return fig

@@ -115,7 +115,7 @@ class Osuawa(object):
         own_data: User = asyncio.run(self.api.get_me())
         return own_data.id, own_data.username
 
-    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo], calculate_extended: bool = True) -> pd.DataFrame:
+    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
             scores_compact,
             orient="index",
@@ -292,20 +292,32 @@ class BeatmapCover(object):
         ver_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
         if ver_cut != -1:
             version = ver_cut
+        # noinspection PyTypeChecker
         writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
+        # noinspection PyTypeChecker
         writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")
+        # noinspection PyTypeChecker
         writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")
+        # noinspection PyTypeChecker
         writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        # noinspection PyTypeChecker
         writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (42, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 192 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
+        # noinspection PyTypeChecker
         writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")
+        # noinspection PyTypeChecker
         writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
+        # noinspection PyTypeChecker
         writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
+        # noinspection PyTypeChecker
         writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
+        # noinspection PyTypeChecker
         writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")
+        # noinspection PyTypeChecker
         writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        # noinspection PyTypeChecker
         writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
         draw.text((42 + 1188, 326), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
         draw.text((41 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
@@ -326,6 +338,13 @@ class BeatmapCover(object):
         return cover_filename
 
 
+class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):  # type: ignore[call-arg]
+    bid: int
+    mods: list[dict[str, Any]]
+    notes: str
+    beatmap: Beatmap
+
+
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
     custom_mods_acronym = {"NM", "TB", "FM", "F+", "SP"}
@@ -344,20 +363,11 @@ class OsuPlaylist(object):
         self.banner = ""
         if "banner" in p:
             banner_img_src = strip_quotes(p.pop("banner"))
-            self.banner = (
-                """
+            self.banner = """
     <div class="relative w-full h-[90] sm:h-[135] lg:h-[185] hover:h-1/2 bg-cover bg-no-repeat bg-center object-cover transition-all duration-300 transform" style="background-image: url(%s)"><div class="absolute inset-0 banner-mask"></div>
     </div>
-"""
-                % banner_img_src
-            )
+""" % banner_img_src
         self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
-
-        class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):  # type: ignore[call-arg]
-            bid: int
-            mods: list[dict[str, Any]]
-            notes: str
-            beatmap: Beatmap
 
         parsed_beatmap_list: list[ParsedPlaylistBeatmap] = []
 
