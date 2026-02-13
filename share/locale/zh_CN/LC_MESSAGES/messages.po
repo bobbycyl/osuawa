@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-02-05 14:15+0800\n"
-"PO-Revision-Date: 2026-02-05 14:17+0800\n"
+"POT-Creation-Date: 2026-02-14 00:55+0800\n"
+"PO-Revision-Date: 2026-02-14 00:56+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -19,7 +19,7 @@ msgstr ""
 "Generated-By: Babel 2.14.0\n"
 "X-Generator: Poedit 3.8\n"
 
-#: Home.py:22 app.py:112
+#: Home.py:22 app.py:119
 msgid "Homepage"
 msgstr "主页"
 
@@ -45,41 +45,35 @@ msgstr "键入“help”以开始。"
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:113 tools/Score_visualizer.py:17
+#: app.py:120 tools/Score_visualizer.py:17
 msgid "Score visualizer"
 msgstr "查成分"
 
-#: app.py:114 tools/Playlist_generator.py:31
+#: app.py:121 tools/Playlist_generator.py:30
 msgid "Playlist generator"
 msgstr "做课题"
 
-#: app.py:115 tools/Recorder.py:22
+#: app.py:122 tools/Recorder.py:22
 msgid "Recorder"
 msgstr "看记录"
 
-#: app.py:121
+#: app.py:128
 msgid "Loading necessary objects..."
 msgstr "正在加载必要对象……"
 
-#: app.py:135
+#: app.py:142
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: app.py:136
+#: app.py:143
 msgid "OAuth2 URL"
 msgstr "授权链接"
 
-#: app.py:164
-msgid ""
-"OAuth2 token or code has expired. Please remove the url parameter and "
-"refresh the page."
-msgstr "授权已过期，请移除查询参数并刷新页面。"
-
-#: app.py:213
+#: app.py:222
 msgid "Press `F` to exit immersive mode."
 msgstr "按 `F` 退出沉浸模式。"
 
-#: app.py:217
+#: app.py:226
 msgid "Immersive Mode"
 msgstr "沉浸模式"
 
@@ -121,7 +115,7 @@ msgstr "展示用户最近分数（需要先保存分数）"
 
 #: osuawa/components.py:177
 msgid "draw strain graph of an osu! standard beatmap"
-msgstr "绘制 osu! 标准模式谱面的负荷折线图"
+msgstr "绘制 osu! 标准模式谱面的负载折线图"
 
 #: osuawa/components.py:279
 #, python-format
@@ -161,11 +155,10 @@ msgid "token generated"
 msgstr "令牌已生成"
 
 #: osuawa/components.py:333
-msgid ""
-"You need to ask the web admin for the session token to unlock full features."
+msgid "You need to ask the web admin for the session token to unlock full features."
 msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。"
 
-#: osuawa/components.py:469
+#: osuawa/components.py:478
 msgid "only osu! standard beatmap supported"
 msgstr "仅支持 osu! 标准模式谱面"
 
@@ -210,8 +203,7 @@ msgid "This loading bar moves slower than a 128 BPM song."
 msgstr "这进度条动得比 128 BPM 的歌还慢。"
 
 #: osuawa/utils.py:80
-msgid ""
-"Tip: You can nod your head to the beat even if the loading bar is stuck."
+msgid "Tip: You can nod your head to the beat even if the loading bar is stuck."
 msgstr "小贴士：即使进度条不动，你也可以跟着节奏点头。"
 
 #: osuawa/utils.py:81
@@ -275,8 +267,7 @@ msgid "Refactoring spaghetti code? No, just piling it up."
 msgstr "重构屎山代码？不不不，堆叠屎山代码。"
 
 #: osuawa/utils.py:96
-msgid ""
-"If you see this tip for more than 5 seconds, the thread is probably dead."
+msgid "If you see this tip for more than 5 seconds, the thread is probably dead."
 msgstr "如果这条小贴士显示超过 5 秒钟，线程可能已经死了。"
 
 #: osuawa/utils.py:97
@@ -304,7 +295,7 @@ msgstr "别关注 ACC 了，享受音乐！"
 msgid "Loading... (This tip is also part of the loading process)"
 msgstr "正在加载中……（是的，仅此而已）"
 
-#: tools/Playlist_generator.py:33
+#: tools/Playlist_generator.py:32
 msgid "new style"
 msgstr "新样式"
 
@@ -571,6 +562,9 @@ msgstr "使用复杂图表"
 #: tools/Score_visualizer.py:298
 msgid "## Filtered Data"
 msgstr "## 目前筛选数据"
+
+#~ msgid "OAuth2 token or code has expired. Please remove the url parameter and refresh the page."
+#~ msgstr "授权已过期，请移除查询参数并刷新页面。"
 
 #~ msgid "user not found"
 #~ msgstr "用户不存在"

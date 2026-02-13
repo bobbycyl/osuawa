@@ -150,6 +150,7 @@ def calc_bin_size(data) -> float:
 
 
 async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
+    # 注：虽然这里目前没有任何需要用到 asyncio 的地方，但是曾经存在过，并且未来可能扩充，因此保留 async
     return {
         "username": user.username,
         "user_id": user.id,
@@ -163,15 +164,15 @@ async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
     }
 
 
-async def a_get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
+async def async_get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
     return await simple_user_dict(await api.user(user, key="username" if isinstance(user, str) else "id"))
 
 
-async def get_username(api: OssapiAsync, user: int) -> str:
+async def async_get_username(api: OssapiAsync, user: int) -> str:
     return (await api.user(user, key="id")).username
 
 
-async def a_get_beatmaps_dict(api: OssapiAsync, bids: list[int]) -> dict[int, Beatmap]:
+async def async_get_beatmaps_dict(api: OssapiAsync, bids: list[int]) -> dict[int, Beatmap]:
     bids = list(set(bids))
     cut_bids: list[list[int]] = []
     for i in range(0, len(bids), 50):
