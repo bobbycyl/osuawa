@@ -77,7 +77,7 @@ def calc_statistics(data: pd.DataFrame, column: str) -> tuple[float, float, floa
     ci_l = data.mean() - margin_of_error
     ci_u = data.mean() + margin_of_error
     # 1% winsorize
-    data_winsor = data.clip(lower=data.quantile(0.01), upper=data.quantile(0.99))
+    data_winsor = data.clip(lower=data.quantile(0.01), upper=data.quantile(0.99)).infer_objects(copy=False)
     return (
         data.min(),
         data.quantile(0.25),

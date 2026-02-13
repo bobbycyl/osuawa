@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 init_page(_("Recorder") + " - osuawa")
 
 
-async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
+async def async_get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
     tasks: list[Task[dict[str, CompletedSimpleScoreInfo]]] = []
     async with asyncio.TaskGroup() as tg:
         for user_id in ids:
-            tasks.append(tg.create_task(st.session_state.awa.a_get_user_beatmap_scores(beatmap, user_id)))
+            tasks.append(tg.create_task(st.session_state.awa.async_get_user_beatmap_scores(beatmap, user_id)))
     scores_compact: dict[str, CompletedSimpleScoreInfo] = {}
     for task in tasks:
         scores_compact.update(task.result())
@@ -35,7 +35,7 @@ async def get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame
 
 @st.cache_data(ttl=60)
 def friends() -> dict[int, str]:
-    raw_friends: list[dict[str, Any]] = asyncio.run(st.session_state.awa.a_get_friends())
+    raw_friends: list[dict[str, Any]] = st.session_state.awa.get_friends()
     ret_friends = {}
     for raw_friend in raw_friends:
         ret_friends[raw_friend["user_id"]] = raw_friend["username"]
@@ -68,7 +68,7 @@ def tosu_main() -> None:
         except orjson.JSONDecodeError:
             st.error(_("invalid user ids"))
             st.stop()
-        df = asyncio.run(get_users_beatmap_scores(ids, bid))
+        df = st.session_state.awa.run_coro(async_get_users_beatmap_scores(ids, bid))
         df["username"] = df["user"].map(friends())
         # sort by score
         df = df.sort_values(by="score", ascending=False)
@@ -113,7 +113,7 @@ st.markdown(_("## Local Beatmap ID Records"))
 st.text_input(_("Ruleset"), value="osu", key="rec_mode")
 st.number_input(_("Limit"), min_value=1, max_value=50, value=5, key="rec_limit")
 w = st.text("")
-user_scores_current = asyncio.run(
+user_scores_current = st.session_state.awa.run_coro(
     st.session_state.awa.api.user_scores(
         user_id=st.session_state.user,
         type="recent",

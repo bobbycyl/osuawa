@@ -1,3 +1,4 @@
+import asyncio
 import builtins
 import gettext
 import logging
@@ -62,7 +63,13 @@ def init_logger():
 
 
 def register_awa(ci, cs, ru, sc, dm, oauth_token: Optional[str] = None, oauth_refresh_token: Optional[str] = None):
-    return Osuawa(ci, cs, ru, sc, dm, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token)
+    # 在 session_state 中持久化事件循环
+    if "async_loop" not in st.session_state:
+        # 创建新的事件循环
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        st.session_state.async_loop = loop
+    return Osuawa(st.session_state.async_loop, ci, cs, ru, sc, dm, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token)
 
 
 def toggle_immersive():
@@ -161,9 +168,11 @@ if "awa" not in st.session_state:
         # 这一般是 token 过期了
         if os.path.exists("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
             os.remove("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"])
-        st.warning(_("OAuth2 token or code has expired. Please remove the url parameter and refresh the page."))
+        # st.warning(_("OAuth2 token or code has expired. Please remove the url parameter and refresh the page."))
         prepare_bar.empty()
-        st.stop()
+        # 清除 query
+        st.query_params.clear()
+        st.rerun()
     prepare_bar.progress(100, text=get_an_osu_meme())
     if st.session_state.user in admins:
         st.session_state.token = ""

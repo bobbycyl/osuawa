@@ -33,7 +33,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, SimpleOsuDifficultyAttribute, SimpleScoreInfo, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, get_username
+from osuawa.utils import CompletedSimpleScoreInfo, SimpleOsuDifficultyAttribute, SimpleScoreInfo, _make_query_uppercase, async_get_username, download_osu, format_size, generate_mods_from_lines, get_size_and_count
 
 if TYPE_CHECKING:
 
@@ -339,9 +339,18 @@ def register_commands(obj: Optional[dict] = None):
 
 
 def save_recent_scores(user: int, include_fails: bool = True) -> str:
-    user_scores: list[Score] = asyncio.run(st.session_state.awa.a_get_recent_scores(user, include_fails))
-    recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
-    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = asyncio.run(st.session_state.awa.complete_scores_compact(recent_scores_compact))
+    async def _save_recent_scores(_user: int, _include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
+        """返回 (username, completed_recent_scores_compact)"""
+        user_scores: list[Score] = await st.session_state.awa.async_get_recent_scores(_user, _include_fails)
+        recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
+        return await asyncio.gather(
+            async_get_username(st.session_state.awa.api, _user),
+            st.session_state.awa.complete_scores_compact(recent_scores_compact),
+        )
+
+    username: str
+    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo]
+    username, completed_recent_scores_compact = st.session_state.awa.run_coro(_save_recent_scores(user, include_fails))
     with _conn.session as s:
         # 插入到表 SCORE，如果遇到冲突，则放弃
         # 准备数据
@@ -371,8 +380,8 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
         len_diff = res.rowcount
         s.commit()
     return "%s: got/diff: %d/%d" % (
-        asyncio.run(get_username(st.session_state.awa.api, user)),
-        len(recent_scores_compact),
+        username,
+        len(completed_recent_scores_compact),
         len_diff,
     )
 
@@ -464,7 +473,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
 
 
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
-    beatmap: Beatmap = asyncio.run(st.session_state.awa.api.beatmap(bid))
+    beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api.beatmap(bid))
     if beatmap.mode != GameMode.OSU:
         raise CommandError(_("only osu! standard beatmap supported"))
     download_osu(beatmap)

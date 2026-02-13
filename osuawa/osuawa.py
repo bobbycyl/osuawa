@@ -6,12 +6,13 @@ import os
 import os.path
 import platform
 import threading
-from asyncio import Task
+from asyncio import AbstractEventLoop, Task
+from collections.abc import Coroutine
 from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Never, Optional, TYPE_CHECKING
 
 import numpy as np
 import orjson
@@ -36,12 +37,12 @@ from .utils import (
     calc_star_rating_color,
     download_osu,
     CompletedSimpleScoreInfo,
-    a_get_beatmaps_dict,
+    async_get_beatmaps_dict,
     to_readable_mods,
     SimpleScoreInfo,
     C,
     headers,
-    a_get_user_info,
+    async_get_user_info,
     simple_user_dict,
     calculate_difficulty,
 )
@@ -82,7 +83,7 @@ class Awapi(OssapiAsync):
             scopes = [Scope.PUBLIC]
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
-    def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> None:
+    def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> Never:
         raise NotImplementedError()
 
 
@@ -103,8 +104,20 @@ class Osuawa(object):
         "SO",
     }
 
-    def __init__(self, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
-        self.api = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
+    def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
+        self.loop: AbstractEventLoop = loop
+        self.api: OssapiAsync = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
+
+    def run_coro[_T](self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """统一的协程执行方法"""
+        if self.loop.is_running():
+            # 如果循环正在运行（比如在异步环境中）
+            # 使用 run_coroutine_threadsafe 或 create_task
+            future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+            return future.result()  # 这会阻塞直到完成
+        else:
+            # 循环存在但未运行，直接使用 run_until_complete
+            return self.loop.run_until_complete(coro)
 
     @cached_property
     def user(self) -> tuple[int, str]:
@@ -112,7 +125,7 @@ class Osuawa(object):
 
         :return: (user_id, username)
         """
-        own_data: User = asyncio.run(self.api.get_me())
+        own_data: User = self.run_coro(self.api.get_me())
         return own_data.id, own_data.username
 
     def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
@@ -147,13 +160,13 @@ class Osuawa(object):
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
-        return asyncio.run(a_get_user_info(self.api, username))
+        return self.run_coro(async_get_user_info(self.api, username))
 
     async def complete_scores_compact(self, scores_compact: dict[str, SimpleScoreInfo]) -> dict[str, CompletedSimpleScoreInfo]:
-        beatmaps_dict = await a_get_beatmaps_dict(self.api, [x.bid for x in scores_compact.values()])
+        beatmaps_dict = await async_get_beatmaps_dict(self.api, [x.bid for x in scores_compact.values()])
         return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
 
-    async def a_get_friends(self) -> list[dict[str, Any]]:
+    async def async_get_friends(self) -> list[dict[str, Any]]:
         friends = await self.api.friends()
         tasks: list[Task[dict[str, Any]]] = []
         async with asyncio.TaskGroup() as tg:
@@ -161,15 +174,18 @@ class Osuawa(object):
                 tasks.append(tg.create_task(simple_user_dict(friend)))
         return [task.result() for task in tasks]
 
-    async def a_get_score(self, score_id: int) -> dict[str, CompletedSimpleScoreInfo]:
+    def get_friends(self) -> list[dict[str, Any]]:
+        return self.run_coro(self.async_get_friends())
+
+    async def async_get_score(self, score_id: int) -> dict[str, CompletedSimpleScoreInfo]:
         score = await self.api.score(score_id)
         score_compact = {str(score.id): SimpleScoreInfo.from_score(score)}
         return await self.complete_scores_compact(score_compact)
 
     def get_score(self, score_id: int) -> pd.DataFrame:
-        return self.create_scores_dataframe(asyncio.run(self.a_get_score(score_id)))
+        return self.create_scores_dataframe(self.run_coro(self.async_get_score(score_id)))
 
-    async def a_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleScoreInfo]:
+    async def async_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleScoreInfo]:
         user_scores = await self.api.beatmap_user_scores(beatmap, user)
         scores_compact = {str(x.id): SimpleScoreInfo.from_score(x) for x in user_scores}
         return await self.complete_scores_compact(scores_compact)
@@ -177,9 +193,9 @@ class Osuawa(object):
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
             user = self.user[0]
-        return self.create_scores_dataframe(asyncio.run(self.a_get_user_beatmap_scores(beatmap, user)))
+        return self.create_scores_dataframe(self.run_coro(self.async_get_user_beatmap_scores(beatmap, user)))
 
-    async def a_get_recent_scores(self, user: int, include_fails: bool = True) -> list[Score]:
+    async def async_get_recent_scores(self, user: int, include_fails: bool = True) -> list[Score]:
         user_scores = []
         offset = 0
         while True:
@@ -353,7 +369,7 @@ class OsuPlaylist(object):
     # osz_type = OneOf("full", "novideo", "mini")
 
     def __init__(self, awa: Osuawa, playlist_filename: str, suffix: str = "", css_style: Optional[int] = None):
-        self.awa = awa
+        self.awa: Osuawa = awa
         p = Properties(playlist_filename)
         p.load()
         self.playlist_filename = playlist_filename
@@ -388,7 +404,7 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = asyncio.run(a_get_beatmaps_dict(self.awa.api, [int(x["bid"]) for x in parsed_beatmap_list]))
+        beatmaps_dict = self.awa.run_coro(async_get_beatmaps_dict(self.awa.api, [int(x["bid"]) for x in parsed_beatmap_list]))
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]
@@ -638,7 +654,7 @@ class OsuPlaylist(object):
         return [task.result() for task in tasks]
 
     def generate(self) -> pd.DataFrame:
-        playlist = asyncio.run(self.playlist_task())
+        playlist = self.awa.run_coro(self.playlist_task())
         df_columns = ["#", "BID", "Beatmap Info (Click to View)", "Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD"]
         df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
         for column in self.custom_columns:

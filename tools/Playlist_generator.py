@@ -1,4 +1,3 @@
-import asyncio
 import os.path
 import shutil
 import time
@@ -151,8 +150,7 @@ image_link_renderer = JsCode(
         return false;
     }
 }
-"""
-    % ("../../app/" + C.UPLOADED_DIRECTORY.value.strip("./") + "/online/darkened-backgrounds/"),
+""" % ("../../app/" + C.UPLOADED_DIRECTORY.value.strip("./") + "/online/darkened-backgrounds/"),
 )
 st.markdown(
     """<style>
@@ -168,6 +166,7 @@ st.markdown(
 )
 
 
+# noinspection PyUnreachableCode
 def refresh(delay: Optional[float] = None, clear_cache: bool = False) -> Never:
     if delay:
         sleep(delay)
@@ -185,6 +184,7 @@ def generate_playlist(filename: str, css_style: Optional[int] = None):
 
 
 def _create_tmp_playlist_p(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> str:
+    # todo: 考虑添加 is_custom 字段（同步添加数据库字段 IS_CUSTOM）
     # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
     pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
     if not os.path.exists(pool_path):
@@ -212,10 +212,10 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
     OsuPlaylist beatmap 与 beatmap_specs、数据库字段对应关系如下：
 
     ```
-    | BID  | SID | Artist - Title (Creator) [Version] | Stars | SR  | BPM | Hit Length | Max Combo | CS  | AR  | OD  | Mods | Notes | slot       |        |          |      |           |          |        |
-    | ---- | --- | ---------------------------------- | ----- | --- | --- | ---------- | --------- | --- | --- | --- | ---- | ----- | ---------- | ------ | -------- | ---- | --------- | -------- | ------ |
-    | bids |     |                                    |       |     |     |            |           |     |     |     |      | notes | slot       | status | comments | pool | suggestor | raw_mods | add_ts |
-    | BID  | SID | INFO                               |       | SR  | BPM | HIT_LENGTH | MAX_COMBO | CS  | AR  | OD  | MODS | NOTES | SKILL_SLOT | STATUS | COMMENTS | POOL | SUGGESTOR | RAW_MODS | ADD_TS |
+    | BID  | SID | Artist - Title (Creator) [Version] | Stars | SR  | BPM | Hit Length | Max Combo | CS  | AR  | OD  | Mods | Notes | slot       |        |          |      |           |          |        | _Artist  | _Title  |
+    | ---- | --- | ---------------------------------- | ----- | --- | --- | ---------- | --------- | --- | --- | --- | ---- | ----- | ---------- | ------ | -------- | ---- | --------- | -------- | ------ | -------- | ------- |
+    | bid  |     |                                    |       |     |     |            |           |     |     |     |      | notes | slot       | status | comments | pool | suggestor | raw_mods | add_ts |          |         |
+    | BID  | SID | INFO                               |       | SR  | BPM | HIT_LENGTH | MAX_COMBO | CS  | AR  | OD  | MODS | NOTES | SKILL_SLOT | STATUS | COMMENTS | POOL | SUGGESTOR | RAW_MODS | ADD_TS | U_ARTIST | U_TITLE |
     ```
 
     :param name: 课题名（在线环境中建议直接用 UID）
@@ -223,9 +223,10 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
     :return: 一个谱面列表，为数据库字段优化了键名
     """
     tmp_playlist_filename = _create_tmp_playlist_p(name, beatmap_specs)
+    # noinspection PyBroadException
     try:
         tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
-        playlist_beatmaps_raw: list[dict] = asyncio.run(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
+        playlist_beatmaps_raw: list[dict] = tmp_playlist.awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
     except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup
         st.error(_("failed to parse the spec(s): %s") % beatmap_specs)
         st.stop()
@@ -578,8 +579,8 @@ if st.session_state.perm >= 1:
     )
     # 由于 MODS 列使用的是 readable_mods 的表示，是不可变的
     # 因此用户可以更改的是与 mods_input 对应的 RAW_MODS 列
-    # 共可可修改列: SKILL_SLOT, STATUS, COMMENTS, POOL, NOTES, RAW_MODS,
-    cell_rules = {"clickable-cell-style": "true"}  # 这里的 'true' 是 JS 表达式，表示始终应用
+    # 可修改列: SKILL_SLOT, STATUS, COMMENTS, POOL, NOTES, RAW_MODS,
+    cell_rules = {"clickable-cell-style": "true"}  # 这里的 "true" 是 JS 表达式
     gb.configure_column("BID", header_name="BID", width=88, cellClassRules=cell_rules, cellStyle={"cursor": "copy"}, onCellClicked=copy_on_click_js)
     gb.configure_column("SKILL_SLOT", header_name="Slot", editable=True, cellStyle=slot_cell_style_js, width=48)
     gb.configure_column("MODS", header_name="Mods", width=68)
@@ -604,7 +605,7 @@ if st.session_state.perm >= 1:
         width=288,
         cellStyle={
             "font-family": "monospace",
-            "white-space": "pre-wrap",  # 这一步关键：保留空格和换行，否则会被挤成一行
+            "white-space": "pre-wrap",
         },
         cellEditor="agLargeTextCellEditor",
         cellEditorPopup=True,
