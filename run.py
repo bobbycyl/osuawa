@@ -24,6 +24,8 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
         os.remove(ttf_dejavu)
         shutil.move(os.path.join(output_dir, "dejavu-fonts-ttf-2.37", "ttf", "DejaVuSansCondensed.ttf"), os.path.join(output_dir, "DejaVuSansCondensed.ttf"))
         shutil.rmtree(os.path.join(output_dir, "dejavu-fonts-ttf-2.37"))
+    else:
+        print("Fonts already exists: DejaVuSansCondensed")
 
     if not (os.path.exists(os.path.join(output_dir, "ResourceHanRoundedSC-Medium.ttf")) and os.path.exists(os.path.join(output_dir, "ResourceHanRoundedSC-Normal.ttf")) and os.path.exists(os.path.join(output_dir, "ResourceHanRoundedSC-Regular.ttf"))):
         print("Downloading fonts: ResourceHanRoundedSC...")
@@ -31,6 +33,8 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
         with py7zr.SevenZipFile(ttf_rhr, mode="r") as p7z:
             p7z.extract(output_dir, {"ResourceHanRoundedSC-Medium.ttf", "ResourceHanRoundedSC-Normal.ttf", "ResourceHanRoundedSC-Regular.ttf"})
         os.remove(ttf_rhr)
+    else:
+        print("Fonts already exists: ResourceHanRoundedSC")
 
     if not (
         os.path.exists(os.path.join(output_dir, "MapleMono-NF-CN-Italic.ttf"))
@@ -46,6 +50,8 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
             zf.extract("MapleMono-NF-CN-Regular.ttf", output_dir)
             zf.extract("MapleMono-NF-CN-SemiBold.ttf", output_dir)
         os.remove(ttf_maple)
+    else:
+        print("Fonts already exists: MapleMono-NF-CN")
 
     if not os.path.exists(os.path.join(output_dir, "fribidi-0.dll")):
         print("Downloading DLLs: fribidi-0.dll...")
@@ -55,6 +61,8 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
         os.remove(dll_fribidi)
         shutil.move(os.path.join(output_dir, "Library", "bin", "fribidi-0.dll"), os.path.join(output_dir, "fribidi-0.dll"))
         shutil.rmtree(os.path.join(output_dir, "Library"))
+    else:
+        print("DLLs already exists: fribidi-0.dll")
 
     if not os.path.exists(os.path.join(site.getsitepackages()[-1], "fontfallback")):
         print("Downloading packages: PillowFontFallback...")
@@ -65,10 +73,14 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
         shutil.move(os.path.join(output_dir, "PillowFontFallback-main", "fontfallback"), site.getsitepackages()[-1])
         shutil.rmtree(os.path.join(output_dir, "PillowFontFallback-main"))
         sys.path.insert(0, os.path.join(site.getsitepackages()[-1], "fontfallback"))
+    else:
+        print("Packages already exists: PillowFontFallback")
 
     if not os.path.exists(os.path.join(output_dir, "bg1.jpg")):
         print("Downloading assets: bg1.jpg...")
         d.start("https://github.com/ppy/osu-resources/blob/master/osu.Game.Resources/Textures/Backgrounds/bg1.jpg?raw=true", "bg1.jpg")
+    else:
+        print("Assets already exists: bg1.jpg")
 
 
 if __name__ == "__main__":

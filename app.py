@@ -20,7 +20,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import load_value, register_commands
-from osuawa.utils import get_an_osu_meme
+from osuawa.utils import create_unique_picker
 
 st.session_state._debugging_mode = False
 admins = st.secrets.args.admins
@@ -125,6 +125,42 @@ if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
 if "awa" not in st.session_state:
+    memes: list[str] = [
+        _("Loading... Keep your cursor steady."),
+        _("PP has gone."),
+        _("Attempting to parse a 400pp jump map..."),
+        _("Who moved my mouse sensitivity?"),
+        _("Don’t take it too seriously, this is just a toy."),
+        _("Re-timing the map... No wait, it’s perfectly aligned this time!"),
+        _("I've got a slider break!"),
+        _("Shh, don’t tell anyone what this tool is built with."),
+        _("Calculating how long your wrist can last."),
+        _("This loading bar moves slower than a 128 BPM song."),
+        _("Tip: You can nod your head to the beat even if the loading bar is stuck."),
+        _("I want a rhythm-pulsing progress bar like Lazer’s."),
+        _("Pooling is a headache."),
+        _("Loading Stellar Railway... Wait, I meant star rating."),
+        _("My ACC is expanding and contracting with temperature."),
+        _("Generating fake SS screenshots..."),
+        _("Loading miss hit sound... 404 Not Found."),
+        _("How is your HP thicker than MMORPG bosses?"),
+        _("I'm not a fan of DT."),
+        _("Calculating how much patience you need..."),
+        _('Loading "my hand slipped" excuse generator...'),
+        _('Generating fake "this is my first time playing" claims...'),
+        _("Loading C#, Rust, JavaScript and so on..."),
+        _("Calculating how much time you have wasted..."),
+        _("Sleeping..."),
+        _("Refactoring spaghetti code? No, just piling it up."),
+        _("If you see this tip for more than 5 seconds, the thread is probably dead."),
+        _("There are no bugs, only undocumented features."),
+        _("The loading bar is actually random length, stop staring at it."),
+        _("If I told you it’s 99%% loaded, would you believe me?") % (),
+        _("Analyzing your play history... seems you like Tech maps?"),
+        _("Stop looking at the Accuracy, enjoy the music!"),
+        _("Loading... (This tip is also part of the loading process)"),
+    ]
+    get_an_osu_meme = create_unique_picker(memes)
     prepare_bar = st.progress(0, text=_("Loading necessary objects..."))
     client_id = st.secrets.args.client_id
     client_secret = st.secrets.args.client_secret

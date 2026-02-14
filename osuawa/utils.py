@@ -1,3 +1,7 @@
+"""
+osuawa.py and utils.py should not contain i18n related text and streamlit related statement
+"""
+
 import asyncio
 import os
 import re
@@ -32,12 +36,8 @@ headers = {
 LANGUAGES = ["en_US", "zh_CN"]
 all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
 sem = BoundedSemaphore()
-if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
-
-
-TYPE_MAP = {
+TYPE_MAPPING = {
     int: "INT",
     float: "REAL",
     bool: "INT",
@@ -65,43 +65,6 @@ class ColorBar(Enum):
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
 
-memes: list[str] = [
-    _("Loading... Keep your cursor steady."),
-    _("PP has gone."),
-    _("Attempting to parse a 400pp jump map..."),
-    _("Who moved my mouse sensitivity?"),
-    _("Don’t take it too seriously, this is just a toy."),
-    _("Re-timing the map... No wait, it’s perfectly aligned this time!"),
-    _("I've got a slider break!"),
-    _("Shh, don’t tell anyone what this tool is built with."),
-    _("Calculating how long your wrist can last."),
-    _("This loading bar moves slower than a 128 BPM song."),
-    _("Tip: You can nod your head to the beat even if the loading bar is stuck."),
-    _("I want a rhythm-pulsing progress bar like Lazer’s."),
-    _("Pooling is a headache."),
-    _("Loading Stellar Railway... Wait, I meant star rating."),
-    _("My ACC is expanding and contracting with temperature."),
-    _("Generating fake SS screenshots..."),
-    _("Loading miss hit sound... 404 Not Found."),
-    _("How is your HP thicker than MMORPG bosses?"),
-    _("I'm not a fan of DT."),
-    _("Calculating how much patience you need..."),
-    _('Loading "my hand slipped" excuse generator...'),
-    _('Generating fake "this is my first time playing" claims...'),
-    _("Loading C#, Rust, JavaScript and so on..."),
-    _("Calculating how much time you have wasted..."),
-    _("Sleeping..."),
-    _("Refactoring spaghetti code? No, just piling it up."),
-    _("If you see this tip for more than 5 seconds, the thread is probably dead."),
-    _("There are no bugs, only undocumented features."),
-    _("The loading bar is actually random length, stop staring at it."),
-    _("If I told you it’s 99%% loaded, would you believe me?") % (),
-    _("Analyzing your play history... seems you like Tech maps?"),
-    _("Stop looking at the Accuracy, enjoy the music!"),
-    _("Loading... (This tip is also part of the loading process)"),
-]
-
-
 def create_unique_picker[_T](items: list[_T]):
     pool = items.copy()
     shuffle(pool)
@@ -124,9 +87,6 @@ def create_unique_picker[_T](items: list[_T]):
     return picker
 
 
-get_an_osu_meme = create_unique_picker(memes)
-
-
 def get_simple_sql_type(py_type: type) -> str:
     # 处理 Optional (例如 Optional[int] 或 Union[int, None])
     if get_origin(py_type) is Union:
@@ -139,7 +99,7 @@ def get_simple_sql_type(py_type: type) -> str:
                 break
 
     # 查表，默认 TEXT
-    return TYPE_MAP.get(py_type, "TEXT")
+    return TYPE_MAPPING.get(py_type, "TEXT")
 
 
 def generate_columns_sql(dataclass_cls, name_mapping: Optional[dict] = None):
