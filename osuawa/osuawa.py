@@ -1,3 +1,7 @@
+"""
+osuawa.py and utils.py should not contain i18n related text and streamlit related statement
+"""
+
 import asyncio
 import ctypes
 import datetime
@@ -48,9 +52,6 @@ from .utils import (
 )
 
 assert datetime
-if TYPE_CHECKING:
-
-    def _(text: str) -> str: ...
 
 
 def strip_quotes(text: str) -> str:
