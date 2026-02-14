@@ -5,7 +5,7 @@ from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum, unique
 from math import log10, sqrt
-from random import randint
+from random import shuffle
 from threading import BoundedSemaphore
 from time import sleep
 from typing import Any, Optional, TYPE_CHECKING, Union, get_args, get_origin
@@ -65,43 +65,66 @@ class ColorBar(Enum):
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
 
-def get_an_osu_meme() -> str:
-    memes = [
-        _("Loading... Keep your cursor steady."),
-        _("PP has gone."),
-        _("Attempting to parse a 400pp jump map..."),
-        _("Who moved my mouse sensitivity?"),
-        _("Don’t take it too seriously, this is just a toy."),
-        _("Re-timing the map... No wait, it’s perfectly aligned this time!"),
-        _("I've got a slider break!"),
-        _("Shh, don’t tell anyone what this tool is built with."),
-        _("Calculating how long your wrist can last."),
-        _("This loading bar moves slower than a 128 BPM song."),
-        _("Tip: You can nod your head to the beat even if the loading bar is stuck."),
-        _("I want a rhythm-pulsing progress bar like Lazer’s."),
-        _("Pooling is a headache."),
-        _("Loading Stellar Railway... Wait, I meant star rating."),
-        _("My ACC is expanding and contracting with temperature."),
-        _("Generating fake SS screenshots..."),
-        _("Loading miss hit sound... 404 Not Found."),
-        _("How is your HP thicker than MMORPG bosses?"),
-        _("I'm not a fan of DT."),
-        _("Calculating how much patience you need..."),
-        _('Loading "my hand slipped" excuse generator...'),
-        _('Generating fake "this is my first time playing" claims...'),
-        _("Loading C#, Rust, JavaScript and so on..."),
-        _("Calculating how much time you have wasted..."),
-        _("Sleeping..."),
-        _("Refactoring spaghetti code? No, just piling it up."),
-        _("If you see this tip for more than 5 seconds, the thread is probably dead."),
-        _("There are no bugs, only undocumented features."),
-        _("The loading bar is actually random length, stop staring at it."),
-        _("If I told you it’s 99%% loaded, would you believe me?") % (),
-        _("Analyzing your play history... seems you like Tech maps?"),
-        _("Stop looking at the Accuracy, enjoy the music!"),
-        _("Loading... (This tip is also part of the loading process)"),
-    ]
-    return memes[randint(0, len(memes) - 1)]
+memes: list[str] = [
+    _("Loading... Keep your cursor steady."),
+    _("PP has gone."),
+    _("Attempting to parse a 400pp jump map..."),
+    _("Who moved my mouse sensitivity?"),
+    _("Don’t take it too seriously, this is just a toy."),
+    _("Re-timing the map... No wait, it’s perfectly aligned this time!"),
+    _("I've got a slider break!"),
+    _("Shh, don’t tell anyone what this tool is built with."),
+    _("Calculating how long your wrist can last."),
+    _("This loading bar moves slower than a 128 BPM song."),
+    _("Tip: You can nod your head to the beat even if the loading bar is stuck."),
+    _("I want a rhythm-pulsing progress bar like Lazer’s."),
+    _("Pooling is a headache."),
+    _("Loading Stellar Railway... Wait, I meant star rating."),
+    _("My ACC is expanding and contracting with temperature."),
+    _("Generating fake SS screenshots..."),
+    _("Loading miss hit sound... 404 Not Found."),
+    _("How is your HP thicker than MMORPG bosses?"),
+    _("I'm not a fan of DT."),
+    _("Calculating how much patience you need..."),
+    _('Loading "my hand slipped" excuse generator...'),
+    _('Generating fake "this is my first time playing" claims...'),
+    _("Loading C#, Rust, JavaScript and so on..."),
+    _("Calculating how much time you have wasted..."),
+    _("Sleeping..."),
+    _("Refactoring spaghetti code? No, just piling it up."),
+    _("If you see this tip for more than 5 seconds, the thread is probably dead."),
+    _("There are no bugs, only undocumented features."),
+    _("The loading bar is actually random length, stop staring at it."),
+    _("If I told you it’s 99%% loaded, would you believe me?") % (),
+    _("Analyzing your play history... seems you like Tech maps?"),
+    _("Stop looking at the Accuracy, enjoy the music!"),
+    _("Loading... (This tip is also part of the loading process)"),
+]
+
+
+def create_unique_picker[_T](items: list[_T]):
+    pool = items.copy()
+    shuffle(pool)
+    cursor = 0
+    last_item = None
+
+    def picker() -> _T:
+        nonlocal cursor, last_item
+        if cursor >= len(pool):
+            cursor = 0
+            shuffle(pool)
+            # pool[0] 有可能是上一轮的 pool[-1]
+            if len(pool) > 1 and pool[0] == last_item:
+                pool[0], pool[1] = pool[1], pool[0]
+        picked = pool[cursor]
+        last_item = picked
+        cursor += 1
+        return picked
+
+    return picker
+
+
+get_an_osu_meme = create_unique_picker(memes)
 
 
 def get_simple_sql_type(py_type: type) -> str:
