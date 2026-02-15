@@ -18,6 +18,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import init_page, load_value, memorized_selectbox, save_value
+from osuawa.osuawa import CompletedPlaylistBeatmap, DatabasePlaylistBeatmap, Osuawa
 from osuawa.utils import _make_query_uppercase, generate_mods_from_lines, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
@@ -26,6 +27,8 @@ if TYPE_CHECKING:
 
     def _(text: str) -> str: ...
 
+    # noinspection PyTypeHints
+    st.session_state.awa: Osuawa
 
 init_page(_("Playlist generator") + " - osuawa")
 with st.sidebar:
@@ -184,7 +187,9 @@ def generate_playlist(filename: str, css_style: Optional[int] = None):
 
 
 def _create_tmp_playlist_p(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> str:
-    # todo: 考虑添加 is_custom 字段（同步添加数据库字段 IS_CUSTOM）
+    # 暂时不考虑定制谱面/本地谱面需求，因为 playlist 要求是纯在线谱面
+    # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具
+    # 然而，这个操作可能会需要完全重构 playlist 生成器的逻辑，因为其目前所使用的所有信息都是在线获取的
     # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
     pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
     if not os.path.exists(pool_path):
@@ -204,7 +209,7 @@ def _create_tmp_playlist_p(name: str, beatmap_specs: list[tuple[int, list, str, 
     return tmp_playlist_filename
 
 
-def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> list[dict]:
+def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> list[DatabasePlaylistBeatmap]:
     """创建临时课题。仅创建，不生成
 
     status: 0=未审核, 1=已审核, 2=已提名
@@ -226,7 +231,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
     # noinspection PyBroadException
     try:
         tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
-        playlist_beatmaps_raw: list[dict] = tmp_playlist.awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
+        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = tmp_playlist._awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
     except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup
         st.error(_("failed to parse the spec(s): %s") % beatmap_specs)
         st.stop()
@@ -237,36 +242,36 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
     playlist_beatmaps_raw.sort(key=lambda x: int(x["#"]))
     playlist_beatmaps_db = []
     for i, playlist_beatmap_raw in enumerate(playlist_beatmaps_raw):
-        if len(playlist_beatmap_raw["slot"]) < 3:
-            st.error(_("slot too short: %s") % playlist_beatmap_raw["slot"])
+        if len(playlist_beatmap_raw["slot"]) < 3:  # type: ignore[literal-required]
+            st.error(_("slot too short: %s") % playlist_beatmap_raw["slot"])  # type: ignore[literal-required]
             st.stop()
-        if len(playlist_beatmap_raw["slot"]) > SLOT_MAX_LEN:
-            st.error(_("slot too long: %s") % playlist_beatmap_raw["slot"])
+        if len(playlist_beatmap_raw["slot"]) > SLOT_MAX_LEN:  # type: ignore[literal-required]
+            st.error(_("slot too long: %s") % playlist_beatmap_raw["slot"])  # type: ignore[literal-required]
             st.stop()
         playlist_beatmaps_db.append(
-            {
-                "BID": int(playlist_beatmap_raw["BID"]),
-                "SID": int(playlist_beatmap_raw["SID"]),
-                "INFO": playlist_beatmap_raw["Artist - Title (Creator) [Version]"],
-                "SKILL_SLOT": playlist_beatmap_raw["slot"],
-                "SR": playlist_beatmap_raw["SR"],  # 相比 Stars，SR 不依赖特殊字体
-                "BPM": playlist_beatmap_raw["BPM"],
-                "HIT_LENGTH": playlist_beatmap_raw["Hit Length"],
-                "MAX_COMBO": playlist_beatmap_raw["Max Combo"],
-                "CS": playlist_beatmap_raw["CS"],
-                "AR": playlist_beatmap_raw["AR"],
-                "OD": playlist_beatmap_raw["OD"],
-                "MODS": playlist_beatmap_raw["Mods"],
-                "NOTES": playlist_beatmap_raw["Notes"],  # notes 在 OsuPlaylist 里有默认值处理
-                "STATUS": beatmap_specs[i][5],
-                "COMMENTS": beatmap_specs[i][6],
-                "POOL": beatmap_specs[i][3],
-                "SUGGESTOR": beatmap_specs[i][7],
-                "RAW_MODS": orjson.dumps(beatmap_specs[i][1]).replace(b" ", b"").decode(),
-                "ADD_TS": float(beatmap_specs[i][8]),
-                "U_ARTIST": playlist_beatmap_raw["_Artist"],
-                "U_TITLE": playlist_beatmap_raw["_Title"],
-            },
+            DatabasePlaylistBeatmap(
+                BID=playlist_beatmap_raw["BID"],
+                SID=playlist_beatmap_raw["SID"],
+                INFO=playlist_beatmap_raw["Artist - Title (Creator) [Version]"],
+                SKILL_SLOT=playlist_beatmap_raw["slot"],  # type: ignore[literal-required]
+                SR=playlist_beatmap_raw["SR"],  # 相比 Stars，SR 不依赖特殊字体
+                BPM=playlist_beatmap_raw["BPM"],
+                HIT_LENGTH=playlist_beatmap_raw["Hit Length"],
+                MAX_COMBO=playlist_beatmap_raw["Max Combo"],
+                CS=playlist_beatmap_raw["CS"],
+                AR=playlist_beatmap_raw["AR"],
+                OD=playlist_beatmap_raw["OD"],
+                MODS=playlist_beatmap_raw["Mods"],
+                NOTES=playlist_beatmap_raw["Notes"],  # notes 在 OsuPlaylist 里有默认值处理
+                STATUS=beatmap_specs[i][5],
+                COMMENTS=beatmap_specs[i][6],
+                POOL=beatmap_specs[i][3],
+                SUGGESTOR=beatmap_specs[i][7],
+                RAW_MODS=orjson.dumps(beatmap_specs[i][1]).replace(b" ", b"").decode(),  # 这里删除空格是否会导致奇怪问题出现仍需商榷
+                ADD_TS=beatmap_specs[i][8],
+                U_ARTIST=playlist_beatmap_raw["_Artist"],
+                U_TITLE=playlist_beatmap_raw["_Title"],
+            ),
         )
     # 删除临时文件
     if os.path.exists(tmp_playlist_filename):
@@ -290,7 +295,7 @@ def check_beatmap_exists(bid: int, mods: str) -> bool:
     return res > 0
 
 
-def update_beatmap(beatmap: Optional[dict] = None, *, old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> None:
+def update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap] = None, *, old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> None:
     """更新课题谱面（包括删除）
 
     如果 beatmap 不为 None，则 old_bid 必须为 None
@@ -352,7 +357,7 @@ def update_beatmap(beatmap: Optional[dict] = None, *, old_bid: Optional[int] = N
         s.commit()
 
 
-def online_playlist_action_logger(bid: int | str, mods: str, action: int, old_mods: Optional[str] = None) -> None:
+def online_playlist_action_logger(bid: int, mods: str, action: int, old_mods: Optional[str] = None) -> None:
     bid = int(bid)
     mods = str(mods)
     verb_mapping = {
@@ -392,6 +397,7 @@ if st.session_state.perm >= 1:
         col1, col2 = st.columns(2)
         with col1:
             urls_input = st.text_input(_("Beatmap URLs or IDs, split by spaces"))
+            # SLOTS 自动大写
             slot_input = st.text_input(_("Slot")).upper()
             notes_input = st.text_input(_("Notes"))
         with col2:
@@ -410,12 +416,11 @@ if st.session_state.perm >= 1:
         if submitted:
             st.session_state.gen_form_pool = pool_input
             save_value("gen_form_pool")
-            # 处理 BID
-            # SLOTS 自动大写
             specs_input: list[tuple[int, list, str, str, str, int, str, str, float]] = []
             urls_input_split = urls_input.split()
             raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input)
             for url_input in urls_input_split:
+                # 处理 BID
                 bid_input = int(url_input.rsplit("/", 1)[-1])
                 # 这里要提前转化 raw_mods 为 "; ".join(mods_ready)，一方面检验是否能序列化，另一方面查重并终止
                 try:
@@ -652,6 +657,7 @@ if st.session_state.perm >= 1:
                         if original_row.empty:
                             st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_mods))
                             continue
+                        # 由于 BID + MODS 为主键，因此这里应该只有一个结果
                         original_row = original_row.iloc[0]
                         # 在可修改列中如果有任意一项被修改了，那么就添加到重算列表中
                         new_primary = False
@@ -659,7 +665,8 @@ if st.session_state.perm >= 1:
                             if pd.isna(row[editable_col]) and pd.isna(original_row[editable_col]):
                                 continue
                             if row[editable_col] != original_row[editable_col]:
-                                # 如果 RAW_MODS 修改了，那么就认为需要先删除原始记录，然后再添加新记录
+                                # 由于 MODS 由 RAW_MODS 生成，因此 RAW_MODS 改变时，主键即改变
+                                # 故如果 RAW_MODS 修改了，那么就认为需要先删除原始记录，然后再添加新记录
                                 if editable_col == "RAW_MODS":
                                     new_primary = True
                                 break
@@ -706,12 +713,12 @@ if uploaded_file is not None:
     session_path = os.path.join(C.UPLOADED_DIRECTORY.value, uid)
     if not os.path.exists(session_path):
         os.mkdir(session_path)
-    playlist_filename = str(os.path.join(session_path, "%s.properties" % playlist_name))
-    html_filename = str(os.path.join(session_path, "%s.html" % playlist_name))
-    covers_dir = str(os.path.join(session_path, "%s.covers" % playlist_name))
-    csv_filename = str(os.path.join(session_path, "%s.csv" % playlist_name))
-    css_filename = str(os.path.join(session_path, "style.css"))
-    zip_filename = str(os.path.join(C.UPLOADED_DIRECTORY.value, "%s.zip" % uid))
+    playlist_filename = os.path.join(session_path, "%s.properties" % playlist_name)
+    html_filename = os.path.join(session_path, "%s.html" % playlist_name)
+    covers_dir = os.path.join(session_path, "%s.covers" % playlist_name)
+    csv_filename = os.path.join(session_path, "%s.csv" % playlist_name)
+    css_filename = os.path.join(session_path, "style.css")
+    zip_filename = os.path.join(C.UPLOADED_DIRECTORY.value, "%s.zip" % uid)
     content = uploaded_file.getvalue()
 
     with open(playlist_filename, "wb") as fo_b:

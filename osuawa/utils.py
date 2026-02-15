@@ -12,7 +12,7 @@ from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
 from time import sleep
-from typing import Any, Optional, TYPE_CHECKING, Union, get_args, get_origin
+from typing import Any, Optional, Union, get_args, get_origin
 
 import numpy as np
 import pandas as pd
