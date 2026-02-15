@@ -10,7 +10,7 @@ import streamlit as st
 from streamlit import logger
 from websockets.sync.client import connect
 
-from osuawa import C
+from osuawa import C, Osuawa
 from osuawa.components import init_page
 from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
     def _(text: str) -> str: ...
 
+    # noinspection PyTypeHints
+    st.session_state.awa: Osuawa
 
 init_page(_("Recorder") + " - osuawa")
 

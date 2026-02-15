@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 
     def _(text: str) -> str: ...
 
+    # noinspection PyTypeHints
+    st.session_state.awa: Osuawa
 
 _conn = st.connection("osuawa", type="sql", ttl=60)
 _conn.query = _make_query_uppercase(_conn.query)
@@ -84,12 +86,11 @@ def memorized_selectbox(label: str, key: str, options: list, default_value: Any)
     st.selectbox(label, options, key=key, on_change=save_value, args=(key,))
 
 
-def init_page(page_title: str, force_val: Optional[bool] = None, need_st_awa: bool = True) -> None:
+def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
     """Page 初始化相关
 
     :param page_title: 标题
     :param force_val: 强制赋值，None 为禁用
-    :param need_st_awa: 需要 session_state.awa
     :return:
     """
     # force_val 好像要引入额外的 session_state 键值对才能做出来，暂时还是不考虑了
@@ -98,12 +99,12 @@ def init_page(page_title: str, force_val: Optional[bool] = None, need_st_awa: bo
         # layout="wide" if st.session_state.get("wide_layout", False) else "centered",
         page_title=page_title,
     )
-    if need_st_awa:
-        try:
-            assert isinstance(st.session_state.awa, Osuawa)
-        except (AttributeError, AssertionError):
-            st.error(_("Failed to initialize the osu!api wrapper. Please refresh the page."))
-            st.stop()
+    # always require awa
+    try:
+        assert isinstance(st.session_state.awa, Osuawa)
+    except (AttributeError, AssertionError):
+        st.error(_("Failed to initialize the osu!api wrapper. Please refresh the page."))
+        st.stop()
 
 
 project_dir = os.path.join(os.path.dirname(__file__), "..")

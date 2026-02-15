@@ -114,7 +114,7 @@ if "translate" not in st.session_state:
 
 # noinspection PyUnresolvedReferences
 builtins.__dict__["_"] = gettext_translate
-st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)
+st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  # 想要绕过 load_value、save_value 就必须使用这种方式
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))

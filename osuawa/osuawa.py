@@ -16,7 +16,7 @@ from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Never, Optional, TYPE_CHECKING
+from typing import Any, Never, Optional
 
 import numpy as np
 import orjson
@@ -362,15 +362,65 @@ class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_item
     beatmap: Beatmap
 
 
+CompletedPlaylistBeatmap = typing_extensions.TypedDict(
+    "CompletedPlaylistBeatmap",
+    {
+        "#": int,
+        "BID": int,
+        "SID": int,
+        "Beatmap Info (Click to View)": str,
+        "Artist - Title (Creator) [Version]": str,
+        "Stars": str,
+        "SR": str,
+        "BPM": str,
+        "Hit Length": str,
+        "Max Combo": str,
+        "CS": str,
+        "AR": str,
+        "OD": str,
+        "Mods": str,
+        "Notes": str,
+        "_Artist": str,
+        "_Title": str,
+    },
+    total=False,
+    extra_items=str,  # type: ignore[call-arg]
+)
+
+
+class DatabasePlaylistBeatmap(typing_extensions.TypedDict):
+    BID: int
+    SID: int
+    INFO: str
+    SKILL_SLOT: str
+    SR: str
+    BPM: str
+    HIT_LENGTH: str
+    MAX_COMBO: str
+    CS: str
+    AR: str
+    OD: str
+    MODS: str
+    NOTES: str
+    STATUS: int
+    COMMENTS: str
+    POOL: str
+    SUGGESTOR: str
+    RAW_MODS: str
+    ADD_TS: float
+    U_ARTIST: str
+    U_TITLE: str
+
+
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
-    custom_mods_acronym = {"NM", "TB", "FM", "F+", "SP"}
+    custom_mods_acronym = {"NM", "TB", "FM", "F+", "SP"}  # NM 其实是官方的模组，但是为了逻辑便捷以及符合惯例，这里加上了
     mod_color = {"NM": "#107fb9", "HD": "#b97f10", "HR": "#b91010", "EZ": "#10b97f", "DT": "#7f10b9", "NC": "#b9107f", "HT": "#7f7f7f", "FM": "#40507f", "TB": "#7f4050", "F+": "#507f40"}
 
     # osz_type = OneOf("full", "novideo", "mini")
 
     def __init__(self, awa: Osuawa, playlist_filename: str, suffix: str = "", css_style: Optional[int] = None):
-        self.awa: Osuawa = awa
+        self._awa = awa  # 如果用 self.awa 的话 st.session_state.awa 的 IDE 类型推断会出错
         p = Properties(playlist_filename)
         p.load()
         self.playlist_filename = playlist_filename
@@ -405,10 +455,13 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = self.awa.run_coro(async_get_beatmaps_dict(self.awa.api, [int(x["bid"]) for x in parsed_beatmap_list]))
+        beatmaps_dict = self._awa.run_coro(async_get_beatmaps_dict(self._awa.api, [int(x["bid"]) for x in parsed_beatmap_list]))
+
+        # post process for parsed beatmaps
         for element in parsed_beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]
+
         self.beatmap_list = parsed_beatmap_list
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
         self.tmp_dir = os.path.splitext(playlist_filename)[0] + ".tmp"
@@ -437,7 +490,7 @@ class OsuPlaylist(object):
         # if self.output_zip:
         #     self.osz_type = "full"
 
-    async def beatmap_task(self, beatmap_index: int) -> dict:
+    async def beatmap_task(self, beatmap_index: int) -> CompletedPlaylistBeatmap:
         i, element = beatmap_index + 1, self.beatmap_list[beatmap_index]
         bid: int = element["bid"]
         b: Beatmap = element["beatmap"]
@@ -477,7 +530,7 @@ class OsuPlaylist(object):
         song_len_in_sec = my_attr.hit_length
         song_len_m, song_len_s = divmod(song_len_in_sec, 60)
         hit_length = "%d:%02d" % (song_len_m, song_len_s)
-        max_combo = "%d" % osupp_attr["max_combo"]
+        max_combo = "%dx" % osupp_attr["max_combo"]
 
         # 绘制cover
         cover = BeatmapCover(b, self.mod_color.get(root_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
@@ -621,7 +674,7 @@ class OsuPlaylist(object):
             await cover.draw(cover_filename)
 
         # 保存数据
-        completed_beatmap = {
+        completed_beatmap: CompletedPlaylistBeatmap = {
             "#": i,
             "BID": b.id,
             "SID": b.beatmapset_id,
@@ -647,7 +700,7 @@ class OsuPlaylist(object):
                 completed_beatmap[column] = element[column]  # type: ignore[literal-required]
         return completed_beatmap
 
-    async def playlist_task(self) -> list[dict]:
+    async def playlist_task(self) -> list[CompletedPlaylistBeatmap]:
         tasks = []
         async with asyncio.TaskGroup() as tg:
             for i in range(len(self.beatmap_list)):
@@ -655,7 +708,7 @@ class OsuPlaylist(object):
         return [task.result() for task in tasks]
 
     def generate(self) -> pd.DataFrame:
-        playlist = self.awa.run_coro(self.playlist_task())
+        playlist = self._awa.run_coro(self.playlist_task())
         df_columns = ["#", "BID", "Beatmap Info (Click to View)", "Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD"]
         df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
         for column in self.custom_columns:
