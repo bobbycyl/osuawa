@@ -231,7 +231,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
     # noinspection PyBroadException
     try:
         tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
-        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = tmp_playlist._awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
+        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = st.session_state.awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
     except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup
         st.error(_("failed to parse the spec(s): %s") % beatmap_specs)
         st.stop()

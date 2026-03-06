@@ -65,6 +65,15 @@ class ColorBar(Enum):
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
 
+def strip_quotes(text: str) -> str:
+    # 判断是否被引号包裹，若是，则 strip
+    if text.startswith('"') and text.endswith('"'):
+        return text.strip('"')
+    if text.startswith("'") and text.endswith("'"):
+        return text.strip("'")
+    return text
+
+
 def create_unique_picker[_T](items: list[_T]):
     pool = items.copy()
     shuffle(pool)

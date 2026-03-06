@@ -15,6 +15,7 @@ from uuid import UUID
 import orjson
 import pandas as pd
 import plotly.express as px
+import redis
 import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
@@ -110,6 +111,12 @@ def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
 project_dir = os.path.join(os.path.dirname(__file__), "..")
 
 
+@st.cache_resource
+def get_redis_connection():
+    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    return r
+
+
 def commands():
     return [
         Command(
@@ -130,7 +137,7 @@ def commands():
             "logfilter",
             "tail logs",
             [Int("n", True), Str("keyword", True)],
-            4,
+            3,
             log_action,
         ),
         Command(
