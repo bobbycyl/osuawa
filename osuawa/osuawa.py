@@ -42,7 +42,7 @@ from .utils import (
     download_osu,
     CompletedSimpleScoreInfo,
     async_get_beatmaps_dict,
-    to_readable_mods,
+    strip_quotes, to_readable_mods,
     SimpleScoreInfo,
     C,
     headers,
@@ -52,15 +52,6 @@ from .utils import (
 )
 
 assert datetime
-
-
-def strip_quotes(text: str) -> str:
-    # 判断是否被引号包裹，若是，则 strip
-    if text.startswith('"') and text.endswith('"'):
-        return text.strip('"')
-    if text.startswith("'") and text.endswith("'"):
-        return text.strip("'")
-    return text
 
 
 class Awapi(OssapiAsync):
@@ -91,18 +82,7 @@ class Awapi(OssapiAsync):
 class Osuawa(object):
     tz = "Asia/Shanghai"
     common_mods = {
-        "EZ",
-        "NF",
-        "HT",
-        "DC",
-        "HR",
-        "SD",
-        "PF",
-        "DT",
-        "NC",
-        "HD",
-        "CL",
-        "SO",
+        "NM", "NF", "EZ", "HD", "HR", "SD", "DT", "RX", "HT", "NC", "FL", "AT", "SO", "AP", "PF", "V2"
     }
 
     def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
@@ -419,8 +399,8 @@ class OsuPlaylist(object):
 
     # osz_type = OneOf("full", "novideo", "mini")
 
-    def __init__(self, awa: Osuawa, playlist_filename: str, suffix: str = "", css_style: Optional[int] = None):
-        self._awa = awa  # 如果用 self.awa 的话 st.session_state.awa 的 IDE 类型推断会出错
+    def __init__(self, awa_instance: Osuawa, playlist_filename: str, suffix: str = "", css_style: Optional[int] = None):
+        self.__awa_instance = awa_instance  # 如果用 self.awa 的话 st.session_state.awa 的 IDE 类型推断会出错
         p = Properties(playlist_filename)
         p.load()
         self.playlist_filename = playlist_filename
@@ -455,7 +435,7 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = self._awa.run_coro(async_get_beatmaps_dict(self._awa.api, [int(x["bid"]) for x in parsed_beatmap_list]))
+        beatmaps_dict = self.__awa_instance.run_coro(async_get_beatmaps_dict(self.__awa_instance.api, [int(x["bid"]) for x in parsed_beatmap_list]))
 
         # post process for parsed beatmaps
         for element in parsed_beatmap_list:
@@ -708,7 +688,7 @@ class OsuPlaylist(object):
         return [task.result() for task in tasks]
 
     def generate(self) -> pd.DataFrame:
-        playlist = self._awa.run_coro(self.playlist_task())
+        playlist = self.__awa_instance.run_coro(self.playlist_task())
         df_columns = ["#", "BID", "Beatmap Info (Click to View)", "Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD"]
         df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
         for column in self.custom_columns:

@@ -63,7 +63,7 @@ if st.session_state["delete_line"]:
     st.session_state["input"] = ""
     st.session_state["delete_line"] = False
 
-y = st.text_input("> ", key="input", on_change=submit, placeholder=_('Type "help" to get started.'))
+y = st.text_input("", key="input", on_change=submit, placeholder=_('Type "help" to get started.'))
 
 html(
     f"""<script>

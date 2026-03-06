@@ -11,10 +11,13 @@ pillow
 plotly
 psycopg2-binary
 py7zr
+redis
 SQLAlchemy
+schedule
 scipy
 slider
 statsmodels
 streamlit
 streamlit-aggrid
 websockets
+zai-sdk
