@@ -42,7 +42,8 @@ from .utils import (
     download_osu,
     CompletedSimpleScoreInfo,
     async_get_beatmaps_dict,
-    strip_quotes, to_readable_mods,
+    strip_quotes,
+    to_readable_mods,
     SimpleScoreInfo,
     C,
     headers,
@@ -64,7 +65,7 @@ class Awapi(OssapiAsync):
         *,
         grant: Optional[Grant | str] = None,
         strict: bool = False,
-        token_directory: str = "./.streamlit/.oauth/",
+        token_directory: str = C.OAUTH_TOKEN_DIRECTORY.value,
         token_key: Optional[str] = None,
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
@@ -82,7 +83,22 @@ class Awapi(OssapiAsync):
 class Osuawa(object):
     tz = "Asia/Shanghai"
     common_mods = {
-        "NM", "NF", "EZ", "HD", "HR", "SD", "DT", "RX", "HT", "NC", "FL", "AT", "SO", "AP", "PF", "V2"
+        "NM",
+        "NF",
+        "EZ",
+        "HD",
+        "HR",
+        "SD",
+        "DT",
+        "RX",
+        "HT",
+        "NC",
+        "FL",
+        "AT",
+        "SO",
+        "AP",
+        "PF",
+        "V2",
     }
 
     def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):

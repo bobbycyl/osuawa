@@ -20,7 +20,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import load_value, register_commands
-from osuawa.utils import create_unique_picker
+from osuawa.utils import create_unique_picker, update_user_cache
 
 st.session_state._debugging_mode = False
 admins = st.secrets.args.admins
@@ -54,7 +54,7 @@ def gettext_translate(text):
 
 @st.cache_data
 def init_logger():
-    fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
+    fh = logging.FileHandler(os.path.join(C.LOGS.value, "streamlit.log"), encoding="utf-8")
     fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
     if "streamlit" not in logger.get_logger("streamlit").handlers:
         logger.get_logger("streamlit").addHandler(fh)
@@ -89,11 +89,13 @@ if "translate" not in st.session_state:
     if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
         os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
     load_value("uni_lang", convert_locale(st.context.locale))
+
     # 半持久化保存
-    if not os.path.exists("./.streamlit/.oauth"):
-        os.mkdir("./.streamlit/.oauth")
-    if not os.path.exists("./.streamlit/.components"):
-        os.mkdir("./.streamlit/.components")
+    if not os.path.exists(C.OAUTH_TOKEN_DIRECTORY.value):
+        os.mkdir(C.OAUTH_TOKEN_DIRECTORY.value)
+    if not os.path.exists(C.COMPONENTS_SHELVES_DIRECTORY.value):
+        os.mkdir(C.COMPONENTS_SHELVES_DIRECTORY.value)
+
     # 数据库需要以下表和字段
     # 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
     # 2. 表 SCORE，字段与 CompletedSimpleScoreInfo 大体一致，另附加 SCORE_ID 字段作为主键
@@ -171,7 +173,7 @@ if "awa" not in st.session_state:
     try:
         if "code" not in st.query_params:
             # check if ossapi token is pickled
-            if "ajs_anonymous_id" in st.context.cookies and os.path.exists("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
+            if "ajs_anonymous_id" in st.context.cookies and os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):
                 awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
                 prepare_bar.progress(67, text=get_an_osu_meme())
             else:
@@ -194,6 +196,7 @@ if "awa" not in st.session_state:
         awa.tz = st.context.timezone
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
+        update_user_cache(st.session_state.user, st.session_state.username, st.context.cookies["ajs_anonymous_id"])
         if st.session_state._debugging_mode:
             from random import randint
 
@@ -202,13 +205,13 @@ if "awa" not in st.session_state:
             logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, UUID(get_script_run_ctx().session_id).hex))
     except NotImplementedError:
         # 这一般是 token 过期了
-        if os.path.exists("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
-            os.remove("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"])
-        # st.warning(_("OAuth2 token or code has expired. Please remove the url parameter and refresh the page."))
+        if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):
+            os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]))
+        st.warning(_("OAuth2 token or code has expired. Please refresh the page."))
         prepare_bar.empty()
-        # 清除 query
-        st.query_params.clear()
-        st.rerun()
+        if "code" in st.query_params:
+            st.query_params.pop("code")
+        st.stop()
     prepare_bar.progress(100, text=get_an_osu_meme())
     if st.session_state.user in admins:
         st.session_state.token = ""
