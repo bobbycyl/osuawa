@@ -47,12 +47,15 @@ _conn = st.connection("osuawa", type="sql", ttl=60)
 _conn.query = _make_query_uppercase(_conn.query)
 
 
+# todo: st.connection 为只读，写入由 daemon worker 负责
+
+
 def save_value(key: str) -> None:
     # <key> <-> st.session_state._<key>_value
     st.session_state["_%s_value" % key] = st.session_state[key]
     # semi-persistent storage
     # ./.streamlit/.components/<ajs_anonymous_id>
-    with shelve.open("./.streamlit/.components/%s" % st.context.cookies["ajs_anonymous_id"]) as db:
+    with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"])) as db:
         db[key] = st.session_state["_%s_value" % key]
 
 
@@ -64,11 +67,11 @@ def load_value(key: str, default_value: Any) -> Any:
             # ./.streamlit/.components/<ajs_anonymous_id>
             # 由于 load 可能发生在第一次访问（save 不会），所以还要检查 cookie 是否存在
             if "ajs_anonymous_id" in st.context.cookies and (
-                os.path.exists("./.streamlit/.components/%s.bak" % st.context.cookies["ajs_anonymous_id"])
-                or os.path.exists("./.streamlit/.components/%s.dat" % st.context.cookies["ajs_anonymous_id"])
-                or os.path.exists("./.streamlit/.components/%s.dir" % st.context.cookies["ajs_anonymous_id"])
+                os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.bak" % st.context.cookies["ajs_anonymous_id"]))
+                or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dat" % st.context.cookies["ajs_anonymous_id"]))
+                or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dir" % st.context.cookies["ajs_anonymous_id"]))
             ):
-                with shelve.open("./.streamlit/.components/%s" % st.context.cookies["ajs_anonymous_id"], "r") as db:
+                with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"]), "r") as db:
                     st.session_state["_%s_value" % key] = db.get(key, default_value)
             else:
                 st.session_state["_%s_value" % key] = default_value
@@ -196,6 +199,7 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
                 # 展示相关文件
                 ret_md += "# Show Files\n\n"
                 # 三个主要文件夹
+                # todo: components shelves 是否需要检查
                 ret_md += "## Storage\n\n"
                 for _path in [C.OUTPUT_DIRECTORY.value, C.UPLOADED_DIRECTORY.value, C.BEATMAPS_CACHE_DIRECTORY.value]:
                     action_path = os.path.join(project_dir, _path)
@@ -204,13 +208,14 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
                     # - **_path**: size, count
                     ret_md += f"- **{_path}**: {size}, {count}\n\n"
                 # 检查 *LCK ./*LCK
+                # todo: 已被遗弃的锁文件，需要考虑是否修正
                 ret_md += "## Lock Files\n\n"
                 for _path in os.listdir(os.path.join(project_dir)):
                     if _path.endswith(".LCK"):
                         ret_md += f"- {_path}\n\n"
                 # 检查 token pickle ./.streamlit/.oauth/*.pickle
                 ret_md += "## Token Pickles\n\n"
-                for _path in os.listdir(os.path.join(project_dir, ".streamlit", ".oauth")):
+                for _path in os.listdir(os.path.join(project_dir, C.OAUTH_TOKEN_DIRECTORY.value)):
                     if _path.endswith(".pickle"):
                         ret_md += f"- {_path}\n\n"
             else:
@@ -247,7 +252,7 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
 
 def log_action(n: int = 100, keyword: Optional[str] = None) -> str:
     ret_md = "# Show last %d lines of logs" % n
-    log_filename = os.path.join(project_dir, "./logs/streamlit.log")
+    log_filename = os.path.join(project_dir, C.LOGS.value, "streamlit.log")
     with open(log_filename, "r", encoding="utf-8") as fi:
         # 先拿到最后 N 行
         last_lines = deque(fi, maxlen=n)

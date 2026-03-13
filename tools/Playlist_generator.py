@@ -37,6 +37,7 @@ with st.sidebar:
 SLOT_MAX_LEN = 5
 conn = st.connection("osuawa", type="sql")
 conn.query = _make_query_uppercase(conn.query)
+# todo: st.connection 为只读，写入由 daemon worker 负责
 uid = UUID(get_script_run_ctx().session_id).hex
 row_style_js_with_dup = JsCode(
     """function(params) {

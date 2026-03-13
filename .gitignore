@@ -14,5 +14,6 @@
 /.streamlit/.oauth/
 /.streamlit/.components/
 /.streamlit/secrets.toml
+/.streamlit/user_cache.json
 qodana.yaml
 osuawa.db

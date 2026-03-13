@@ -3,6 +3,7 @@ osupp @ git+https://github.com/bobbycyl/osupp.git
 babel
 fonttools
 matplotlib
+mysqlclient
 numpy
 orjson
 ossapi[async]

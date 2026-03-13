@@ -15,8 +15,9 @@ from time import sleep
 from typing import Any, Optional, Union, get_args, get_origin
 
 import numpy as np
+import orjson
 import pandas as pd
-from clayutil.futil import Downloader
+from clayutil.futil import Downloader, filelock
 from clayutil.sutil import md5sum
 from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
 from osupp.core import init_osu_tools
@@ -55,6 +56,10 @@ class C(Enum):
     UPLOADED_DIRECTORY = "./static/uploaded/"
     BEATMAPS_CACHE_DIRECTORY = "./static/beatmaps/"
 
+    OAUTH_TOKEN_DIRECTORY = "./.streamlit/.oauth/"
+    COMPONENTS_SHELVES_DIRECTORY = "./.streamlit/.components/"
+    USER_CACHE = "./.streamlit/user_cache.json"
+
 
 @unique
 class ColorBar(Enum):
@@ -63,6 +68,44 @@ class ColorBar(Enum):
     YP_R = [66, 79, 79, 124, 246, 255, 255, 198, 101, 24, 0]
     YP_G = [144, 192, 255, 255, 240, 128, 78, 69, 99, 21, 0]
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
+
+
+@filelock(3)
+def update_user_cache(user: int, username: str, tokens: Optional[list[str]] = None, lck_name: str = "USER_CACHE") -> None:
+    """
+    :param user: osu! user ID
+    :param username: osu! username
+    :param tokens: OAuth2 token 列表，None 则执行 invalidate 操作
+    :param lck_name:
+    """
+    if not os.path.exists(C.USER_CACHE.value):
+        with open(C.USER_CACHE.value, "wb") as fo_b:
+            fo_b.write(orjson.dumps({}))
+    with open(C.USER_CACHE.value, "rb") as fi_b:
+        user_cache = orjson.loads(fi_b.read())
+    # {user: {"username": username, "token": [token_0, token_1, ...]}}
+    if tokens is None:
+        user_cache[user] = {"username": username, "token": []}
+    else:
+        if user not in user_cache:
+            user_cache[user] = {"username": username, "token": tokens}
+        else:  # append token
+            user_cache[user] = {
+                "username": user_cache[user]["username"],
+                "token": list(set(user_cache[user]["token"] + tokens)),
+            }
+    with open(C.USER_CACHE.value, "wb") as fo_b:
+        fo_b.write(orjson.dumps({str(k): v for k, v in user_cache.items()}))
+
+
+def get_cached_user(user: int) -> dict[str, Any]:
+    if not os.path.exists(C.USER_CACHE.value):
+        raise FileNotFoundError("user cache not exists: %s" % C.USER_CACHE.value)
+    with open(C.USER_CACHE.value, "rb") as fi_b:
+        user_cache = orjson.loads(fi_b.read())
+    if str(user) not in user_cache:
+        raise KeyError("user %d not being cached" % user)
+    return user_cache[str(user)]
 
 
 def strip_quotes(text: str) -> str:
