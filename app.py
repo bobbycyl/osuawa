@@ -196,7 +196,7 @@ if "awa" not in st.session_state:
         awa.tz = st.context.timezone
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
-        update_user_cache(st.session_state.user, st.session_state.username, st.context.cookies["ajs_anonymous_id"])
+        update_user_cache(st.session_state.user, st.session_state.username, [st.context.cookies["ajs_anonymous_id"]])
         if st.session_state._debugging_mode:
             from random import randint
 

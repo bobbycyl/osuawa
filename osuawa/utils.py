@@ -71,11 +71,11 @@ class ColorBar(Enum):
 
 
 @filelock(3)
-def update_user_cache(user: int, username: str, tokens: Optional[list[str]] = None, lck_name: str = "USER_CACHE") -> None:
+def update_user_cache(user: int, username: str, ids: Optional[list[str]] = None, lck_name: str = "USER_CACHE") -> None:
     """
     :param user: osu! user ID
     :param username: osu! username
-    :param tokens: OAuth2 token 列表，None 则执行 invalidate 操作
+    :param ids: 设备识别 id 列表，None 则执行 invalidate 操作
     :param lck_name:
     """
     if not os.path.exists(C.USER_CACHE.value):
@@ -83,16 +83,16 @@ def update_user_cache(user: int, username: str, tokens: Optional[list[str]] = No
             fo_b.write(orjson.dumps({}))
     with open(C.USER_CACHE.value, "rb") as fi_b:
         user_cache = orjson.loads(fi_b.read())
-    # {user: {"username": username, "token": [token_0, token_1, ...]}}
-    if tokens is None:
-        user_cache[user] = {"username": username, "token": []}
+    # {user: {"username": username, "id": [id_0, id_1, ...]}}
+    if ids is None:
+        user_cache[user] = {"username": username, "id": []}
     else:
         if user not in user_cache:
-            user_cache[user] = {"username": username, "token": tokens}
-        else:  # append token
+            user_cache[user] = {"username": username, "id": ids}
+        else:  # append id
             user_cache[user] = {
                 "username": user_cache[user]["username"],
-                "token": list(set(user_cache[user]["token"] + tokens)),
+                "id": list(set(user_cache[user]["id"] + ids)),
             }
     with open(C.USER_CACHE.value, "wb") as fo_b:
         fo_b.write(orjson.dumps({str(k): v for k, v in user_cache.items()}))
