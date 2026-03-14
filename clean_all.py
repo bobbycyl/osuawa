@@ -17,3 +17,5 @@ shutil.rmtree(C.OAUTH_TOKEN_DIRECTORY.value, ignore_errors=True)
 shutil.rmtree(C.COMPONENTS_SHELVES_DIRECTORY.value, ignore_errors=True)
 if os.path.exists("./osuawa.db"):
     os.remove("./osuawa.db")
+if os.path.exists(C.USER_CACHE.value):
+    os.remove(C.USER_CACHE.value)

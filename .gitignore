@@ -17,3 +17,5 @@
 /.streamlit/user_cache.json
 qodana.yaml
 osuawa.db
+*LCK
+tmp.py
