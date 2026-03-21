@@ -30,7 +30,7 @@ def run(g):
             st.error(e)
             break  # use continue if you want to continue running the generator
         except StopIteration as e:
-            st.success(_("%d tasks done") % e.value)
+            st.success(_("%d sub-tasks done") % e.value)
             break
         except (Error, NotImplementedError) as e:
             logger.get_logger("streamlit").exception(e)

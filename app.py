@@ -55,7 +55,7 @@ def gettext_translate(text):
 @st.cache_data
 def init_logger():
     fh = logging.FileHandler(os.path.join(C.LOGS.value, "streamlit.log"), encoding="utf-8")
-    fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
+    fh.setFormatter(logging.Formatter(st.get_option("logger.messageFormat")))
     if "streamlit" not in logger.get_logger("streamlit").handlers:
         logger.get_logger("streamlit").addHandler(fh)
     if st.session_state.username not in logger.get_logger("streamlit").handlers:
@@ -117,6 +117,7 @@ if "translate" not in st.session_state:
 # noinspection PyUnresolvedReferences
 builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  # 想要绕过 load_value、save_value 就必须使用这种方式
+st.session_state.redis_tasks: list[str] = []
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))

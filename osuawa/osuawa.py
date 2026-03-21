@@ -2,6 +2,15 @@
 osuawa.py and utils.py should not contain i18n related text and streamlit related statement
 """
 
+__all__ = (
+    "C",
+    "assets_dir",
+    "Awapi",
+    "Osuawa",
+    "BeatmapCover",
+    "OsuPlaylist",
+)
+
 import asyncio
 import ctypes
 import datetime
@@ -21,7 +30,6 @@ from typing import Any, Never, Optional
 import numpy as np
 import orjson
 import pandas as pd
-import typing_extensions
 
 assets_dir = os.path.join(os.path.dirname(__file__))
 if platform.system() == "Windows":
@@ -31,7 +39,7 @@ from clayutil.futil import Downloader, Properties
 from clayutil.validator import Integer
 
 from fontfallback import writing
-from ossapi import Grant, OssapiAsync, Domain, Scope, Score, User, GameMode, Beatmap
+from ossapi.ossapiv2_async import Grant, OssapiAsync, Domain, Scope, Score, User, GameMode, Beatmap
 
 from .utils import (
     ExtendedSimpleScoreInfo,
@@ -50,6 +58,8 @@ from .utils import (
     async_get_user_info,
     simple_user_dict,
     calculate_difficulty,
+    ParsedPlaylistBeatmap,
+    CompletedPlaylistBeatmap,
 )
 
 assert datetime
@@ -61,7 +71,7 @@ class Awapi(OssapiAsync):
         client_id: int,
         client_secret: str,
         redirect_uri: Optional[str] = None,
-        scopes: Optional[list[str]] = None,
+        scopes: Optional[list[Scope | str]] = None,
         *,
         grant: Optional[Grant | str] = None,
         strict: bool = False,
@@ -306,32 +316,32 @@ class BeatmapCover(object):
         if ver_cut != -1:
             version = ver_cut
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         writing.draw_multiline_text_v2(draw, (42, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 192 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         draw.text((42 + 1188, 326), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
         draw.text((41 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
         draw.text((40 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
@@ -351,63 +361,6 @@ class BeatmapCover(object):
         return cover_filename
 
 
-class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):  # type: ignore[call-arg]
-    bid: int
-    mods: list[dict[str, Any]]
-    notes: str
-    beatmap: Beatmap
-
-
-CompletedPlaylistBeatmap = typing_extensions.TypedDict(
-    "CompletedPlaylistBeatmap",
-    {
-        "#": int,
-        "BID": int,
-        "SID": int,
-        "Beatmap Info (Click to View)": str,
-        "Artist - Title (Creator) [Version]": str,
-        "Stars": str,
-        "SR": str,
-        "BPM": str,
-        "Hit Length": str,
-        "Max Combo": str,
-        "CS": str,
-        "AR": str,
-        "OD": str,
-        "Mods": str,
-        "Notes": str,
-        "_Artist": str,
-        "_Title": str,
-    },
-    total=False,
-    extra_items=str,  # type: ignore[call-arg]
-)
-
-
-class DatabasePlaylistBeatmap(typing_extensions.TypedDict):
-    BID: int
-    SID: int
-    INFO: str
-    SKILL_SLOT: str
-    SR: str
-    BPM: str
-    HIT_LENGTH: str
-    MAX_COMBO: str
-    CS: str
-    AR: str
-    OD: str
-    MODS: str
-    NOTES: str
-    STATUS: int
-    COMMENTS: str
-    POOL: str
-    SUGGESTOR: str
-    RAW_MODS: str
-    ADD_TS: float
-    U_ARTIST: str
-    U_TITLE: str
-
-
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
     custom_mods_acronym = {"NM", "TB", "FM", "F+", "SP"}  # NM 其实是官方的模组，但是为了逻辑便捷以及符合惯例，这里加上了
@@ -422,15 +375,15 @@ class OsuPlaylist(object):
         self.playlist_filename = playlist_filename
         self.suffix = suffix
         self.css_style = css_style
-        self.footer = strip_quotes(p.pop("footer")) if "footer" in p else ""
+        self.footer = strip_quotes(str(p.pop("footer"))) if "footer" in p else ""
         self.banner = ""
         if "banner" in p:
-            banner_img_src = strip_quotes(p.pop("banner"))
+            banner_img_src = strip_quotes(str(p.pop("banner")))
             self.banner = """
     <div class="relative w-full h-[90] sm:h-[135] lg:h-[185] hover:h-1/2 bg-cover bg-no-repeat bg-center object-cover transition-all duration-300 transform" style="background-image: url(%s)"><div class="absolute inset-0 banner-mask"></div>
     </div>
 """ % banner_img_src
-        self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
+        self.custom_columns: list[str] = orjson.loads(str(p.pop("custom_columns"))) if "custom_columns" in p else []
 
         parsed_beatmap_list: list[ParsedPlaylistBeatmap] = []
 
@@ -534,7 +487,7 @@ class OsuPlaylist(object):
             # 将背景图片保存在统一文件夹内以减小占用
             if not os.path.exists(os.path.join(self.bg_dir, "%d.jpg" % bid)):
                 bg_d = Downloader(self.bg_dir)
-                bg_filename = await bg_d.async_start(f"https://assets.ppy.sh/beatmaps/%d/covers/fullsize.jpg" % b.beatmapset_id, "%d" % bid, headers)
+                bg_filename = await bg_d.async_start("https://assets.ppy.sh/beatmaps/%d/covers/fullsize.jpg" % b.beatmapset_id, "%d" % bid, headers)
                 # bg_filename = await bg_d.async_start(f"https://beatconnect.io/bg/%d/%d" % (b.beatmapset_id, bid), "%d" % bid, headers)
                 try:
                     im: Image.Image = Image.open(bg_filename)
@@ -705,18 +658,21 @@ class OsuPlaylist(object):
 
     def generate(self) -> pd.DataFrame:
         playlist = self.__awa_instance.run_coro(self.playlist_task())
-        df_columns = ["#", "BID", "Beatmap Info (Click to View)", "Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD"]
-        df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
-        for column in self.custom_columns:
-            if column == "mods":
-                continue
-            else:
-                df_columns.insert(3, column)
-                df_standalone_columns.insert(4, column)
-        df_columns.append("Notes")
-        df_standalone_columns.append("Notes")
-        df = pd.DataFrame(playlist, columns=df_columns)
-        df_standalone = pd.DataFrame(playlist, columns=df_standalone_columns)
+        # for column in self.custom_columns:
+        #     if column == "mods":
+        #         continue
+        #     else:
+        #         df_columns.insert(3, column)
+        #         df_standalone_columns.insert(4, column)
+        head_cols = ["#", "BID", "Beatmap Info (Click to View)"]
+        head_standalone_cols = ["#", "BID", "SID", "Artist - Title (Creator) [Version]"]
+        extra_cols = [c for c in self.custom_columns if c != "mods"]
+        tail_cols = ["Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Notes"]
+        tail_standalone_cols = ["SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods", "Notes"]
+        df_columns = head_cols + extra_cols + tail_cols
+        df_standalone_columns = head_standalone_cols + extra_cols + tail_standalone_cols
+        df = pd.DataFrame(playlist, columns=pd.Index(df_columns))
+        df_standalone = pd.DataFrame(playlist, columns=pd.Index(df_standalone_columns))
         df.sort_values(by=["#"], inplace=True)
         df_standalone.sort_values(by=["#"], inplace=True)
         pd.set_option("colheader_justify", "center")
