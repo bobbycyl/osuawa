@@ -5,22 +5,25 @@ osuawa.py and utils.py should not contain i18n related text and streamlit relate
 import asyncio
 import os
 import re
+import uuid
 from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
-from time import sleep
-from typing import Any, Optional, Union, get_args, get_origin
+from time import sleep, time
+from typing import Any, NamedTuple, Optional, TypedDict, Union, get_args, get_origin
 
 import numpy as np
 import orjson
 import pandas as pd
+import typing_extensions
 from clayutil.futil import Downloader, filelock
 from clayutil.sutil import md5sum
 from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
 from osupp.core import init_osu_tools
+from redis import Redis
 
 init_osu_tools(os.path.join(os.path.dirname(__file__), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
 # noinspection PyUnresolvedReferences
@@ -59,6 +62,9 @@ class C(Enum):
     OAUTH_TOKEN_DIRECTORY = "./.streamlit/.oauth/"
     COMPONENTS_SHELVES_DIRECTORY = "./.streamlit/.components/"
     USER_CACHE = "./.streamlit/user_cache.json"
+
+    TASK_QUEUE = "awatasks:queue"
+    TASK_STATUS = "awatask:status:{task_id}"
 
 
 @unique
@@ -457,6 +463,102 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     score_nf: int
     mods: str
     only_common_mods: bool
+
+
+class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):  # type: ignore[call-arg]
+    bid: int
+    mods: list[dict[str, Any]]
+    notes: str
+    beatmap: Beatmap
+
+
+CompletedPlaylistBeatmap = typing_extensions.TypedDict(
+    "CompletedPlaylistBeatmap",
+    {
+        "#": int,
+        "BID": int,
+        "SID": int,
+        "Beatmap Info (Click to View)": str,
+        "Artist - Title (Creator) [Version]": str,
+        "Stars": str,
+        "SR": str,
+        "BPM": str,
+        "Hit Length": str,
+        "Max Combo": str,
+        "CS": str,
+        "AR": str,
+        "OD": str,
+        "Mods": str,
+        "Notes": str,
+        "_Artist": str,
+        "_Title": str,
+    },
+    total=False,
+    extra_items=str,  # type: ignore[call-arg]
+)
+
+
+class DatabasePlaylistBeatmap(typing_extensions.TypedDict):
+    BID: int
+    SID: int
+    INFO: str
+    SKILL_SLOT: str
+    SR: str
+    BPM: str
+    HIT_LENGTH: str
+    MAX_COMBO: str
+    CS: str
+    AR: str
+    OD: str
+    MODS: str
+    NOTES: str
+    STATUS: int
+    COMMENTS: str
+    POOL: str
+    SUGGESTOR: str
+    RAW_MODS: str
+    ADD_TS: float
+    U_ARTIST: str
+    U_TITLE: str
+
+
+class BeatmapToUpdate(TypedDict, total=False):
+    """
+    Attributes:
+        beatmap: 欲更新的谱面
+        old_bid: 欲删除 BID
+        old_mods: 欲删除 MODS
+    """
+
+    beatmap: DatabasePlaylistBeatmap
+    old_bid: Optional[int]
+    old_mods: Optional[str]
+
+
+class BeatmapSpec(NamedTuple):
+    bid: int
+    raw_mods: list[dict[str, str | dict[str, str | float | bool]]]
+    slot: str
+    pool: str
+    notes: str
+    status: int
+    comments: str
+    suggestor: str
+    add_ts: float
+
+
+def push_task(r: Redis, task_command: str) -> str:
+    task_id = uuid.uuid4().hex
+    r.lpush(C.TASK_QUEUE.value, "%s%s" % (task_id, task_command))
+    r.hset(
+        C.TASK_STATUS.value.format(task_id=task_id),
+        mapping={
+            "status": "pending",
+            "result": "",
+            "time": time(),
+        },
+    )
+    return task_id
 
 
 def download_osu(beatmap: Beatmap):

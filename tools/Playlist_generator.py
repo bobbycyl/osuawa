@@ -17,9 +17,9 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist
-from osuawa.components import init_page, load_value, memorized_selectbox, save_value
-from osuawa.osuawa import CompletedPlaylistBeatmap, DatabasePlaylistBeatmap, Osuawa
-from osuawa.utils import _make_query_uppercase, generate_mods_from_lines, to_readable_mods
+from osuawa.components import get_redis_connection, init_page, load_value, memorized_selectbox, save_value
+from osuawa.osuawa import Osuawa
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, CompletedPlaylistBeatmap, DatabasePlaylistBeatmap, _make_query_uppercase, generate_mods_from_lines, push_task, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa
+    # noinspection PyTypeHints
+    st.session_state.redis_tasks: list[str]
 
 init_page(_("Playlist generator") + " - osuawa")
 with st.sidebar:
@@ -37,6 +39,7 @@ with st.sidebar:
 SLOT_MAX_LEN = 5
 conn = st.connection("osuawa", type="sql")
 conn.query = _make_query_uppercase(conn.query)
+r = get_redis_connection()
 # todo: st.connection 为只读，写入由 daemon worker 负责
 uid = UUID(get_script_run_ctx().session_id).hex
 row_style_js_with_dup = JsCode(
@@ -187,7 +190,7 @@ def generate_playlist(filename: str, css_style: Optional[int] = None):
     return playlist.generate()
 
 
-def _create_tmp_playlist_p(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> str:
+def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
     # 暂时不考虑定制谱面/本地谱面需求，因为 playlist 要求是纯在线谱面
     # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具
     # 然而，这个操作可能会需要完全重构 playlist 生成器的逻辑，因为其目前所使用的所有信息都是在线获取的
@@ -210,7 +213,7 @@ def _create_tmp_playlist_p(name: str, beatmap_specs: list[tuple[int, list, str, 
     return tmp_playlist_filename
 
 
-def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str, str, int, str, str, float]]) -> list[DatabasePlaylistBeatmap]:
+def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[DatabasePlaylistBeatmap]:
     """创建临时课题。仅创建，不生成
 
     status: 0=未审核, 1=已审核, 2=已提名
@@ -268,7 +271,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[tuple[int, list, str, str
                 COMMENTS=beatmap_specs[i][6],
                 POOL=beatmap_specs[i][3],
                 SUGGESTOR=beatmap_specs[i][7],
-                RAW_MODS=orjson.dumps(beatmap_specs[i][1]).replace(b" ", b"").decode(),  # 这里删除空格是否会导致奇怪问题出现仍需商榷
+                RAW_MODS=orjson.dumps(beatmap_specs[i][1]).decode(),  # orjson 序列化时输出的是紧凑的字符串
                 ADD_TS=beatmap_specs[i][8],
                 U_ARTIST=playlist_beatmap_raw["_Artist"],
                 U_TITLE=playlist_beatmap_raw["_Title"],
@@ -296,87 +299,10 @@ def check_beatmap_exists(bid: int, mods: str) -> bool:
     return res > 0
 
 
-def update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap] = None, *, old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> None:
-    """更新课题谱面（包括删除）
-
-    如果 beatmap 不为 None，则 old_bid 必须为 None
-
-    :param beatmap: 欲更新课题谱面
-    :param old_bid: 欲删除 BID
-    :param old_mods: 欲删除 MODS
-    :return:
-    """
-    if beatmap is not None:
-        # 如果 beatmap 不为 None，old_bid 从 beatmap 中获取
-        if old_bid is not None:
-            # 提供 beatmap 意味着更新/修改，此时不允许删除操作
-            raise ValueError("cannot update a beatmap with a different old bid")
-        old_bid = beatmap["BID"]
-
-    with conn.session as s:
-        if old_bid is not None and old_mods is not None:
-            # 有可能传入的是 numpy 类型，需要强制转化为原生类型
-            old_bid = int(old_bid)
-            old_mods = str(old_mods)
-            s.execute(
-                text(
-                    """DELETE
-                       FROM BEATMAP
-                       WHERE BID = :bid
-                         AND MODS = :mods""",
-                ),
-                {"bid": old_bid, "mods": old_mods},
-            )
-        if beatmap is not None:
-            s.execute(
-                text(
-                    """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE)
-                       VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)
-                       ON CONFLICT (BID, MODS)
-                           DO UPDATE SET SKILL_SLOT = EXCLUDED.SKILL_SLOT,
-                                         SR         = EXCLUDED.SR,
-                                         BPM        = EXCLUDED.BPM,
-                                         HIT_LENGTH = EXCLUDED.HIT_LENGTH,
-                                         MAX_COMBO  = EXCLUDED.MAX_COMBO,
-                                         CS         = EXCLUDED.CS,
-                                         AR         = EXCLUDED.AR,
-                                         OD         = EXCLUDED.OD,
-                                         MODS       = EXCLUDED.MODS,
-                                         NOTES      = EXCLUDED.NOTES,
-                                         STATUS     = EXCLUDED.STATUS,
-                                         COMMENTS   = EXCLUDED.COMMENTS,
-                                         POOL       = EXCLUDED.POOL,
-                                         SUGGESTOR  = EXCLUDED.SUGGESTOR,
-                                         RAW_MODS   = EXCLUDED.RAW_MODS,
-                                         INFO       = EXCLUDED.INFO
-                    -- 注意：ADD_TS 只会保留第一次创建记录时的值，后续不会被更新""",
-                ),
-                params=beatmap,
-            )
-        else:
-            raise ValueError(_("no changes made"))
-        s.commit()
-
-
-def online_playlist_action_logger(bid: int, mods: str, action: int, old_mods: Optional[str] = None) -> None:
-    bid = int(bid)
-    mods = str(mods)
-    verb_mapping = {
-        0: "added",
-        1: "deleted",
-        2: "updated",
-    }
-    msg = "%s (%d %s)" % (verb_mapping[action], bid, mods)
-    if old_mods is not None:
-        msg += " from %s" % old_mods
-    logger.get_logger(st.session_state.username).info(msg)
-    st.toast(msg)
-
-
 @st.dialog(_("Export selected as a playlist"))
 def export_filtered_playlist():
     parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
-    specs_x = [(bid, mods, skill, "", note, 0, "", "", 0.0) for bid, mods, skill, note in zip(selected_rows["BID"], parsed_mods_list, selected_rows["SKILL_SLOT"], selected_rows["NOTES"])]  # 直接用解析好的列表
+    specs_x = [BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0) for bid, mods, skill, note in zip(selected_rows["BID"], parsed_mods_list, selected_rows["SKILL_SLOT"], selected_rows["NOTES"])]  # 直接用解析好的列表
     tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
     st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
     with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
@@ -417,7 +343,7 @@ if st.session_state.perm >= 1:
         if submitted:
             st.session_state.gen_form_pool = pool_input
             save_value("gen_form_pool")
-            specs_input: list[tuple[int, list, str, str, str, int, str, str, float]] = []
+            specs_input: list[BeatmapSpec] = []
             urls_input_split = urls_input.split()
             raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input)
             for url_input in urls_input_split:
@@ -435,7 +361,7 @@ if st.session_state.perm >= 1:
                     continue
                 validate_restricted_identifier(st.session_state.gen_form_pool)
                 specs_input.append(
-                    (
+                    BeatmapSpec(
                         bid_input,
                         raw_mods_input,
                         slot_input,
@@ -449,8 +375,7 @@ if st.session_state.perm >= 1:
                 )
             playlist_beatmaps_input = create_tmp_playlist(uid, specs_input)
             for beatmap_to_insert in playlist_beatmaps_input:
-                update_beatmap(beatmap_to_insert)
-                online_playlist_action_logger(beatmap_to_insert["BID"], beatmap_to_insert["MODS"], 0)
+                st.session_state.redis_tasks.append(push_task(r, orjson.dumps(BeatmapToUpdate(beatmap=beatmap_to_insert)).decode()))
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -649,7 +574,7 @@ if st.session_state.perm >= 1:
                 if edited_df.empty:
                     st.toast(_("no changes made"))
                 else:
-                    specs_recalculate: list[tuple[int, list, str, str, str, int, str, str, float]] = []
+                    specs_recalculate: list[BeatmapSpec] = []
                     olds_to_drop: list[tuple[str, bool]] = []  # (old MODS, RAW_MODS changed)
                     for index, row in edited_df.iterrows():
                         edited_bid, edited_mods = row["BID"], row["MODS"]
@@ -674,7 +599,7 @@ if st.session_state.perm >= 1:
                         else:
                             continue
                         try:
-                            specs_recalculate.append((edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
+                            specs_recalculate.append(BeatmapSpec(edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
                         except orjson.JSONDecodeError as e:
                             st.toast(_("invalid JSON: %s") % row["RAW_MODS"])
                             st.stop()
@@ -682,11 +607,14 @@ if st.session_state.perm >= 1:
                     playlist_beatmaps_recalculate = create_tmp_playlist(uid, specs_recalculate)
                     for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, playlist_beatmaps_recalculate):
                         if old_to_drop[1]:
-                            update_beatmap(beatmap_to_upsert, old_mods=old_to_drop[0])
-                            online_playlist_action_logger(beatmap_to_upsert["BID"], beatmap_to_upsert["MODS"], 2, old_to_drop[0])
+                            st.session_state.redis_tasks.append(
+                                orjson.dumps(BeatmapToUpdate(beatmap=beatmap_to_upsert, old_mods=old_to_drop[0])).decode(),
+                            )
+
                         else:
-                            update_beatmap(beatmap_to_upsert)
-                            online_playlist_action_logger(beatmap_to_upsert["BID"], beatmap_to_upsert["MODS"], 2)
+                            st.session_state.redis_tasks.append(
+                                orjson.dumps(BeatmapToUpdate(beatmap=beatmap_to_upsert)).decode(),
+                            )
                 refresh(1.5)
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh(clear_cache=True)
@@ -699,10 +627,11 @@ if st.session_state.perm >= 1:
                 if len(selected_rows) == 0:
                     st.toast(_("no beatmaps selected"))
                 else:
-                    required_rows_tuple = selected_rows[["BID", "MODS"]]
-                    for row in required_rows_tuple.itertuples(index=False):
-                        update_beatmap(old_bid=row.BID, old_mods=row.MODS)
-                        online_playlist_action_logger(row.BID, row.MODS, 1)
+                    required_rows = selected_rows[["BID", "MODS"]]
+                    for row in required_rows.itertuples(index=False):
+                        st.session_state.redis_tasks.append(
+                            orjson.dumps(BeatmapToUpdate(old_bid=row.BID, old_mods=row.MODS)).decode(),
+                        )
                 refresh(1.5)
 
 st.divider()

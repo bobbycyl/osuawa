@@ -1,11 +1,9 @@
-import asyncio
 import os
 import os.path
 import re
 import shelve
 import shutil
 from collections import deque
-from dataclasses import asdict
 from datetime import date, datetime, time
 from secrets import token_hex
 from shutil import copyfile
@@ -19,14 +17,13 @@ import redis
 import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
-    CollectionField as Coll,
     Command,
     CommandError,
     IntegerField as Int,
     JSONStringField as JsonStr,
     StringField as Str,
 )
-from ossapi import Beatmap, GameMode, Score
+from ossapi import Beatmap, GameMode
 from osupp.performance import calculate_osu_performance
 from plotly.graph_objs import Figure
 from sqlalchemy import text
@@ -34,7 +31,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, SimpleOsuDifficultyAttribute, SimpleScoreInfo, _make_query_uppercase, async_get_username, download_osu, format_size, generate_mods_from_lines, get_size_and_count
+from osuawa.utils import CompletedSimpleScoreInfo, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
 
 if TYPE_CHECKING:
 
@@ -120,6 +117,9 @@ def get_redis_connection():
     return r
 
 
+_r = get_redis_connection()
+
+
 def commands():
     return [
         Command(
@@ -153,21 +153,9 @@ def commands():
         Command(
             "save",
             _("save user recent scores"),
-            [Int("user"), Bool("include_fails", True)],
+            [Int("user")],
             1,
-            save_recent_scores,
-        ),
-        Command(
-            "update",
-            _("update user recent scores"),
-            [
-                Coll(
-                    "user",
-                    get_all_score_users(),
-                ),
-            ],
-            1,
-            save_recent_scores,
+            lambda user: push_task(_r, "save %d" % user),
         ),
         Command("score", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
         Command(
@@ -208,7 +196,6 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
                     # - **_path**: size, count
                     ret_md += f"- **{_path}**: {size}, {count}\n\n"
                 # 检查 *LCK ./*LCK
-                # todo: 已被遗弃的锁文件，需要考虑是否修正
                 ret_md += "## Lock Files\n\n"
                 for _path in os.listdir(os.path.join(project_dir)):
                     if _path.endswith(".LCK"):
@@ -252,25 +239,27 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
 
 def log_action(n: int = 100, keyword: Optional[str] = None) -> str:
     ret_md = "# Show last %d lines of logs" % n
-    log_filename = os.path.join(project_dir, C.LOGS.value, "streamlit.log")
-    with open(log_filename, "r", encoding="utf-8") as fi:
-        # 先拿到最后 N 行
-        last_lines = deque(fi, maxlen=n)
+    for log_filename in ["streamlit.log", "daemon.log"]:
+        ret_md += "## %s" % log_filename
+        log_filename = os.path.join(project_dir, C.LOGS.value, log_filename)
+        with open(log_filename, "r", encoding="utf-8") as fi:
+            # 先拿到最后 N 行
+            last_lines = deque(fi, maxlen=n)
 
-    results = []
-    if keyword is not None:
-        ret_md += f' with keyword "{keyword}".\n\n'
-        for line in last_lines:
-            if keyword in line:
-                results.append(line)
-    else:
-        ret_md += ".\n\n"
-        results = list(last_lines)
-    # 使用代码块包裹日志内容，防止 Markdown 格式错乱
-    ret_md += "```log\n"
-    # strip() 防止末尾多余空行
-    ret_md += "".join(results).strip()
-    ret_md += "\n```"
+        results = []
+        if keyword is not None:
+            ret_md += f' with keyword "{keyword}".\n\n'
+            for line in last_lines:
+                if keyword in line:
+                    results.append(line)
+        else:
+            ret_md += ".\n\n"
+            results = list(last_lines)
+        # 使用代码块包裹日志内容，防止 Markdown 格式错乱
+        ret_md += "```log\n"
+        # strip() 防止末尾多余空行
+        ret_md += "".join(results).strip()
+        ret_md += "\n```"
     return ret_md
 
 
@@ -341,7 +330,10 @@ def register_commands(obj: Optional[dict] = None):
         else:
             st.info(_('use `reg {"token": "<token>"}` to pass the token'))
             st.session_state.token = token_hex(16)
-            logger.get_logger("streamlit").info("generated token for session %s: %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
+            ctx = get_script_run_ctx()
+            if ctx is None:
+                raise RuntimeError("no streamlit ctx")
+            logger.get_logger("streamlit").info("generated token for session %s: %s" % (UUID(ctx.session_id).hex, st.session_state.token))
             ret = _("token generated")
             st.toast(_("You need to ask the web admin for the session token to unlock full features."))
     else:
@@ -349,54 +341,6 @@ def register_commands(obj: Optional[dict] = None):
         pass
     st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
     return ret
-
-
-def save_recent_scores(user: int, include_fails: bool = True) -> str:
-    async def _save_recent_scores(_user: int, _include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
-        """返回 (username, completed_recent_scores_compact)"""
-        user_scores: list[Score] = await st.session_state.awa.async_get_recent_scores(_user, _include_fails)
-        recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
-        return await asyncio.gather(
-            async_get_username(st.session_state.awa.api, _user),
-            st.session_state.awa.complete_scores_compact(recent_scores_compact),
-        )
-
-    username: str
-    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo]
-    username, completed_recent_scores_compact = st.session_state.awa.run_coro(_save_recent_scores(user, include_fails))
-    with _conn.session as s:
-        # 插入到表 SCORE，如果遇到冲突，则放弃
-        # 准备数据
-        scores = []
-        for pk, _v in completed_recent_scores_compact.items():
-            score = asdict(
-                _v,
-                dict_factory=lambda items: {k.lstrip("_"): None if v is None else v.timestamp() if isinstance(v, datetime) else int(v) if isinstance(v, bool) else orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v for k, v in items},
-            )
-            score["score_id"] = pk
-            scores.append(score)
-        res = s.execute(
-            text(
-                """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP, IS_SPEED_DOWN,
-                                      INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
-                                      B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
-                                      B_PP_81IF, B_PP_67IF)
-                   VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
-                           :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
-                           :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
-                           :b_pp_81if, :b_pp_67if)
-                   ON CONFLICT DO NOTHING;""",
-            ),
-            params=scores,
-        )
-
-        len_diff = res.rowcount
-        s.commit()
-    return "%s: got/diff: %d/%d" % (
-        username,
-        len(completed_recent_scores_compact),
-        len_diff,
-    )
 
 
 def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = None) -> pd.DataFrame:
