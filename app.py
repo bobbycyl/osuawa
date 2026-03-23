@@ -5,11 +5,10 @@ import logging
 import os
 from html import escape as html_escape
 from typing import Optional, TYPE_CHECKING
-from uuid import UUID
 
 import requests
 import streamlit as st
-from babel import Locale
+from babel import Locale, UnknownLocaleError
 from clayutil.cmdparse import (
     CommandParser,
 )
@@ -19,8 +18,8 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
-from osuawa.components import load_value, register_commands
-from osuawa.utils import create_unique_picker, update_user_cache
+from osuawa.components import get_session_id, load_value, register_commands
+from osuawa.utils import RedisTaskId, create_unique_picker, update_user_cache
 
 st.session_state._debugging_mode = False
 admins = st.secrets.args.admins
@@ -29,7 +28,9 @@ if TYPE_CHECKING:
     def _(text: str) -> str: ...
 
 
-def convert_locale(accept_language: str):
+def convert_locale(accept_language: Optional[str]):
+    if accept_language is None:
+        return "en_US"
     try:
         parsed_locale = Locale.parse(accept_language.split(",")[0], sep="-")
         converted_lang = "%s_%s" % (parsed_locale.language, parsed_locale.territory)
@@ -37,7 +38,7 @@ def convert_locale(accept_language: str):
             return "en_US"
         else:
             return converted_lang
-    except:
+    except (UnknownLocaleError, ValueError, AttributeError, IndexError):
         return "en_US"
 
 
@@ -117,7 +118,8 @@ if "translate" not in st.session_state:
 # noinspection PyUnresolvedReferences
 builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  # 想要绕过 load_value、save_value 就必须使用这种方式
-st.session_state.redis_tasks: list[str] = []
+# noinspection PyTypeHints
+st.session_state.redis_tasks: list[RedisTaskId] = []
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
@@ -203,7 +205,10 @@ if "awa" not in st.session_state:
 
             # 启用随机用户名
             st.session_state.username = "".join([chr(randint(ord("a"), ord("z"))) for _ in range(8)])
-            logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, UUID(get_script_run_ctx().session_id).hex))
+            ctx = get_script_run_ctx()
+            if ctx is None:
+                raise RuntimeError("no streamlit runtime")
+            logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, get_session_id()))
     except NotImplementedError:
         # 这一般是 token 过期了
         if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):

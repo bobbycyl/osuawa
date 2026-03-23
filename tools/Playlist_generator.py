@@ -4,7 +4,6 @@ import time
 from functools import partial
 from time import sleep, time_ns
 from typing import Never, Optional, TYPE_CHECKING
-from uuid import UUID
 
 import orjson
 import pandas as pd
@@ -14,10 +13,9 @@ from clayutil.validator import validate_type
 from sqlalchemy import text
 from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
-from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist
-from osuawa.components import get_redis_connection, init_page, load_value, memorized_selectbox, save_value
+from osuawa.components import get_redis_connection, get_session_id, init_page, load_value, memorized_selectbox, save_value
 from osuawa.osuawa import Osuawa
 from osuawa.utils import BeatmapSpec, BeatmapToUpdate, CompletedPlaylistBeatmap, DatabasePlaylistBeatmap, _make_query_uppercase, generate_mods_from_lines, push_task, to_readable_mods
 
@@ -41,7 +39,7 @@ conn = st.connection("osuawa", type="sql")
 conn.query = _make_query_uppercase(conn.query)
 r = get_redis_connection()
 # todo: st.connection 为只读，写入由 daemon worker 负责
-uid = UUID(get_script_run_ctx().session_id).hex
+uid = get_session_id()
 row_style_js_with_dup = JsCode(
     """function(params) {
     if (params.data._is_dup_bid) return { backgroundColor: 'crimson' };
@@ -213,6 +211,7 @@ def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
     return tmp_playlist_filename
 
 
+# noinspection PyTypedDict
 def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[DatabasePlaylistBeatmap]:
     """创建临时课题。仅创建，不生成
 
@@ -236,7 +235,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     try:
         tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
         playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = st.session_state.awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
-    except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup
+    except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup  # noqa: E722
         st.error(_("failed to parse the spec(s): %s") % beatmap_specs)
         st.stop()
     # playlist_beatmaps_raw 的顺序可能和传入的 specs 顺序不一致
@@ -246,18 +245,18 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     playlist_beatmaps_raw.sort(key=lambda x: int(x["#"]))
     playlist_beatmaps_db = []
     for i, playlist_beatmap_raw in enumerate(playlist_beatmaps_raw):
-        if len(playlist_beatmap_raw["slot"]) < 3:  # type: ignore[literal-required]
-            st.error(_("slot too short: %s") % playlist_beatmap_raw["slot"])  # type: ignore[literal-required]
+        if len(playlist_beatmap_raw["slot"]) < 3:
+            st.error(_("slot too short: %s") % playlist_beatmap_raw["slot"])
             st.stop()
-        if len(playlist_beatmap_raw["slot"]) > SLOT_MAX_LEN:  # type: ignore[literal-required]
-            st.error(_("slot too long: %s") % playlist_beatmap_raw["slot"])  # type: ignore[literal-required]
+        if len(playlist_beatmap_raw["slot"]) > SLOT_MAX_LEN:
+            st.error(_("slot too long: %s") % playlist_beatmap_raw["slot"])
             st.stop()
         playlist_beatmaps_db.append(
             DatabasePlaylistBeatmap(
                 BID=playlist_beatmap_raw["BID"],
                 SID=playlist_beatmap_raw["SID"],
                 INFO=playlist_beatmap_raw["Artist - Title (Creator) [Version]"],
-                SKILL_SLOT=playlist_beatmap_raw["slot"],  # type: ignore[literal-required]
+                SKILL_SLOT=playlist_beatmap_raw["slot"],
                 SR=playlist_beatmap_raw["SR"],  # 相比 Stars，SR 不依赖特殊字体
                 BPM=playlist_beatmap_raw["BPM"],
                 HIT_LENGTH=playlist_beatmap_raw["Hit Length"],
@@ -345,7 +344,7 @@ if st.session_state.perm >= 1:
             save_value("gen_form_pool")
             specs_input: list[BeatmapSpec] = []
             urls_input_split = urls_input.split()
-            raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input)
+            raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input or "")
             for url_input in urls_input_split:
                 # 处理 BID
                 bid_input = int(url_input.rsplit("/", 1)[-1])
@@ -365,8 +364,8 @@ if st.session_state.perm >= 1:
                         bid_input,
                         raw_mods_input,
                         slot_input,
-                        st.session_state.gen_form_pool,
-                        notes_input,
+                        st.session_state.gen_form_pool or "",
+                        notes_input or "",
                         0,
                         "",
                         st.session_state.username,
@@ -408,6 +407,7 @@ if st.session_state.perm >= 1:
     duplicate_songs = (duplicate_songs_raw["U_ARTIST"] + " " + duplicate_songs_raw["U_TITLE"]).to_list()
 
     # pool 和 status 的查询使用 SQL 完成
+    # noinspection SqlConstantExpression
     filter_query = """SELECT *
                       FROM BEATMAP
                       WHERE 1 = 1"""
@@ -600,7 +600,7 @@ if st.session_state.perm >= 1:
                             continue
                         try:
                             specs_recalculate.append(BeatmapSpec(edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
-                        except orjson.JSONDecodeError as e:
+                        except orjson.JSONDecodeError:
                             st.toast(_("invalid JSON: %s") % row["RAW_MODS"])
                             st.stop()
                         olds_to_drop.append((original_row["MODS"], new_primary))

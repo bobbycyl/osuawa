@@ -25,13 +25,13 @@ from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Never, Optional
+from typing import Any, Never, Optional, cast
 
 import numpy as np
 import orjson
 import pandas as pd
 
-assets_dir = os.path.join(os.path.dirname(__file__))
+assets_dir: str = os.path.dirname(__file__)
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
@@ -83,7 +83,7 @@ class Awapi(OssapiAsync):
         api_version: int | str = 20240529,
     ):
         if scopes is None:
-            scopes = [Scope.PUBLIC]
+            scopes: list[Scope | str] = [Scope.PUBLIC]
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
     def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> Never:
@@ -139,12 +139,12 @@ class Osuawa(object):
         df = pd.DataFrame.from_dict(
             scores_compact,
             orient="index",
-            columns=[f.name for f in fields(CompletedSimpleScoreInfo)],
+            columns=pd.Index(f.name for f in fields(CompletedSimpleScoreInfo)),
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
-        df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
-        df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
+        df["ts"] = cast(pd.Series, pd.to_datetime(df["ts"], utc=True)).dt.tz_convert(self.tz)
+        df["st"] = cast(pd.Series, pd.to_datetime(df["st"], utc=True)).dt.tz_convert(self.tz)
         ec = ExtendedSimpleScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
         df[ec[1]] = df["pp"] / df["b_pp_100if"]
@@ -199,7 +199,7 @@ class Osuawa(object):
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
-            user = self.user[0]
+            user: int = self.user[0]
         return self.create_scores_dataframe(self.run_coro(self.async_get_user_beatmap_scores(beatmap, user)))
 
     async def async_get_recent_scores(self, user: int, include_fails: bool = True) -> list[Score]:
@@ -222,7 +222,7 @@ class Osuawa(object):
         return user_scores
 
 
-def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
+def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str:
     text_len_dry_run = draw.textlength(text, font=font)
     if text_len_dry_run > length_limit:
         cut_length = -1
@@ -234,7 +234,7 @@ def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, us
             cut_length -= 1
         return text_cut
     else:
-        return -1
+        return ""
 
 
 class BeatmapCover(object):
@@ -302,18 +302,18 @@ class BeatmapCover(object):
         stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
         title_u = self.beatmap.beatmapset().title_unicode
         t1_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u, len_set - stars_len - text_pos - padding - mod_theme_len, False)
-        if t1_cut != -1:
-            title_u2 = title_u.lstrip(t1_cut)
+        if t1_cut != "":
+            title_u2 = title_u[len(t1_cut) :]
             title_u = "%s\n%s" % (t1_cut, title_u2)
             t2_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u2, len_set - padding - mod_theme_len, True)
-            if t2_cut != -1:
+            if t2_cut != "":
                 title_u = "%s\n%s" % (t1_cut, t2_cut)
 
         # 绘制左侧文字
         fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
         version = self.beatmap.version
         ver_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
-        if ver_cut != -1:
+        if ver_cut != "":
             version = ver_cut
         # noinspection PyTypeChecker
         writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
@@ -392,13 +392,14 @@ class OsuPlaylist(object):
         while p:
             k, v = p.popitem()
             if k[0] == "#":  # notes
-                current_parsed_beatmap["notes"] += v.lstrip("#").lstrip(" ")
+                current_parsed_beatmap["notes"] += str(v).lstrip("#").lstrip(" ")
             else:
                 current_parsed_beatmap["bid"] = int(k)
-                obj_v = orjson.loads(v)
+                obj_v = orjson.loads(str(v))
                 if self.custom_columns:
                     for column in self.custom_columns:
-                        current_parsed_beatmap[column] = obj_v.get(column)  # type: ignore[literal-required]
+                        # noinspection PyTypedDict
+                        current_parsed_beatmap[column] = obj_v.get(column)
                 else:
                     current_parsed_beatmap["mods"] = obj_v
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
@@ -461,7 +462,7 @@ class OsuPlaylist(object):
 
         # 下载谱面与计算难度
         download_osu(b)
-        my_attr = SimpleOsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
+        my_attr = SimpleOsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
         my_attr.set_mods(mods)
         osupp_attr = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
         stars1 = osupp_attr["star_rating"]
