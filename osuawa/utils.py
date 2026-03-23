@@ -12,14 +12,14 @@ from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
-from time import sleep, time
+from time import sleep, time, time_ns
 from typing import Any, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
 
 import numpy as np
 import orjson
 import pandas as pd
 import typing_extensions
-from clayutil.futil import Downloader, filelock
+from clayutil.futil import Downloader, Properties, filelock
 from clayutil.sutil import md5sum
 from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
 from osupp.core import init_osu_tools
@@ -64,6 +64,8 @@ class C(Enum):
 
     TASK_QUEUE = "awatasks:queue"
     TASK_STATUS = "awatask:status:{task_id}"
+
+    SLOT_MAX_LEN = 5
 
 
 @unique
@@ -507,7 +509,7 @@ CompletedPlaylistBeatmap = typing_extensions.TypedDict(
 )
 
 
-class DatabasePlaylistBeatmap(typing_extensions.TypedDict):
+class DatabasePlaylistBeatmap(TypedDict):
     BID: int
     SID: int
     INFO: str
@@ -531,19 +533,6 @@ class DatabasePlaylistBeatmap(typing_extensions.TypedDict):
     U_TITLE: str
 
 
-class BeatmapToUpdate(TypedDict, total=False):
-    """
-    Attributes:
-        beatmap: 欲更新的谱面
-        old_bid: 欲删除 BID
-        old_mods: 欲删除 MODS
-    """
-
-    beatmap: Optional[DatabasePlaylistBeatmap]
-    old_bid: Optional[int]
-    old_mods: Optional[str]
-
-
 class BeatmapSpec(NamedTuple):
     bid: int
     raw_mods: list[dict[str, str | dict[str, str | float | bool]]]
@@ -554,6 +543,20 @@ class BeatmapSpec(NamedTuple):
     comments: str
     suggestor: str
     add_ts: float
+
+
+class BeatmapToUpdate(TypedDict, total=False):
+    """
+    Attributes:
+        beatmap: 欲更新的谱面
+        old_bid: 欲删除 BID
+        old_mods: 欲删除 MODS
+    """
+
+    name: str
+    beatmap: Optional[BeatmapSpec]
+    old_bid: Optional[int]
+    old_mods: Optional[str]
 
 
 RedisTaskId = NewType("RedisTaskId", str)
@@ -778,6 +781,29 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]
+
+
+def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
+    # 暂时不考虑定制谱面/本地谱面需求，因为 playlist 要求是纯在线谱面
+    # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具
+    # 然而，这个操作可能会需要完全重构 playlist 生成器的逻辑，因为其目前所使用的所有信息都是在线获取的
+    # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
+    pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
+    if not os.path.exists(pool_path):
+        os.mkdir(pool_path)
+    # 创建一个临时谱面文件，以 name + time 为谱面名
+    tmp_playlist_filename = str(os.path.join(pool_path, "%s_%d.properties" % (name, time_ns() // 1_000_000)))
+    tmp_playlist_p = Properties(tmp_playlist_filename)
+    tmp_playlist_p["custom_columns"] = '["mods", "slot"]'  # 一定要启用自定义列功能，不然不支持 slot
+    # playlist Properties 文件格式如下：
+    # bid = {"mods": mods, "slot": slot}
+    # # notes
+    # Properties 是一个 OrderedDict，往后依次添加内容即可。要注意 notes 必须以 \n 结尾，因为对于注释的解析是完整行
+    for i, a in enumerate(beatmap_specs, start=1):
+        tmp_playlist_p[str(a[0])] = orjson.dumps({"mods": a[1], "slot": a[2]}).decode()
+        tmp_playlist_p["#%i" % (i * 2 - 1)] = "# %s\n" % a[4]
+    tmp_playlist_p.dump()
+    return tmp_playlist_filename
 
 
 def _make_query_uppercase(original_query_func):

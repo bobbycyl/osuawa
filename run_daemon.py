@@ -10,7 +10,7 @@ import os.path
 from dataclasses import asdict
 from datetime import datetime
 from time import time
-from typing import cast
+from typing import Optional, cast
 
 import orjson
 import redis
@@ -20,8 +20,8 @@ from clayutil.cmdparse import CollectionField as Coll, Command, CommandParser, I
 from ossapi import Domain, Scope, Score
 from sqlalchemy import create_engine, text
 
-from osuawa import Osuawa
-from osuawa.utils import BeatmapToUpdate, C, CompletedSimpleScoreInfo, SimpleScoreInfo, async_get_username, push_task
+from osuawa import OsuPlaylist, Osuawa
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, SimpleScoreInfo, _create_tmp_playlist_p, async_get_username, push_task
 
 ST_CONFIG_FILENAME = "./.streamlit/config.toml"
 ST_SECRETS_FILENAME = "./.streamlit/secrets.toml"
@@ -46,7 +46,7 @@ engine = create_engine(_url)
 r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
 # Daemon 使用 Client Credentials Grant
-daemon_awa = Osuawa(loop, st_secrets["args"]["client_id"], st_secrets["args"]["client_secret"], None, [Scope.PUBLIC.value, Scope.DELEGATE.value], Domain.OSU.value, "daemon", None, None)
+daemon_awa = Osuawa(loop, st_secrets["args"]["client_id"], st_secrets["args"]["client_secret"], None, [Scope.PUBLIC.value], Domain.OSU.value, "daemon", None, None)
 sem = asyncio.Semaphore(1)
 
 
@@ -73,69 +73,14 @@ def commands():
         ),
         Command(
             "beatmap",
-            "update beatmap",
+            "update beatmaps",
             [
                 JsonStr("obj"),
             ],
             0,
-            update_beatmap,
+            update_beatmaps,
         ),
     ]
-
-
-cmdparser = CommandParser()
-cmdparser.register_command(*commands())
-
-
-def main():
-    formatter = logging.Formatter(st_config["logger"]["messageFormat"])
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(formatter)
-    fh = logging.FileHandler(os.path.join(C.LOGS.value, "daemon.log"), encoding="utf-8")
-    fh.setFormatter(formatter)
-    logger = logging.getLogger("daemon")
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-    logger.info("Redis connected")
-
-    setup_scheduled_tasks()
-
-    while True:
-        result = cast(list, r.brpop([C.TASK_QUEUE.value], timeout=1))[0]
-        if result:
-            task_info = orjson.loads(result[1])
-            # task_info 结构为 uuid hex + command 的字符串拼接
-            task_id = task_info[:32]
-            task_cmd = task_info[32:]
-            logger.info(f"[{task_id}/started]: {task_cmd}")
-            g = cmdparser.parse_command(task_cmd)
-            while True:
-                try:
-                    logger.info(f"[{task_id}/executing]: {next(g)}")
-                except StopIteration as e:
-                    logger.info(f"[{task_id}/success]: {e.value} sub-tasks done")
-                    r.hset(
-                        C.TASK_STATUS.value.format(task_id=task_id),
-                        mapping={
-                            "status": "success",
-                            "result": str(e.value),
-                            "time": time(),
-                        },
-                    )
-                    break
-                except Exception as e:
-                    logger.error(f"[{task_id}/error]: {e}", exc_info=True)
-                    r.hset(
-                        C.TASK_STATUS.value.format(task_id=task_id),
-                        mapping={
-                            "status": "error",
-                            "result": str(e),
-                            "time": time(),
-                        },
-                    )
-                    break
 
 
 async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
@@ -196,18 +141,84 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
     )
 
 
-def update_beatmap(obj: BeatmapToUpdate) -> str:
+# noinspection PyTypedDict
+def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[DatabasePlaylistBeatmap]:
+    """创建临时课题。仅创建，不生成
+
+    status: 0=未审核, 1=已审核, 2=已提名
+
+    OsuPlaylist beatmap 与 beatmap_specs、数据库字段对应关系如下：
+
+    ```
+    | BID  | SID | Artist - Title (Creator) [Version] | Stars | SR  | BPM | Hit Length | Max Combo | CS  | AR  | OD  | Mods | Notes | slot       |        |          |      |           |          |        | _Artist  | _Title  |
+    | ---- | --- | ---------------------------------- | ----- | --- | --- | ---------- | --------- | --- | --- | --- | ---- | ----- | ---------- | ------ | -------- | ---- | --------- | -------- | ------ | -------- | ------- |
+    | bid  |     |                                    |       |     |     |            |           |     |     |     |      | notes | slot       | status | comments | pool | suggestor | raw_mods | add_ts |          |         |
+    | BID  | SID | INFO                               |       | SR  | BPM | HIT_LENGTH | MAX_COMBO | CS  | AR  | OD  | MODS | NOTES | SKILL_SLOT | STATUS | COMMENTS | POOL | SUGGESTOR | RAW_MODS | ADD_TS | U_ARTIST | U_TITLE |
+    ```
+
+    :param name: 课题名（在线环境中建议直接用 UID）
+    :param beatmap_specs: bid, raw_mods, slot, pool, notes, status, comments, suggestor, add_ts
+    :return: 一个谱面列表，为数据库字段优化了键名
+    """
+    tmp_playlist_filename = _create_tmp_playlist_p(name, beatmap_specs)
+    # noinspection PyBroadException
+    try:
+        tmp_playlist = OsuPlaylist(daemon_awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
+        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = daemon_awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
+    except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup  # noqa: E722
+        raise ValueError("failed to parse the spec(s): %s" % beatmap_specs)
+    # playlist_beatmaps_raw 的顺序可能和传入的 specs 顺序不一致
+    # 原始 beatmap 的键应包含如下
+    # # BID, SID, Artist - Title (Creator) [Version], Stars, SR, BPM, Hit Length, Max Combo, CS, AR, OD, Mods, Notes, slot
+    # 根据 # 键对其进行排序是有必要的。# 从 1 开始递增，它与传入的 specs 顺序一致
+    playlist_beatmaps_raw.sort(key=lambda x: int(x["#"]))
+    playlist_beatmaps_db = []
+    for i, playlist_beatmap_raw in enumerate(playlist_beatmaps_raw):
+        if len(playlist_beatmap_raw["slot"]) < 3:
+            raise ValueError("slot too short: %s" % playlist_beatmap_raw["slot"])
+        if len(playlist_beatmap_raw["slot"]) > int(C.SLOT_MAX_LEN.value):
+            raise ValueError("slot too long: %s" % playlist_beatmap_raw["slot"])
+        playlist_beatmaps_db.append(
+            DatabasePlaylistBeatmap(
+                BID=playlist_beatmap_raw["BID"],
+                SID=playlist_beatmap_raw["SID"],
+                INFO=playlist_beatmap_raw["Artist - Title (Creator) [Version]"],
+                SKILL_SLOT=playlist_beatmap_raw["slot"],
+                SR=playlist_beatmap_raw["SR"],  # 相比 Stars，SR 不依赖特殊字体
+                BPM=playlist_beatmap_raw["BPM"],
+                HIT_LENGTH=playlist_beatmap_raw["Hit Length"],
+                MAX_COMBO=playlist_beatmap_raw["Max Combo"],
+                CS=playlist_beatmap_raw["CS"],
+                AR=playlist_beatmap_raw["AR"],
+                OD=playlist_beatmap_raw["OD"],
+                MODS=playlist_beatmap_raw["Mods"],
+                NOTES=playlist_beatmap_raw["Notes"],  # notes 在 OsuPlaylist 里有默认值处理
+                STATUS=beatmap_specs[i][5],
+                COMMENTS=beatmap_specs[i][6],
+                POOL=beatmap_specs[i][3],
+                SUGGESTOR=beatmap_specs[i][7],
+                RAW_MODS=orjson.dumps(beatmap_specs[i][1]).decode(),  # orjson 序列化时输出的是紧凑的字符串
+                ADD_TS=beatmap_specs[i][8],
+                U_ARTIST=playlist_beatmap_raw["_Artist"],
+                U_TITLE=playlist_beatmap_raw["_Title"],
+            ),
+        )
+    # 删除临时文件
+    if os.path.exists(tmp_playlist_filename):
+        os.remove(tmp_playlist_filename)
+    return playlist_beatmaps_db
+
+
+def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> str:
     """更新课题谱面（包括删除）
 
     如果 beatmap 不为 None，则 old_bid 必须为 None
 
-    :param obj: 欲更新的谱面信息（包括删除）
+    :param beatmap: 欲更新的谱面
+    :param old_bid: 欲删除的 BID（主键之一）
+    :param old_mods: 欲删除的 MODS（主键之二）
     :return 结果消息
     """
-    beatmap = obj.get("beatmap")
-    old_bid = obj.get("old_bid")
-    old_mods = obj.get("old_mods")
-
     # 操作符号（二进制）: 0                0
     #                     ^                ^
     #             第一位代表更新   第二位代表删除
@@ -217,7 +228,6 @@ def update_beatmap(obj: BeatmapToUpdate) -> str:
     # 如果结果为 10，则代表新增谱面
     # 如果结果为 01，则代表删除谱面
     # 如果结果为 11，则代表更新谱面
-    # 使用位操作实现以上功能
     action = 0b00
 
     if beatmap is not None:
@@ -233,8 +243,8 @@ def update_beatmap(obj: BeatmapToUpdate) -> str:
         if old_bid is not None and old_mods is not None:
             action |= 1
             # 有可能传入的是 numpy 类型，需要强制转化为原生类型
-            old_bid = int(old_bid)
-            old_mods = str(old_mods)
+            old_bid: int = int(old_bid)
+            old_mods: str = str(old_mods)
             action_bid = old_bid
             action_mods = old_mods
             conn.execute(
@@ -290,5 +300,86 @@ def update_beatmap(obj: BeatmapToUpdate) -> str:
 
 def setup_scheduled_tasks():
     schedule.every(12).hours.do(
-        push_task(r, "update .*"),
+        push_task,
+        r,
+        "update .*",
     )
+
+
+def update_beatmaps(obj: list[BeatmapToUpdate]):
+    beatmap_specs: list[BeatmapSpec] = []
+    name = ""
+    has_spec_list: list[bool] = []
+    for beatmap_to_update in obj:
+        beatmap_spec: BeatmapSpec | list | None = beatmap_to_update.get("beatmap")  # JSON 反序列化时会自动转换为 list 类型，需要强制转换为 BeatmapSpec 类型
+        if beatmap_spec is not None:
+            has_spec_list.append(True)
+            beatmap_specs.append(BeatmapSpec(*beatmap_spec))
+            name = beatmap_to_update["name"]
+        else:
+            has_spec_list.append(False)
+    database_beatmaps = create_tmp_playlist(name, beatmap_specs)
+    for i, beatmap_to_update in enumerate(obj):
+        database_beatmap = database_beatmaps[i] if has_spec_list[i] else None
+        old_bid = beatmap_to_update.get("old_bid")
+        old_mods = beatmap_to_update.get("old_mods")
+        _update_beatmap(database_beatmap, old_bid, old_mods)
+
+
+if __name__ == "__main__":
+    cmdparser = CommandParser()
+    cmdparser.register_command(0, *commands())
+
+    formatter = logging.Formatter(st_config["logger"]["messageFormat"])
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(formatter)
+    fh = logging.FileHandler(os.path.join(C.LOGS.value, "daemon.log"), encoding="utf-8")
+    fh.setFormatter(formatter)
+    logger = logging.getLogger("daemon")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(ch)
+    logger.addHandler(fh)
+    logger.info("Redis connected")
+
+    setup_scheduled_tasks()
+
+    while True:
+        try:
+            result: tuple[str, str] | None = cast(tuple[str, str], cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)))
+            if result is None:
+                continue
+            task_info = result[1]
+            if task_info:
+                # task_info 结构为 uuid hex + command 的字符串拼接
+                task_id = task_info[:32]
+                task_cmd = task_info[32:]
+                logger.info(f"[{task_id}/started]: {task_cmd}")
+                g = cmdparser.parse_command(task_cmd)
+                while True:
+                    try:
+                        logger.info(f"[{task_id}/executing]: {next(g)}")
+                    except StopIteration as e:
+                        logger.info(f"[{task_id}/success]: {e.value} sub-tasks done")
+                        r.hset(
+                            C.TASK_STATUS.value.format(task_id=task_id),
+                            mapping={
+                                "status": "success",
+                                "result": str(e.value),
+                                "time": time(),
+                            },
+                        )
+                        break
+                    except Exception as e:
+                        logger.error(f"[{task_id}/error]: {e}", exc_info=True)
+                        r.hset(
+                            C.TASK_STATUS.value.format(task_id=task_id),
+                            mapping={
+                                "status": "error",
+                                "result": str(e),
+                                "time": time(),
+                            },
+                        )
+                        break
+        except KeyboardInterrupt:
+            break
