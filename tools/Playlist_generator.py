@@ -2,13 +2,13 @@ import os.path
 import shutil
 import time
 from functools import partial
-from time import sleep, time_ns
-from typing import Never, Optional, TYPE_CHECKING
+from time import sleep
+from typing import Never, Optional, TYPE_CHECKING, cast
 
 import orjson
 import pandas as pd
 import streamlit as st
-from clayutil.futil import Properties, compress_as_zip
+from clayutil.futil import compress_as_zip
 from clayutil.validator import validate_type
 from sqlalchemy import text
 from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
@@ -17,7 +17,7 @@ from streamlit import logger
 from osuawa import C, OsuPlaylist
 from osuawa.components import get_redis_connection, get_session_id, init_page, load_value, memorized_selectbox, save_value
 from osuawa.osuawa import Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, CompletedPlaylistBeatmap, DatabasePlaylistBeatmap, _make_query_uppercase, generate_mods_from_lines, push_task, to_readable_mods
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, _create_tmp_playlist_p, _make_query_uppercase, generate_mods_from_lines, push_task, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -34,7 +34,6 @@ init_page(_("Playlist generator") + " - osuawa")
 with st.sidebar:
     st.toggle(_("new style"), key="new_style", value=True)
 
-SLOT_MAX_LEN = 5
 conn = st.connection("osuawa", type="sql")
 conn.query = _make_query_uppercase(conn.query)
 r = get_redis_connection()
@@ -171,6 +170,12 @@ st.markdown(
 )
 
 
+def default(obj):
+    if hasattr(obj, "_fields"):
+        return list(obj)
+    raise TypeError
+
+
 # noinspection PyUnreachableCode
 def refresh(delay: Optional[float] = None, clear_cache: bool = False) -> Never:
     if delay:
@@ -184,102 +189,9 @@ def refresh(delay: Optional[float] = None, clear_cache: bool = False) -> Never:
 
 @st.cache_data(show_spinner=False)
 def generate_playlist(filename: str, css_style: Optional[int] = None):
+    # 由于这个有实时性要求，因此不挪到后台处理
     playlist = OsuPlaylist(st.session_state.awa, filename, css_style=css_style)
     return playlist.generate()
-
-
-def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
-    # 暂时不考虑定制谱面/本地谱面需求，因为 playlist 要求是纯在线谱面
-    # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具
-    # 然而，这个操作可能会需要完全重构 playlist 生成器的逻辑，因为其目前所使用的所有信息都是在线获取的
-    # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
-    pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
-    if not os.path.exists(pool_path):
-        os.mkdir(pool_path)
-    # 创建一个临时谱面文件，以 name + time 为谱面名
-    tmp_playlist_filename = str(os.path.join(pool_path, "%s_%d.properties" % (name, time_ns() // 1_000_000)))
-    tmp_playlist_p = Properties(tmp_playlist_filename)
-    tmp_playlist_p["custom_columns"] = '["mods", "slot"]'  # 一定要启用自定义列功能，不然不支持 slot
-    # playlist Properties 文件格式如下：
-    # bid = {"mods": mods, "slot": slot}
-    # # notes
-    # Properties 是一个 OrderedDict，往后依次添加内容即可。要注意 notes 必须以 \n 结尾，因为对于注释的解析是完整行
-    for i, a in enumerate(beatmap_specs, start=1):
-        tmp_playlist_p[str(a[0])] = orjson.dumps({"mods": a[1], "slot": a[2]}).decode()
-        tmp_playlist_p["#%i" % (i * 2 - 1)] = "# %s\n" % a[4]
-    tmp_playlist_p.dump()
-    return tmp_playlist_filename
-
-
-# noinspection PyTypedDict
-def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[DatabasePlaylistBeatmap]:
-    """创建临时课题。仅创建，不生成
-
-    status: 0=未审核, 1=已审核, 2=已提名
-
-    OsuPlaylist beatmap 与 beatmap_specs、数据库字段对应关系如下：
-
-    ```
-    | BID  | SID | Artist - Title (Creator) [Version] | Stars | SR  | BPM | Hit Length | Max Combo | CS  | AR  | OD  | Mods | Notes | slot       |        |          |      |           |          |        | _Artist  | _Title  |
-    | ---- | --- | ---------------------------------- | ----- | --- | --- | ---------- | --------- | --- | --- | --- | ---- | ----- | ---------- | ------ | -------- | ---- | --------- | -------- | ------ | -------- | ------- |
-    | bid  |     |                                    |       |     |     |            |           |     |     |     |      | notes | slot       | status | comments | pool | suggestor | raw_mods | add_ts |          |         |
-    | BID  | SID | INFO                               |       | SR  | BPM | HIT_LENGTH | MAX_COMBO | CS  | AR  | OD  | MODS | NOTES | SKILL_SLOT | STATUS | COMMENTS | POOL | SUGGESTOR | RAW_MODS | ADD_TS | U_ARTIST | U_TITLE |
-    ```
-
-    :param name: 课题名（在线环境中建议直接用 UID）
-    :param beatmap_specs: bid, raw_mods, slot, pool, notes, status, comments, suggestor, add_ts
-    :return: 一个谱面列表，为数据库字段优化了键名
-    """
-    tmp_playlist_filename = _create_tmp_playlist_p(name, beatmap_specs)
-    # noinspection PyBroadException
-    try:
-        tmp_playlist = OsuPlaylist(st.session_state.awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
-        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = st.session_state.awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
-    except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup  # noqa: E722
-        st.error(_("failed to parse the spec(s): %s") % beatmap_specs)
-        st.stop()
-    # playlist_beatmaps_raw 的顺序可能和传入的 specs 顺序不一致
-    # 原始 beatmap 的键应包含如下
-    # # BID, SID, Artist - Title (Creator) [Version], Stars, SR, BPM, Hit Length, Max Combo, CS, AR, OD, Mods, Notes, slot
-    # 根据 # 键对其进行排序是有必要的。# 从 1 开始递增，它与传入的 specs 顺序一致
-    playlist_beatmaps_raw.sort(key=lambda x: int(x["#"]))
-    playlist_beatmaps_db = []
-    for i, playlist_beatmap_raw in enumerate(playlist_beatmaps_raw):
-        if len(playlist_beatmap_raw["slot"]) < 3:
-            st.error(_("slot too short: %s") % playlist_beatmap_raw["slot"])
-            st.stop()
-        if len(playlist_beatmap_raw["slot"]) > SLOT_MAX_LEN:
-            st.error(_("slot too long: %s") % playlist_beatmap_raw["slot"])
-            st.stop()
-        playlist_beatmaps_db.append(
-            DatabasePlaylistBeatmap(
-                BID=playlist_beatmap_raw["BID"],
-                SID=playlist_beatmap_raw["SID"],
-                INFO=playlist_beatmap_raw["Artist - Title (Creator) [Version]"],
-                SKILL_SLOT=playlist_beatmap_raw["slot"],
-                SR=playlist_beatmap_raw["SR"],  # 相比 Stars，SR 不依赖特殊字体
-                BPM=playlist_beatmap_raw["BPM"],
-                HIT_LENGTH=playlist_beatmap_raw["Hit Length"],
-                MAX_COMBO=playlist_beatmap_raw["Max Combo"],
-                CS=playlist_beatmap_raw["CS"],
-                AR=playlist_beatmap_raw["AR"],
-                OD=playlist_beatmap_raw["OD"],
-                MODS=playlist_beatmap_raw["Mods"],
-                NOTES=playlist_beatmap_raw["Notes"],  # notes 在 OsuPlaylist 里有默认值处理
-                STATUS=beatmap_specs[i][5],
-                COMMENTS=beatmap_specs[i][6],
-                POOL=beatmap_specs[i][3],
-                SUGGESTOR=beatmap_specs[i][7],
-                RAW_MODS=orjson.dumps(beatmap_specs[i][1]).decode(),  # orjson 序列化时输出的是紧凑的字符串
-                ADD_TS=beatmap_specs[i][8],
-                U_ARTIST=playlist_beatmap_raw["_Artist"],
-                U_TITLE=playlist_beatmap_raw["_Title"],
-            ),
-        )
-    # 删除临时文件
-    if os.path.exists(tmp_playlist_filename):
-        os.remove(tmp_playlist_filename)
-    return playlist_beatmaps_db
 
 
 def check_beatmap_exists(bid: int, mods: str) -> bool:
@@ -324,7 +236,11 @@ if st.session_state.perm >= 1:
         with col1:
             urls_input = st.text_input(_("Beatmap URLs or IDs, split by spaces"))
             # SLOTS 自动大写
-            slot_input = st.text_input(_("Slot")).upper()
+            slot_input = st.text_input(_("Slot"))
+            if slot_input is None:
+                st.error(_("blank slot not allowed"))
+                st.stop()
+            slot_input = slot_input.upper()
             notes_input = st.text_input(_("Notes"))
         with col2:
             # 由于 form 不允许组件设置 on_change，因此这里要手动实现记忆功能
@@ -343,8 +259,13 @@ if st.session_state.perm >= 1:
             st.session_state.gen_form_pool = pool_input
             save_value("gen_form_pool")
             specs_input: list[BeatmapSpec] = []
+            if urls_input is None:
+                st.error(_("blank beatmap not allowed"))
+                st.stop()
             urls_input_split = urls_input.split()
             raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input or "")
+
+            # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
             for url_input in urls_input_split:
                 # 处理 BID
                 bid_input = int(url_input.rsplit("/", 1)[-1])
@@ -372,9 +293,8 @@ if st.session_state.perm >= 1:
                         time.time(),
                     ),
                 )
-            playlist_beatmaps_input = create_tmp_playlist(uid, specs_input)
-            for beatmap_to_insert in playlist_beatmaps_input:
-                st.session_state.redis_tasks.append(push_task(r, orjson.dumps(BeatmapToUpdate(beatmap=beatmap_to_insert)).decode()))
+            # todo: 建议一个 empty，轮询状态
+            st.session_state.redis_tasks.append(push_task(r, "beatmap %s" % orjson.dumps([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -439,7 +359,7 @@ if st.session_state.perm >= 1:
         # 1. 首先按照 _slot_name 排序，顺序为 NM -> HD -> HR -> DT -> FM -> F+ -> 其他未列明字段 -> TB
         # 2. 然后按照 _slot_index 排序，因为向左填充 0 了所以直接按 alphabet 排序即可
         df["_slot_name"] = df["SKILL_SLOT"].str[:2]
-        df["_slot_index"] = df["SKILL_SLOT"].str[2:].str.zfill(SLOT_MAX_LEN - 2)
+        df["_slot_index"] = df["SKILL_SLOT"].str[2:].str.zfill(int(C.SLOT_MAX_LEN.value) - 2)
         custom_order = ["NM", "HD", "HR", "DT", "FM", "F+"]
         last_special = "TB"
         other_names = sorted(
@@ -457,7 +377,7 @@ if st.session_state.perm >= 1:
     # 创建 LINK 列
     df["LINK"] = "https://osu.ppy.sh/b/" + df["BID"].astype(str)
     # 创建 ADD_DATETIME 列，它是由 ADD_TS (来自于 time.time() 的 UTC 时间浮点数) 转换为含时区信息的 ISO Format（时区 = st.session_state.awa.tz）
-    df["ADD_DATETIME"] = pd.to_datetime(df["ADD_TS"], unit="s").dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz).dt.strftime("%Y-%m-%d %H:%M:%S %Z%z")
+    df["ADD_DATETIME"] = cast(pd.Series, pd.to_datetime(df["ADD_TS"], unit="s")).dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz).dt.strftime("%Y-%m-%d %H:%M:%S %Z%z")
     desired_col_order = [
         "BID",
         "SKILL_SLOT",
@@ -563,7 +483,10 @@ if st.session_state.perm >= 1:
         allow_unsafe_jscode=True,
         key="gen_playlist_grid",
     )
-    edited_df = pd.DataFrame(grid_response["data"])
+    if grid_response["data"]:
+        edited_df = pd.DataFrame(grid_response["data"])
+    else:
+        edited_df = pd.DataFrame()
 
     selected_rows = grid_response["selected_rows"]
 
@@ -586,35 +509,24 @@ if st.session_state.perm >= 1:
                         # 由于 BID + MODS 为主键，因此这里应该只有一个结果
                         original_row = original_row.iloc[0]
                         # 在可修改列中如果有任意一项被修改了，那么就添加到重算列表中
-                        new_primary = False
-                        for editable_col in ["RAW_MODS", "SKILL_SLOT", "POOL", "NOTES", "STATUS", "COMMENTS"]:
-                            if pd.isna(row[editable_col]) and pd.isna(original_row[editable_col]):
-                                continue
-                            if row[editable_col] != original_row[editable_col]:
-                                # 由于 MODS 由 RAW_MODS 生成，因此 RAW_MODS 改变时，主键即改变
-                                # 故如果 RAW_MODS 修改了，那么就认为需要先删除原始记录，然后再添加新记录
-                                if editable_col == "RAW_MODS":
-                                    new_primary = True
-                                break
-                        else:
-                            continue
+                        # 由于 MODS 由 RAW_MODS 生成，因此 RAW_MODS 改变时，主键即改变
+                        # 故如果 RAW_MODS 修改了，那么就认为需要先删除原始记录，然后再添加新记录
+                        new_primary = row["RAW_MODS"] != original_row["RAW_MODS"] and not (pd.isna(row["RAW_MODS"]) and pd.isna(original_row["RAW_MODS"]))
                         try:
                             specs_recalculate.append(BeatmapSpec(edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
                         except orjson.JSONDecodeError:
                             st.toast(_("invalid JSON: %s") % row["RAW_MODS"])
                             st.stop()
                         olds_to_drop.append((original_row["MODS"], new_primary))
-                    playlist_beatmaps_recalculate = create_tmp_playlist(uid, specs_recalculate)
-                    for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, playlist_beatmaps_recalculate):
+                    # 同理，为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
+                    beatmaps_to_upsert: list[BeatmapToUpdate] = []
+                    for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate):
                         if old_to_drop[1]:
-                            st.session_state.redis_tasks.append(
-                                orjson.dumps(BeatmapToUpdate(beatmap=beatmap_to_upsert, old_mods=old_to_drop[0])).decode(),
-                            )
-
+                            beatmaps_to_upsert.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
                         else:
-                            st.session_state.redis_tasks.append(
-                                orjson.dumps(BeatmapToUpdate(beatmap=beatmap_to_upsert)).decode(),
-                            )
+                            beatmaps_to_upsert.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
+                    st.session_state.redis_tasks.append(push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_upsert, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
+
                 refresh(1.5)
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh(clear_cache=True)
@@ -628,10 +540,10 @@ if st.session_state.perm >= 1:
                     st.toast(_("no beatmaps selected"))
                 else:
                     required_rows = selected_rows[["BID", "MODS"]]
+                    beatmaps_to_delete: list[BeatmapToUpdate] = []
                     for row in required_rows.itertuples(index=False):
-                        st.session_state.redis_tasks.append(
-                            orjson.dumps(BeatmapToUpdate(old_bid=row.BID, old_mods=row.MODS)).decode(),
-                        )
+                        beatmaps_to_delete.append(BeatmapToUpdate(old_bid=row.BID, old_mods=row.MODS))
+                    st.session_state.redis_tasks.append(push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_delete, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
                 refresh(1.5)
 
 st.divider()
@@ -639,6 +551,9 @@ st.divider()
 st.markdown(_("## Generate from a file"))
 uploaded_file = st.file_uploader(_("choose a file"), type=["properties"])
 if uploaded_file is not None:
+    if isinstance(uploaded_file, list):
+        st.error("multiple files not allowed")
+        st.stop()
     playlist_name = os.path.splitext(uploaded_file.name)[0]
     session_path = os.path.join(C.UPLOADED_DIRECTORY.value, uid)
     if not os.path.exists(session_path):

@@ -659,12 +659,6 @@ class OsuPlaylist(object):
 
     def generate(self) -> pd.DataFrame:
         playlist = self.__awa_instance.run_coro(self.playlist_task())
-        # for column in self.custom_columns:
-        #     if column == "mods":
-        #         continue
-        #     else:
-        #         df_columns.insert(3, column)
-        #         df_standalone_columns.insert(4, column)
         head_cols = ["#", "BID", "Beatmap Info (Click to View)"]
         head_standalone_cols = ["#", "BID", "SID", "Artist - Title (Creator) [Version]"]
         extra_cols = [c for c in self.custom_columns if c != "mods"]
