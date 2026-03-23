@@ -64,7 +64,8 @@ def load_value(key: str, default_value: Any) -> Any:
             # ./.streamlit/.components/<ajs_anonymous_id>
             # 由于 load 可能发生在第一次访问（save 不会），所以还要检查 cookie 是否存在
             if "ajs_anonymous_id" in st.context.cookies and (
-                os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.bak" % st.context.cookies["ajs_anonymous_id"]))
+                os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"]))
+                or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.bak" % st.context.cookies["ajs_anonymous_id"]))
                 or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dat" % st.context.cookies["ajs_anonymous_id"]))
                 or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dir" % st.context.cookies["ajs_anonymous_id"]))
             ):
@@ -115,7 +116,7 @@ def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
         st.stop()
 
 
-project_dir = os.path.join(os.path.dirname(__file__), "..")
+project_dir = os.path.join(str(os.path.dirname(__file__)), "..")
 
 
 @st.cache_resource
@@ -324,7 +325,7 @@ def cat(user: int):
 def register_commands(obj: Optional[dict] = None):
     ret = ""
     if obj is None:
-        obj = {}
+        obj: dict = {}
     if "perm" not in st.session_state:
         st.session_state.perm = 0
     if not obj.get("simple", False):
@@ -447,7 +448,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
     else:
         mods = []
     # 生成 osu_tools 所能接受的样式
-    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
+    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(mods)
     calculator = calculate_osu_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
     osupp_attr = next(calculator)
