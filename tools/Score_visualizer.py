@@ -68,7 +68,7 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def calc_statistics(data: pd.DataFrame, column: str) -> tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, int]:
-    data = data[column]
+    data: pd.Series = data[column]
     # table: | index | min | Q1 | median | Q3 | max | mean | winsor_mean | std | var | CV | skew | kurtosis | 95% CI L | 95% CI U | N |
     data_se = data.sem()
     data_df = len(data) - 1
@@ -79,20 +79,20 @@ def calc_statistics(data: pd.DataFrame, column: str) -> tuple[float, float, floa
     # 1% winsorize
     data_winsor = data.clip(lower=data.quantile(0.01), upper=data.quantile(0.99)).infer_objects(copy=False)
     return (
-        data.min(),
+        float(data.min()),
         data.quantile(0.25),
-        data.median(),
-        data.quantile(0.75),
-        data.max(),
-        data.mean(),
-        data_winsor.mean(),
-        data.std(ddof=1),
-        data.var(ddof=1),
-        (data.std(ddof=1) / data.mean()),
-        data.skew(),
-        data.kurt(),
-        ci_l,
-        ci_u,
+        float(data.median()),
+        float(data.quantile(0.75)),
+        float(data.max()),
+        float(data.mean()),
+        float(data_winsor.mean()),
+        float(data.std(ddof=1)),
+        float(data.var(ddof=1)),
+        (float(data.std(ddof=1)) / float(data.mean())),
+        float(data.skew()),
+        float(data.kurt()),
+        float(ci_l),
+        float(ci_u),
         len(data),
     )
 
@@ -101,7 +101,7 @@ def generate_stats_dataframe(data: pd.DataFrame, indexes: list[str]) -> pd.DataF
     index_records = {}
     for index in indexes:
         index_records[index] = calc_statistics(data, index)
-    df_stats = pd.DataFrame.from_dict(index_records, orient="index", columns=("min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "_CIL", "_CIU", "N")).round(2)
+    df_stats = pd.DataFrame.from_dict(index_records, orient="index", columns=pd.Index(("min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "_CIL", "_CIU", "N"))).round(2)
     df_stats["95% CI"] = df_stats.apply(lambda row: f"[{row['_CIL']:.2f}, {row['_CIU']:.2f}]", axis=1)
     df_stats = df_stats[["min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "95% CI", "N"]]
     return df_stats

@@ -87,6 +87,13 @@ def memorized_selectbox(label: str, key: str, options: list, default_value: Any)
     st.selectbox(label, options, key=key, on_change=save_value, args=(key,))
 
 
+def get_session_id() -> str:
+    ctx = get_script_run_ctx()
+    if ctx is None:
+        raise RuntimeError("no streamlit ctx")
+    return UUID(ctx.session_id).hex
+
+
 def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
     """Page 初始化相关
 
@@ -330,10 +337,8 @@ def register_commands(obj: Optional[dict] = None):
         else:
             st.info(_('use `reg {"token": "<token>"}` to pass the token'))
             st.session_state.token = token_hex(16)
-            ctx = get_script_run_ctx()
-            if ctx is None:
-                raise RuntimeError("no streamlit ctx")
-            logger.get_logger("streamlit").info("generated token for session %s: %s" % (UUID(ctx.session_id).hex, st.session_state.token))
+
+            logger.get_logger("streamlit").info("generated token for session %s: %s" % (get_session_id(), st.session_state.token))
             ret = _("token generated")
             st.toast(_("You need to ask the web admin for the session token to unlock full features."))
     else:

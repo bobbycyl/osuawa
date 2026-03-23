@@ -13,7 +13,7 @@ from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
 from time import sleep, time
-from typing import Any, NamedTuple, Optional, TypedDict, Union, get_args, get_origin
+from typing import Any, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
 
 import numpy as np
 import orjson
@@ -25,12 +25,11 @@ from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 r
 from osupp.core import init_osu_tools
 from redis import Redis
 
-init_osu_tools(os.path.join(os.path.dirname(__file__), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
-# noinspection PyUnresolvedReferences
+init_osu_tools(os.path.join(str(os.path.dirname(__file__)), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
 from osupp.core import OsuRuleset
 
 # noinspection PyUnusedImports
-from osupp.difficulty import calculate_difficulty, get_all_mods
+from osupp.difficulty import calculate_difficulty as calculate_difficulty, get_all_mods
 from osupp.performance import OsuPerformance, calculate_osu_performance
 
 headers = {
@@ -41,7 +40,7 @@ LANGUAGES = ["en_US", "zh_CN"]
 all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
 sem = BoundedSemaphore()
 
-TYPE_MAPPING = {
+TYPE_MAPPING: dict[type, str] = {
     int: "INT",
     float: "REAL",
     bool: "INT",
@@ -163,8 +162,8 @@ def get_simple_sql_type(py_type: type) -> str:
 def generate_columns_sql(dataclass_cls, name_mapping: Optional[dict] = None):
     parts = []
     for f in fields(dataclass_cls):
-        sql_type = get_simple_sql_type(f.type)
-        if f.name in name_mapping:
+        sql_type = get_simple_sql_type(cast(type, f.type))
+        if name_mapping and f.name in name_mapping:
             parts.append(f"{name_mapping[f.name]} {sql_type}")
         else:
             parts.append(f"{f.name.upper()} {sql_type}")
@@ -192,17 +191,25 @@ def calc_bin_size(data) -> float:
 
 async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
     # 注：虽然这里目前没有任何需要用到 asyncio 的地方，但是曾经存在过，并且未来可能扩充，因此保留 async
-    return {
+    # todo: 完善 simple_user_dict 所包含的信息
+    base_dict = {
         "username": user.username,
         "user_id": user.id,
         "country": user.country,
         "online": user.is_online,
         "supporter": user.is_supporter,
         "team": user.team,
-        "pp": user.statistics.pp,
-        "global_rank": user.statistics.global_rank,
-        "country_rank": user.statistics.country_rank,
     }
+    match user_statistics := user.statistics:
+        case None:
+            return base_dict
+        case _:
+            return {
+                **base_dict,
+                "pp": user_statistics.pp,
+                "global_rank": user_statistics.global_rank,
+                "country_rank": user_statistics.country_rank,
+            }
 
 
 async def async_get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
@@ -465,13 +472,15 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     only_common_mods: bool
 
 
-class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):  # type: ignore[call-arg]
+# noinspection PyTypedDict
+class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):
     bid: int
     mods: list[dict[str, Any]]
     notes: str
     beatmap: Beatmap
 
 
+# noinspection PyArgumentList
 CompletedPlaylistBeatmap = typing_extensions.TypedDict(
     "CompletedPlaylistBeatmap",
     {
@@ -494,7 +503,7 @@ CompletedPlaylistBeatmap = typing_extensions.TypedDict(
         "_Title": str,
     },
     total=False,
-    extra_items=str,  # type: ignore[call-arg]
+    extra_items=str,
 )
 
 
@@ -530,7 +539,7 @@ class BeatmapToUpdate(TypedDict, total=False):
         old_mods: 欲删除 MODS
     """
 
-    beatmap: DatabasePlaylistBeatmap
+    beatmap: Optional[DatabasePlaylistBeatmap]
     old_bid: Optional[int]
     old_mods: Optional[str]
 
@@ -547,7 +556,10 @@ class BeatmapSpec(NamedTuple):
     add_ts: float
 
 
-def push_task(r: Redis, task_command: str) -> str:
+RedisTaskId = NewType("RedisTaskId", str)
+
+
+def push_task(r: Redis, task_command: str) -> RedisTaskId:
     task_id = uuid.uuid4().hex
     r.lpush(C.TASK_QUEUE.value, "%s%s" % (task_id, task_command))
     r.hset(
@@ -558,7 +570,7 @@ def push_task(r: Redis, task_command: str) -> str:
             "time": time(),
         },
     )
-    return task_id
+    return RedisTaskId(task_id)
 
 
 def download_osu(beatmap: Beatmap):
@@ -578,7 +590,7 @@ def download_osu(beatmap: Beatmap):
 
 def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
-    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
+    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(score._mods)
     download_osu(beatmap)
     calculator = calculate_osu_performance(
@@ -590,7 +602,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     perf_got_attr = calculator.send(
         OsuPerformance(
             combo=score.max_combo,
-            misses=score.statistics.get("miss", 0),
+            misses=score.statistics.get("miss") or 0,
             mehs=score.statistics.get("meh"),
             oks=score.statistics.get("ok"),
             large_tick_hits=score.statistics.get("large_tick_hit"),
@@ -670,7 +682,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
 
 def calc_positive_percent(score: int | float | None, min_score: int | float, max_score: int | float) -> int:
     if score is None:
-        score = 0.0
+        score: float = 0.0
     score_pct = int((score - min_score) / (max_score - min_score) * 100.0)
     if score_pct > 100:
         score_pct = 100
@@ -700,7 +712,7 @@ def get_size_and_count(path):
         total_count = 0
         for root, dirs, filenames in os.walk(path):
             for filename in filenames:
-                filepath = os.path.join(root, filename)
+                filepath = os.path.join(str(root), str(filename))
                 total_size += os.path.getsize(filepath)
                 total_count += 1
         return total_size, total_count

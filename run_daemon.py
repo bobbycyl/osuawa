@@ -7,9 +7,10 @@ import asyncio
 import logging
 import os
 import os.path
-import time
 from dataclasses import asdict
-from datetime import datetime, time
+from datetime import datetime
+from time import time
+from typing import cast
 
 import orjson
 import redis
@@ -102,7 +103,7 @@ def main():
     setup_scheduled_tasks()
 
     while True:
-        result = r.brpop([C.TASK_QUEUE.value], timeout=1)[0]
+        result = cast(list, r.brpop([C.TASK_QUEUE.value], timeout=1))[0]
         if result:
             task_info = orjson.loads(result[1])
             # task_info 结构为 uuid hex + command 的字符串拼接
@@ -120,7 +121,7 @@ def main():
                         mapping={
                             "status": "success",
                             "result": str(e.value),
-                            "time": time.time(),
+                            "time": time(),
                         },
                     )
                     break
@@ -131,7 +132,7 @@ def main():
                         mapping={
                             "status": "error",
                             "result": str(e),
-                            "time": time.time(),
+                            "time": time(),
                         },
                     )
                     break
@@ -186,7 +187,8 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
             scores,
         )
 
-        len_diff = res.rowcount()
+        len_diff = res.rowcount
+    # noinspection PyStringFormat
     return "%s: got/diff: %d/%d" % (
         username,
         len(completed_recent_scores_compact),
@@ -226,11 +228,15 @@ def update_beatmap(obj: BeatmapToUpdate) -> str:
         old_bid = beatmap["BID"]
 
     with engine.begin() as conn:
+        action_bid: int
+        action_mods: str
         if old_bid is not None and old_mods is not None:
             action |= 1
             # 有可能传入的是 numpy 类型，需要强制转化为原生类型
             old_bid = int(old_bid)
             old_mods = str(old_mods)
+            action_bid = old_bid
+            action_mods = old_mods
             conn.execute(
                 text(
                     """DELETE
@@ -242,6 +248,8 @@ def update_beatmap(obj: BeatmapToUpdate) -> str:
             )
         if beatmap is not None:
             action |= 2
+            action_bid = beatmap["BID"]
+            action_mods = beatmap["MODS"]
             conn.execute(
                 text(
                     """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE)
@@ -265,19 +273,19 @@ def update_beatmap(obj: BeatmapToUpdate) -> str:
                                          INFO       = EXCLUDED.INFO
                     -- 注意：ADD_TS 只会保留第一次创建记录时的值，后续不会被更新""",
                 ),
-                params=beatmap,
+                parameters=beatmap,
             )
         if action == 0b00:
             raise ValueError("no changes made")
-        verb_mapping = {
-            0b01: "deleted",
-            0b10: "added",
-            0b11: "updated",
-        }
-        msg = "%s (%d %s)" % (verb_mapping[action], int(beatmap["BID"]), str(beatmap["MODS"]))
-        if old_mods is not None:
-            msg += " from %s" % old_mods
-        return msg
+    verb_mapping = {
+        0b01: "deleted",
+        0b10: "added",
+        0b11: "updated",
+    }
+    msg = "%s (%d %s)" % (verb_mapping[action], action_bid, action_mods)
+    if old_mods is not None:
+        msg += " from %s" % old_mods
+    return msg
 
 
 def setup_scheduled_tasks():
