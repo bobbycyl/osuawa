@@ -26,7 +26,7 @@ def run(g):
             st.write(next(g))
         except CommandError as e:
             st.error(e)
-            break  # use continue if you want to continue running the generator
+            continue
         except StopIteration as e:
             st.success(_("%d sub-tasks done") % e.value)
             break

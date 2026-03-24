@@ -18,7 +18,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
-from osuawa.components import get_session_id, load_value, register_commands
+from osuawa.components import get_session_id, load_value, register_commands, task_board
 from osuawa.utils import RedisTaskId, create_unique_picker, update_user_cache
 
 st.session_state._debugging_mode = False
@@ -188,12 +188,12 @@ if "awa" not in st.session_state:
         else:
             code = st.query_params.code
             prepare_bar.progress(50, text=get_an_osu_meme())
-            r = requests.post(
+            _oauth_r = requests.post(
                 Awapi.TOKEN_URL.format(domain=domain),
                 headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
                 data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
             )
-            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
+            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, _oauth_r.json().get("access_token"), _oauth_r.json().get("refresh_token"))
             awa.api._save_token(awa.api.session.token)
             st.query_params.pop("code")
             prepare_bar.progress(67, text=get_an_osu_meme())
@@ -271,7 +271,8 @@ if st.session_state.immersive_active:
 with st.sidebar:
     st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:")
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
-
+    if st.button(_("Tasks Board")):
+        st.dialog(_("Tasks Board"))(task_board)()
 # _page_manager = get_script_run_ctx().pages_manager
 # _current_page_script_hash = _page_manager.current_page_script_hash
 # _url_path = _page_manager.get_pages().get(_current_page_script_hash, None).get("url_pathname", "")
