@@ -1,6 +1,5 @@
 from time import sleep
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 import streamlit as st
 from clayutil.cmdparse import (
@@ -9,10 +8,9 @@ from clayutil.cmdparse import (
 from streamlit import logger
 from streamlit.components.v1 import html
 from streamlit.errors import Error
-from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import LANGUAGES
-from osuawa.components import init_page, memorized_selectbox
+from osuawa.components import get_session_id, init_page, memorized_selectbox
 
 if TYPE_CHECKING:
 
@@ -28,9 +26,9 @@ def run(g):
             st.write(next(g))
         except CommandError as e:
             st.error(e)
-            break  # use continue if you want to continue running the generator
+            continue
         except StopIteration as e:
-            st.success(_("%d tasks done") % e.value)
+            st.success(_("%d sub-tasks done") % e.value)
             break
         except (Error, NotImplementedError) as e:
             logger.get_logger("streamlit").exception(e)
@@ -63,14 +61,14 @@ if st.session_state["delete_line"]:
     st.session_state["input"] = ""
     st.session_state["delete_line"] = False
 
-y = st.text_input("> ", key="input", on_change=submit, placeholder=_('Type "help" to get started.'))
+y = st.text_input("> ", key="input", on_change=submit, placeholder=_('Type "help" to get started.'), label_visibility="collapsed")
 
 html(
-    f"""<script>
+    """<script>
     var input = window.parent.document.querySelectorAll("input[type=text]");
-    for (var i = 0; i < input.length; ++i) {{
+    for (var i = 0; i < input.length; ++i) {
         input[i].focus();
-    }}
+    }
 </script>
 """,
     height=0,
@@ -88,4 +86,4 @@ if st.session_state._debugging_mode:
     memorized_selectbox("Memorized Selectbox Test", "test_memorized_selectbox", list("abcde"), "c")
     memorized_multiselect("Memorized Multiselect Test", "test_memorized_multiselect", list("abcde"), ["c", "e"])
 
-st.text(_("Session: %s") % UUID(get_script_run_ctx().session_id).hex)
+st.text(_("Session: %s") % get_session_id())

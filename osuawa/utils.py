@@ -5,28 +5,31 @@ osuawa.py and utils.py should not contain i18n related text and streamlit relate
 import asyncio
 import os
 import re
+import uuid
 from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
-from time import sleep
-from typing import Any, Optional, Union, get_args, get_origin
+from time import sleep, time, time_ns
+from typing import Any, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
 
 import numpy as np
+import orjson
 import pandas as pd
-from clayutil.futil import Downloader
+import typing_extensions
+from clayutil.futil import Downloader, Properties, filelock
 from clayutil.sutil import md5sum
 from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
 from osupp.core import init_osu_tools
+from redis import Redis
 
-init_osu_tools(os.path.join(os.path.dirname(__file__), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
-# noinspection PyUnresolvedReferences
+init_osu_tools(os.path.join(str(os.path.dirname(__file__)), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
 from osupp.core import OsuRuleset
 
 # noinspection PyUnusedImports
-from osupp.difficulty import calculate_difficulty, get_all_mods
+from osupp.difficulty import calculate_difficulty as calculate_difficulty, get_all_mods
 from osupp.performance import OsuPerformance, calculate_osu_performance
 
 headers = {
@@ -37,7 +40,7 @@ LANGUAGES = ["en_US", "zh_CN"]
 all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
 sem = BoundedSemaphore()
 
-TYPE_MAPPING = {
+TYPE_MAPPING: dict[type, str] = {
     int: "INT",
     float: "REAL",
     bool: "INT",
@@ -55,6 +58,15 @@ class C(Enum):
     UPLOADED_DIRECTORY = "./static/uploaded/"
     BEATMAPS_CACHE_DIRECTORY = "./static/beatmaps/"
 
+    OAUTH_TOKEN_DIRECTORY = "./.streamlit/.oauth/"
+    COMPONENTS_SHELVES_DIRECTORY = "./.streamlit/.components/"
+    USER_CACHE = "./.streamlit/user_cache.json"
+
+    TASK_QUEUE = "awatasks:queue"
+    TASK_STATUS = "awatask:status:{task_id}"
+
+    SLOT_MAX_LEN = 5
+
 
 @unique
 class ColorBar(Enum):
@@ -63,6 +75,53 @@ class ColorBar(Enum):
     YP_R = [66, 79, 79, 124, 246, 255, 255, 198, 101, 24, 0]
     YP_G = [144, 192, 255, 255, 240, 128, 78, 69, 99, 21, 0]
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
+
+
+@filelock(3)
+def update_user_cache(user: int, username: str, ids: Optional[list[str]] = None, lck_name: str = "USER_CACHE") -> None:
+    """
+    :param user: osu! user ID
+    :param username: osu! username
+    :param ids: 设备识别 id 列表，None 则执行 invalidate 操作
+    :param lck_name:
+    """
+    if not os.path.exists(C.USER_CACHE.value):
+        with open(C.USER_CACHE.value, "wb") as fo_b:
+            fo_b.write(orjson.dumps({}))
+    with open(C.USER_CACHE.value, "rb") as fi_b:
+        user_cache = orjson.loads(fi_b.read())
+    # {user: {"username": username, "id": [id_0, id_1, ...]}}
+    if ids is None:
+        user_cache[user] = {"username": username, "id": []}
+    else:
+        if user not in user_cache:
+            user_cache[user] = {"username": username, "id": ids}
+        else:  # append id
+            user_cache[user] = {
+                "username": user_cache[user]["username"],
+                "id": list(set(user_cache[user]["id"] + ids)),
+            }
+    with open(C.USER_CACHE.value, "wb") as fo_b:
+        fo_b.write(orjson.dumps({str(k): v for k, v in user_cache.items()}))
+
+
+def get_cached_user(user: int) -> dict[str, Any]:
+    if not os.path.exists(C.USER_CACHE.value):
+        raise FileNotFoundError("user cache not exists: %s" % C.USER_CACHE.value)
+    with open(C.USER_CACHE.value, "rb") as fi_b:
+        user_cache = orjson.loads(fi_b.read())
+    if str(user) not in user_cache:
+        raise KeyError("user %d not being cached" % user)
+    return user_cache[str(user)]
+
+
+def strip_quotes(text: str) -> str:
+    # 判断是否被引号包裹，若是，则 strip
+    if text.startswith('"') and text.endswith('"'):
+        return text.strip('"')
+    if text.startswith("'") and text.endswith("'"):
+        return text.strip("'")
+    return text
 
 
 def create_unique_picker[_T](items: list[_T]):
@@ -105,8 +164,8 @@ def get_simple_sql_type(py_type: type) -> str:
 def generate_columns_sql(dataclass_cls, name_mapping: Optional[dict] = None):
     parts = []
     for f in fields(dataclass_cls):
-        sql_type = get_simple_sql_type(f.type)
-        if f.name in name_mapping:
+        sql_type = get_simple_sql_type(cast(type, f.type))
+        if name_mapping and f.name in name_mapping:
             parts.append(f"{name_mapping[f.name]} {sql_type}")
         else:
             parts.append(f"{f.name.upper()} {sql_type}")
@@ -134,17 +193,25 @@ def calc_bin_size(data) -> float:
 
 async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
     # 注：虽然这里目前没有任何需要用到 asyncio 的地方，但是曾经存在过，并且未来可能扩充，因此保留 async
-    return {
+    # todo: 完善 simple_user_dict 所包含的信息
+    base_dict = {
         "username": user.username,
         "user_id": user.id,
         "country": user.country,
         "online": user.is_online,
         "supporter": user.is_supporter,
         "team": user.team,
-        "pp": user.statistics.pp,
-        "global_rank": user.statistics.global_rank,
-        "country_rank": user.statistics.country_rank,
     }
+    match user_statistics := user.statistics:
+        case None:
+            return base_dict
+        case _:
+            return {
+                **base_dict,
+                "pp": user_statistics.pp,
+                "global_rank": user_statistics.global_rank,
+                "country_rank": user_statistics.country_rank,
+            }
 
 
 async def async_get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
@@ -407,6 +474,109 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     only_common_mods: bool
 
 
+# noinspection PyTypedDict
+class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):
+    bid: int
+    mods: list[dict[str, Any]]
+    notes: str
+    beatmap: Beatmap
+
+
+# noinspection PyArgumentList
+CompletedPlaylistBeatmap = typing_extensions.TypedDict(
+    "CompletedPlaylistBeatmap",
+    {
+        "#": int,
+        "BID": int,
+        "SID": int,
+        "Beatmap Info (Click to View)": str,
+        "Artist - Title (Creator) [Version]": str,
+        "Stars": str,
+        "SR": str,
+        "BPM": str,
+        "Hit Length": str,
+        "Max Combo": str,
+        "CS": str,
+        "AR": str,
+        "OD": str,
+        "Mods": str,
+        "Notes": str,
+        "_Artist": str,
+        "_Title": str,
+    },
+    total=False,
+    extra_items=str,
+)
+
+
+class DatabasePlaylistBeatmap(TypedDict):
+    BID: int
+    SID: int
+    INFO: str
+    SKILL_SLOT: str
+    SR: str
+    BPM: str
+    HIT_LENGTH: str
+    MAX_COMBO: str
+    CS: str
+    AR: str
+    OD: str
+    MODS: str
+    NOTES: str
+    STATUS: int
+    COMMENTS: str
+    POOL: str
+    SUGGESTOR: str
+    RAW_MODS: str
+    ADD_TS: float
+    U_ARTIST: str
+    U_TITLE: str
+
+
+class BeatmapSpec(NamedTuple):
+    bid: int
+    raw_mods: list[dict[str, str | dict[str, str | float | bool]]]
+    slot: str
+    pool: str
+    notes: str
+    status: int
+    comments: str
+    suggestor: str
+    add_ts: float
+
+
+class BeatmapToUpdate(TypedDict, total=False):
+    """
+    Attributes:
+        beatmap: 欲更新的谱面
+        old_bid: 欲删除 BID
+        old_mods: 欲删除 MODS
+    """
+
+    name: str
+    beatmap: Optional[BeatmapSpec]
+    old_bid: Optional[int]
+    old_mods: Optional[str]
+
+
+RedisTaskId = NewType("RedisTaskId", str)
+
+
+def push_task(r: Redis, task_command: str) -> RedisTaskId:
+    task_id = uuid.uuid4().hex
+    r.lpush(C.TASK_QUEUE.value, "%s%s" % (task_id, task_command))
+    r.hset(
+        C.TASK_STATUS.value.format(task_id=task_id),
+        mapping={
+            "status": "pending",
+            "result": "",
+            "time": time(),
+            "command": task_command,
+        },
+    )
+    return RedisTaskId(task_id)
+
+
 def download_osu(beatmap: Beatmap):
     need_download = False
     if not os.path.exists(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id)):
@@ -424,7 +594,7 @@ def download_osu(beatmap: Beatmap):
 
 def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
-    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
+    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(score._mods)
     download_osu(beatmap)
     calculator = calculate_osu_performance(
@@ -436,7 +606,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     perf_got_attr = calculator.send(
         OsuPerformance(
             combo=score.max_combo,
-            misses=score.statistics.get("miss", 0),
+            misses=score.statistics.get("miss") or 0,
             mehs=score.statistics.get("meh"),
             oks=score.statistics.get("ok"),
             large_tick_hits=score.statistics.get("large_tick_hit"),
@@ -516,7 +686,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
 
 def calc_positive_percent(score: int | float | None, min_score: int | float, max_score: int | float) -> int:
     if score is None:
-        score = 0.0
+        score: float = 0.0
     score_pct = int((score - min_score) / (max_score - min_score) * 100.0)
     if score_pct > 100:
         score_pct = 100
@@ -546,7 +716,7 @@ def get_size_and_count(path):
         total_count = 0
         for root, dirs, filenames in os.walk(path):
             for filename in filenames:
-                filepath = os.path.join(root, filename)
+                filepath = os.path.join(str(root), str(filename))
                 total_size += os.path.getsize(filepath)
                 total_count += 1
         return total_size, total_count
@@ -612,6 +782,35 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]
+
+
+def safe_norm(value, type_: type = str):
+    if pd.isna(value):
+        return None
+    return type_(value)
+
+
+def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
+    # 暂时不考虑定制谱面/本地谱面需求，因为 playlist 要求是纯在线谱面
+    # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具
+    # 然而，这个操作可能会需要完全重构 playlist 生成器的逻辑，因为其目前所使用的所有信息都是在线获取的
+    # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
+    pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
+    if not os.path.exists(pool_path):
+        os.mkdir(pool_path)
+    # 创建一个临时谱面文件，以 name + time 为谱面名
+    tmp_playlist_filename = str(os.path.join(pool_path, "%s_%d.properties" % (name, time_ns() // 1_000_000)))
+    tmp_playlist_p = Properties(tmp_playlist_filename)
+    tmp_playlist_p["custom_columns"] = '["mods", "slot"]'  # 一定要启用自定义列功能，不然不支持 slot
+    # playlist Properties 文件格式如下：
+    # bid = {"mods": mods, "slot": slot}
+    # # notes
+    # Properties 是一个 OrderedDict，往后依次添加内容即可。要注意 notes 必须以 \n 结尾，因为对于注释的解析是完整行
+    for i, a in enumerate(beatmap_specs, start=1):
+        tmp_playlist_p[str(a[0])] = orjson.dumps({"mods": a[1], "slot": a[2]}).decode()
+        tmp_playlist_p["#%i" % (i * 2 - 1)] = "# %s\n" % a[4]
+    tmp_playlist_p.dump()
+    return tmp_playlist_filename
 
 
 def _make_query_uppercase(original_query_func):

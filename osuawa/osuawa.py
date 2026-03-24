@@ -2,6 +2,15 @@
 osuawa.py and utils.py should not contain i18n related text and streamlit related statement
 """
 
+__all__ = (
+    "C",
+    "assets_dir",
+    "Awapi",
+    "Osuawa",
+    "BeatmapCover",
+    "OsuPlaylist",
+)
+
 import asyncio
 import ctypes
 import datetime
@@ -16,14 +25,13 @@ from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Never, Optional
+from typing import Any, Never, Optional, cast
 
 import numpy as np
 import orjson
 import pandas as pd
-import typing_extensions
 
-assets_dir = os.path.join(os.path.dirname(__file__))
+assets_dir: str = os.path.dirname(__file__)
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
@@ -31,7 +39,7 @@ from clayutil.futil import Downloader, Properties
 from clayutil.validator import Integer
 
 from fontfallback import writing
-from ossapi import Grant, OssapiAsync, Domain, Scope, Score, User, GameMode, Beatmap
+from ossapi.ossapiv2_async import Grant, OssapiAsync, Domain, Scope, Score, User, GameMode, Beatmap
 
 from .utils import (
     ExtendedSimpleScoreInfo,
@@ -42,6 +50,7 @@ from .utils import (
     download_osu,
     CompletedSimpleScoreInfo,
     async_get_beatmaps_dict,
+    strip_quotes,
     to_readable_mods,
     SimpleScoreInfo,
     C,
@@ -49,18 +58,11 @@ from .utils import (
     async_get_user_info,
     simple_user_dict,
     calculate_difficulty,
+    ParsedPlaylistBeatmap,
+    CompletedPlaylistBeatmap,
 )
 
 assert datetime
-
-
-def strip_quotes(text: str) -> str:
-    # 判断是否被引号包裹，若是，则 strip
-    if text.startswith('"') and text.endswith('"'):
-        return text.strip('"')
-    if text.startswith("'") and text.endswith("'"):
-        return text.strip("'")
-    return text
 
 
 class Awapi(OssapiAsync):
@@ -69,11 +71,11 @@ class Awapi(OssapiAsync):
         client_id: int,
         client_secret: str,
         redirect_uri: Optional[str] = None,
-        scopes: Optional[list[str]] = None,
+        scopes: Optional[list[Scope | str]] = None,
         *,
         grant: Optional[Grant | str] = None,
         strict: bool = False,
-        token_directory: str = "./.streamlit/.oauth/",
+        token_directory: str = C.OAUTH_TOKEN_DIRECTORY.value,
         token_key: Optional[str] = None,
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
@@ -81,7 +83,7 @@ class Awapi(OssapiAsync):
         api_version: int | str = 20240529,
     ):
         if scopes is None:
-            scopes = [Scope.PUBLIC]
+            scopes: list[Scope | str] = [Scope.PUBLIC]
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
     def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> Never:
@@ -91,18 +93,22 @@ class Awapi(OssapiAsync):
 class Osuawa(object):
     tz = "Asia/Shanghai"
     common_mods = {
-        "EZ",
+        "NM",
         "NF",
-        "HT",
-        "DC",
+        "EZ",
+        "HD",
         "HR",
         "SD",
-        "PF",
         "DT",
+        "RX",
+        "HT",
         "NC",
-        "HD",
-        "CL",
+        "FL",
+        "AT",
         "SO",
+        "AP",
+        "PF",
+        "V2",
     }
 
     def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
@@ -133,12 +139,12 @@ class Osuawa(object):
         df = pd.DataFrame.from_dict(
             scores_compact,
             orient="index",
-            columns=[f.name for f in fields(CompletedSimpleScoreInfo)],
+            columns=pd.Index(f.name for f in fields(CompletedSimpleScoreInfo)),
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
-        df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
-        df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
+        df["ts"] = cast(pd.Series, pd.to_datetime(df["ts"], utc=True)).dt.tz_convert(self.tz)
+        df["st"] = cast(pd.Series, pd.to_datetime(df["st"], utc=True)).dt.tz_convert(self.tz)
         ec = ExtendedSimpleScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
         df[ec[1]] = df["pp"] / df["b_pp_100if"]
@@ -193,7 +199,7 @@ class Osuawa(object):
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
-            user = self.user[0]
+            user: int = self.user[0]
         return self.create_scores_dataframe(self.run_coro(self.async_get_user_beatmap_scores(beatmap, user)))
 
     async def async_get_recent_scores(self, user: int, include_fails: bool = True) -> list[Score]:
@@ -216,7 +222,7 @@ class Osuawa(object):
         return user_scores
 
 
-def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str | int:
+def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str:
     text_len_dry_run = draw.textlength(text, font=font)
     if text_len_dry_run > length_limit:
         cut_length = -1
@@ -228,7 +234,7 @@ def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, us
             cut_length -= 1
         return text_cut
     else:
-        return -1
+        return ""
 
 
 class BeatmapCover(object):
@@ -296,46 +302,46 @@ class BeatmapCover(object):
         stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
         title_u = self.beatmap.beatmapset().title_unicode
         t1_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u, len_set - stars_len - text_pos - padding - mod_theme_len, False)
-        if t1_cut != -1:
-            title_u2 = title_u.lstrip(t1_cut)
+        if t1_cut != "":
+            title_u2 = title_u[len(t1_cut) :]
             title_u = "%s\n%s" % (t1_cut, title_u2)
             t2_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u2, len_set - padding - mod_theme_len, True)
-            if t2_cut != -1:
+            if t2_cut != "":
                 title_u = "%s\n%s" % (t1_cut, t2_cut)
 
         # 绘制左侧文字
         fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
         version = self.beatmap.version
         ver_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
-        if ver_cut != -1:
+        if ver_cut != "":
             version = ver_cut
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         writing.draw_multiline_text_v2(draw, (42, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 192 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
         draw.text((42 + 1188, 326), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
         draw.text((41 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
         draw.text((40 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
@@ -355,63 +361,6 @@ class BeatmapCover(object):
         return cover_filename
 
 
-class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):  # type: ignore[call-arg]
-    bid: int
-    mods: list[dict[str, Any]]
-    notes: str
-    beatmap: Beatmap
-
-
-CompletedPlaylistBeatmap = typing_extensions.TypedDict(
-    "CompletedPlaylistBeatmap",
-    {
-        "#": int,
-        "BID": int,
-        "SID": int,
-        "Beatmap Info (Click to View)": str,
-        "Artist - Title (Creator) [Version]": str,
-        "Stars": str,
-        "SR": str,
-        "BPM": str,
-        "Hit Length": str,
-        "Max Combo": str,
-        "CS": str,
-        "AR": str,
-        "OD": str,
-        "Mods": str,
-        "Notes": str,
-        "_Artist": str,
-        "_Title": str,
-    },
-    total=False,
-    extra_items=str,  # type: ignore[call-arg]
-)
-
-
-class DatabasePlaylistBeatmap(typing_extensions.TypedDict):
-    BID: int
-    SID: int
-    INFO: str
-    SKILL_SLOT: str
-    SR: str
-    BPM: str
-    HIT_LENGTH: str
-    MAX_COMBO: str
-    CS: str
-    AR: str
-    OD: str
-    MODS: str
-    NOTES: str
-    STATUS: int
-    COMMENTS: str
-    POOL: str
-    SUGGESTOR: str
-    RAW_MODS: str
-    ADD_TS: float
-    U_ARTIST: str
-    U_TITLE: str
-
-
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
     custom_mods_acronym = {"NM", "TB", "FM", "F+", "SP"}  # NM 其实是官方的模组，但是为了逻辑便捷以及符合惯例，这里加上了
@@ -419,22 +368,22 @@ class OsuPlaylist(object):
 
     # osz_type = OneOf("full", "novideo", "mini")
 
-    def __init__(self, awa: Osuawa, playlist_filename: str, suffix: str = "", css_style: Optional[int] = None):
-        self._awa = awa  # 如果用 self.awa 的话 st.session_state.awa 的 IDE 类型推断会出错
+    def __init__(self, awa_instance: Osuawa, playlist_filename: str, suffix: str = "", css_style: Optional[int] = None):
+        self.__awa_instance = awa_instance  # 如果用 self.awa 的话 st.session_state.awa 的 IDE 类型推断会出错
         p = Properties(playlist_filename)
         p.load()
         self.playlist_filename = playlist_filename
         self.suffix = suffix
         self.css_style = css_style
-        self.footer = strip_quotes(p.pop("footer")) if "footer" in p else ""
+        self.footer = strip_quotes(str(p.pop("footer"))) if "footer" in p else ""
         self.banner = ""
         if "banner" in p:
-            banner_img_src = strip_quotes(p.pop("banner"))
+            banner_img_src = strip_quotes(str(p.pop("banner")))
             self.banner = """
     <div class="relative w-full h-[90] sm:h-[135] lg:h-[185] hover:h-1/2 bg-cover bg-no-repeat bg-center object-cover transition-all duration-300 transform" style="background-image: url(%s)"><div class="absolute inset-0 banner-mask"></div>
     </div>
 """ % banner_img_src
-        self.custom_columns = orjson.loads(p.pop("custom_columns")) if "custom_columns" in p else []
+        self.custom_columns: list[str] = orjson.loads(str(p.pop("custom_columns"))) if "custom_columns" in p else []
 
         parsed_beatmap_list: list[ParsedPlaylistBeatmap] = []
 
@@ -443,19 +392,20 @@ class OsuPlaylist(object):
         while p:
             k, v = p.popitem()
             if k[0] == "#":  # notes
-                current_parsed_beatmap["notes"] += v.lstrip("#").lstrip(" ")
+                current_parsed_beatmap["notes"] += str(v).lstrip("#").lstrip(" ")
             else:
                 current_parsed_beatmap["bid"] = int(k)
-                obj_v = orjson.loads(v)
+                obj_v = orjson.loads(str(v))
                 if self.custom_columns:
                     for column in self.custom_columns:
-                        current_parsed_beatmap[column] = obj_v.get(column)  # type: ignore[literal-required]
+                        # noinspection PyTypedDict
+                        current_parsed_beatmap[column] = obj_v.get(column)
                 else:
                     current_parsed_beatmap["mods"] = obj_v
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = self._awa.run_coro(async_get_beatmaps_dict(self._awa.api, [int(x["bid"]) for x in parsed_beatmap_list]))
+        beatmaps_dict = self.__awa_instance.run_coro(async_get_beatmaps_dict(self.__awa_instance.api, [int(x["bid"]) for x in parsed_beatmap_list]))
 
         # post process for parsed beatmaps
         for element in parsed_beatmap_list:
@@ -512,7 +462,7 @@ class OsuPlaylist(object):
 
         # 下载谱面与计算难度
         download_osu(b)
-        my_attr = SimpleOsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm, b.hit_length)
+        my_attr = SimpleOsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
         my_attr.set_mods(mods)
         osupp_attr = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
         stars1 = osupp_attr["star_rating"]
@@ -538,7 +488,7 @@ class OsuPlaylist(object):
             # 将背景图片保存在统一文件夹内以减小占用
             if not os.path.exists(os.path.join(self.bg_dir, "%d.jpg" % bid)):
                 bg_d = Downloader(self.bg_dir)
-                bg_filename = await bg_d.async_start(f"https://assets.ppy.sh/beatmaps/%d/covers/fullsize.jpg" % b.beatmapset_id, "%d" % bid, headers)
+                bg_filename = await bg_d.async_start("https://assets.ppy.sh/beatmaps/%d/covers/fullsize.jpg" % b.beatmapset_id, "%d" % bid, headers)
                 # bg_filename = await bg_d.async_start(f"https://beatconnect.io/bg/%d/%d" % (b.beatmapset_id, bid), "%d" % bid, headers)
                 try:
                     im: Image.Image = Image.open(bg_filename)
@@ -708,19 +658,16 @@ class OsuPlaylist(object):
         return [task.result() for task in tasks]
 
     def generate(self) -> pd.DataFrame:
-        playlist = self._awa.run_coro(self.playlist_task())
-        df_columns = ["#", "BID", "Beatmap Info (Click to View)", "Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD"]
-        df_standalone_columns = ["#", "BID", "SID", "Artist - Title (Creator) [Version]", "SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods"]
-        for column in self.custom_columns:
-            if column == "mods":
-                continue
-            else:
-                df_columns.insert(3, column)
-                df_standalone_columns.insert(4, column)
-        df_columns.append("Notes")
-        df_standalone_columns.append("Notes")
-        df = pd.DataFrame(playlist, columns=df_columns)
-        df_standalone = pd.DataFrame(playlist, columns=df_standalone_columns)
+        playlist = self.__awa_instance.run_coro(self.playlist_task())
+        head_cols = ["#", "BID", "Beatmap Info (Click to View)"]
+        head_standalone_cols = ["#", "BID", "SID", "Artist - Title (Creator) [Version]"]
+        extra_cols = [c for c in self.custom_columns if c != "mods"]
+        tail_cols = ["Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Notes"]
+        tail_standalone_cols = ["SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods", "Notes"]
+        df_columns = head_cols + extra_cols + tail_cols
+        df_standalone_columns = head_standalone_cols + extra_cols + tail_standalone_cols
+        df = pd.DataFrame(playlist, columns=pd.Index(df_columns))
+        df_standalone = pd.DataFrame(playlist, columns=pd.Index(df_standalone_columns))
         df.sort_values(by=["#"], inplace=True)
         df_standalone.sort_values(by=["#"], inplace=True)
         pd.set_option("colheader_justify", "center")
