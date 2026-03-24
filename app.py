@@ -118,14 +118,15 @@ if "translate" not in st.session_state:
 # noinspection PyUnresolvedReferences
 builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  # 想要绕过 load_value、save_value 就必须使用这种方式
-# noinspection PyTypeHints
-st.session_state.redis_tasks: list[RedisTaskId] = []
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
 pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist generator"))
 pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
 
+if "redis_tasks" not in st.session_state:
+    # noinspection PyTypeHints
+    st.session_state.redis_tasks: list[RedisTaskId] = []
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
