@@ -124,9 +124,9 @@ pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visual
 pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist generator"))
 pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
 
-if "redis_tasks" not in st.session_state:
-    # noinspection PyTypeHints
-    st.session_state.redis_tasks: list[RedisTaskId] = []
+load_value("redis_tasks", [])
+# noinspection PyTypeHints
+st.session_state.redis_tasks: list[RedisTaskId]
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
@@ -271,8 +271,8 @@ if st.session_state.immersive_active:
 with st.sidebar:
     st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:")
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
-    if st.button(_("Tasks Board")):
-        st.dialog(_("Tasks Board"))(task_board)()
+    if st.button(_("Tasks Board"), use_container_width=True, icon=":material/assignment:"):
+        st.dialog(_("Tasks Board"), width="large")(task_board)()
 # _page_manager = get_script_run_ctx().pages_manager
 # _current_page_script_hash = _page_manager.current_page_script_hash
 # _url_path = _page_manager.get_pages().get(_current_page_script_hash, None).get("url_pathname", "")

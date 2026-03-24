@@ -32,7 +32,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
+from osuawa.utils import BeatmapSpec, CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
 
 if TYPE_CHECKING:
 
@@ -57,7 +57,7 @@ def save_value(key: str) -> None:
         db[key] = st.session_state["_%s_value" % key]
 
 
-def load_value(key: str, default_value: Any) -> Any:
+def load_value(key: str, default_value: Any) -> None:
     # <key> <-> st.session_state._<key>_value
     if "_%s_value" % key not in st.session_state:
         if key not in st.session_state:
@@ -483,42 +483,48 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
         "error": "crimson",
     }
     # 使用 columns 网格布局
-    cols = st.columns(2)
     for idx, (task_id, status_mapping) in enumerate(tasks):
-        with cols[(idx % 2)]:
-            with st.container(border=True):
-                # 状态指示器
-                _status = status_mapping["status"]
-                _result = status_mapping["result"]
-                _time = status_mapping["time"]
-                _dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
-                _command = status_mapping["command"]
-                status_color.get(_status, "#808080")
+        with st.container(border=True):
+            _status = status_mapping["status"]
+            _result = status_mapping["result"]
+            _time = status_mapping["time"]
+            _dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
+            _command_name, params_json = status_mapping["command"].split(" ", 1)
+            status_color.get(_status, "#808080")
 
-                st.markdown(
-                    f"<div style='width: 10px; height: 10px; border-radius: 50%; " f"background-color: {status_color}; display: inline-block;'></div> " f"<span style='font-size: 12px; color: gray;'>ID: {task_id}</span>",
-                    unsafe_allow_html=True,
-                )
+            st.text(_("Task ID: %s") % task_id)
 
-                # 任务信息
-                st.markdown(f"**command:** `{_command}`")
-                st.caption(f"updated at: {_dt}")
+            # 任务信息
+            # todo: 真的需要这样做吗？
+            st.markdown(f"**command:** `{_command_name}`")
+            st.json(
+                [
+                    {
+                        "beatmap_spec": BeatmapSpec(*spec)._asdict() if (spec := p.get("beatmap")) is not None else None,
+                        "old_bid": p.get("old_bid"),
+                        "old_mods": p.get("old_mods"),
+                    }
+                    for p in orjson.loads(params_json)
+                ],
+                expanded=False,
+            )
+            st.caption(f"updated at: {_dt}")
 
-                # 状态显示
-                match _status:
-                    case "pending":
-                        st.spinner(_("pending..."))
-                    case "success":
-                        st.success("%s sub-tasks done" % _result)
-                    case "error":
-                        st.error(_result)
-                    case _:
-                        st.write(_result)
+            # 状态显示
+            match _status:
+                case "pending":
+                    st.spinner(_("pending..."))
+                case "success":
+                    st.success("%s sub-tasks done" % _result)
+                case "error":
+                    st.error(_result)
+                case _:
+                    st.write(_result)
 
 
 def task_board():
     tasks_to_show: list[tuple[RedisTaskId, dict[str, str]]] = []
-    for task_id in st.session_state.redis_tasks:
+    for task_id in reversed(st.session_state.redis_tasks):
         status_key = C.TASK_STATUS.value.format(task_id=task_id)
         status_mapping: Optional[dict] = cast(Optional[dict], _r.hgetall(status_key))
         if status_mapping:
