@@ -1,31 +1,30 @@
-import asyncio
 import os
 import os.path
 import re
 import shelve
 import shutil
 from collections import deque
-from dataclasses import asdict
 from datetime import date, datetime, time
 from secrets import token_hex
 from shutil import copyfile
-from typing import Any, Literal, Optional, TYPE_CHECKING
+from typing import Any, Literal, Optional, TYPE_CHECKING, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import orjson
 import pandas as pd
 import plotly.express as px
+import redis
 import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
-    CollectionField as Coll,
     Command,
     CommandError,
     IntegerField as Int,
     JSONStringField as JsonStr,
     StringField as Str,
 )
-from ossapi import Beatmap, GameMode, Score
+from ossapi import Beatmap, GameMode
 from osupp.performance import calculate_osu_performance
 from plotly.graph_objs import Figure
 from sqlalchemy import text
@@ -33,7 +32,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, SimpleOsuDifficultyAttribute, SimpleScoreInfo, _make_query_uppercase, async_get_username, download_osu, format_size, generate_mods_from_lines, get_size_and_count
+from osuawa.utils import BeatmapSpec, CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
 
 if TYPE_CHECKING:
 
@@ -46,16 +45,19 @@ _conn = st.connection("osuawa", type="sql", ttl=60)
 _conn.query = _make_query_uppercase(_conn.query)
 
 
+# todo: st.connection 为只读，写入由 daemon worker 负责
+
+
 def save_value(key: str) -> None:
     # <key> <-> st.session_state._<key>_value
     st.session_state["_%s_value" % key] = st.session_state[key]
     # semi-persistent storage
     # ./.streamlit/.components/<ajs_anonymous_id>
-    with shelve.open("./.streamlit/.components/%s" % st.context.cookies["ajs_anonymous_id"]) as db:
+    with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"])) as db:
         db[key] = st.session_state["_%s_value" % key]
 
 
-def load_value(key: str, default_value: Any) -> Any:
+def load_value(key: str, default_value: Any) -> None:
     # <key> <-> st.session_state._<key>_value
     if "_%s_value" % key not in st.session_state:
         if key not in st.session_state:
@@ -63,11 +65,12 @@ def load_value(key: str, default_value: Any) -> Any:
             # ./.streamlit/.components/<ajs_anonymous_id>
             # 由于 load 可能发生在第一次访问（save 不会），所以还要检查 cookie 是否存在
             if "ajs_anonymous_id" in st.context.cookies and (
-                os.path.exists("./.streamlit/.components/%s.bak" % st.context.cookies["ajs_anonymous_id"])
-                or os.path.exists("./.streamlit/.components/%s.dat" % st.context.cookies["ajs_anonymous_id"])
-                or os.path.exists("./.streamlit/.components/%s.dir" % st.context.cookies["ajs_anonymous_id"])
+                os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"]))
+                or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.bak" % st.context.cookies["ajs_anonymous_id"]))
+                or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dat" % st.context.cookies["ajs_anonymous_id"]))
+                or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dir" % st.context.cookies["ajs_anonymous_id"]))
             ):
-                with shelve.open("./.streamlit/.components/%s" % st.context.cookies["ajs_anonymous_id"], "r") as db:
+                with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"]), "r") as db:
                     st.session_state["_%s_value" % key] = db.get(key, default_value)
             else:
                 st.session_state["_%s_value" % key] = default_value
@@ -84,6 +87,13 @@ def memorized_multiselect(label: str, key: str, options: list, default_value: An
 def memorized_selectbox(label: str, key: str, options: list, default_value: Any) -> None:
     load_value(key, default_value)
     st.selectbox(label, options, key=key, on_change=save_value, args=(key,))
+
+
+def get_session_id() -> str:
+    ctx = get_script_run_ctx()
+    if ctx is None:
+        raise RuntimeError("no streamlit ctx")
+    return UUID(ctx.session_id).hex
 
 
 def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
@@ -107,7 +117,16 @@ def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
         st.stop()
 
 
-project_dir = os.path.join(os.path.dirname(__file__), "..")
+project_dir = os.path.join(str(os.path.dirname(__file__)), "..")
+
+
+@st.cache_resource
+def get_redis_connection():
+    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    return r
+
+
+_r = get_redis_connection()
 
 
 def commands():
@@ -130,7 +149,7 @@ def commands():
             "logfilter",
             "tail logs",
             [Int("n", True), Str("keyword", True)],
-            4,
+            3,
             log_action,
         ),
         Command(
@@ -143,21 +162,9 @@ def commands():
         Command(
             "save",
             _("save user recent scores"),
-            [Int("user"), Bool("include_fails", True)],
+            [Int("user")],
             1,
-            save_recent_scores,
-        ),
-        Command(
-            "update",
-            _("update user recent scores"),
-            [
-                Coll(
-                    "user",
-                    get_all_score_users(),
-                ),
-            ],
-            1,
-            save_recent_scores,
+            lambda user: push_task(_r, "save %d" % user),
         ),
         Command("score", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
         Command(
@@ -189,6 +196,7 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
                 # 展示相关文件
                 ret_md += "# Show Files\n\n"
                 # 三个主要文件夹
+                # todo: components shelves 是否需要检查
                 ret_md += "## Storage\n\n"
                 for _path in [C.OUTPUT_DIRECTORY.value, C.UPLOADED_DIRECTORY.value, C.BEATMAPS_CACHE_DIRECTORY.value]:
                     action_path = os.path.join(project_dir, _path)
@@ -203,7 +211,7 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
                         ret_md += f"- {_path}\n\n"
                 # 检查 token pickle ./.streamlit/.oauth/*.pickle
                 ret_md += "## Token Pickles\n\n"
-                for _path in os.listdir(os.path.join(project_dir, ".streamlit", ".oauth")):
+                for _path in os.listdir(os.path.join(project_dir, C.OAUTH_TOKEN_DIRECTORY.value)):
                     if _path.endswith(".pickle"):
                         ret_md += f"- {_path}\n\n"
             else:
@@ -240,25 +248,27 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
 
 def log_action(n: int = 100, keyword: Optional[str] = None) -> str:
     ret_md = "# Show last %d lines of logs" % n
-    log_filename = os.path.join(project_dir, "./logs/streamlit.log")
-    with open(log_filename, "r", encoding="utf-8") as fi:
-        # 先拿到最后 N 行
-        last_lines = deque(fi, maxlen=n)
+    for log_filename in ["streamlit.log", "daemon.log"]:
+        ret_md += "## %s" % log_filename
+        log_filename = os.path.join(project_dir, C.LOGS.value, log_filename)
+        with open(log_filename, "r", encoding="utf-8") as fi:
+            # 先拿到最后 N 行
+            last_lines = deque(fi, maxlen=n)
 
-    results = []
-    if keyword is not None:
-        ret_md += f' with keyword "{keyword}".\n\n'
-        for line in last_lines:
-            if keyword in line:
-                results.append(line)
-    else:
-        ret_md += ".\n\n"
-        results = list(last_lines)
-    # 使用代码块包裹日志内容，防止 Markdown 格式错乱
-    ret_md += "```log\n"
-    # strip() 防止末尾多余空行
-    ret_md += "".join(results).strip()
-    ret_md += "\n```"
+        results = []
+        if keyword is not None:
+            ret_md += f' with keyword "{keyword}".\n\n'
+            for line in last_lines:
+                if keyword in line:
+                    results.append(line)
+        else:
+            ret_md += ".\n\n"
+            results = list(last_lines)
+        # 使用代码块包裹日志内容，防止 Markdown 格式错乱
+        ret_md += "```log\n"
+        # strip() 防止末尾多余空行
+        ret_md += "".join(results).strip()
+        ret_md += "\n```"
     return ret_md
 
 
@@ -316,7 +326,7 @@ def cat(user: int):
 def register_commands(obj: Optional[dict] = None):
     ret = ""
     if obj is None:
-        obj = {}
+        obj: dict = {}
     if "perm" not in st.session_state:
         st.session_state.perm = 0
     if not obj.get("simple", False):
@@ -329,7 +339,8 @@ def register_commands(obj: Optional[dict] = None):
         else:
             st.info(_('use `reg {"token": "<token>"}` to pass the token'))
             st.session_state.token = token_hex(16)
-            logger.get_logger("streamlit").info("generated token for session %s: %s" % (UUID(get_script_run_ctx().session_id).hex, st.session_state.token))
+
+            logger.get_logger("streamlit").info("generated token for session %s: %s" % (get_session_id(), st.session_state.token))
             ret = _("token generated")
             st.toast(_("You need to ask the web admin for the session token to unlock full features."))
     else:
@@ -337,54 +348,6 @@ def register_commands(obj: Optional[dict] = None):
         pass
     st.session_state.cmdparser.register_command(st.session_state.perm, *commands())
     return ret
-
-
-def save_recent_scores(user: int, include_fails: bool = True) -> str:
-    async def _save_recent_scores(_user: int, _include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
-        """返回 (username, completed_recent_scores_compact)"""
-        user_scores: list[Score] = await st.session_state.awa.async_get_recent_scores(_user, _include_fails)
-        recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
-        return await asyncio.gather(
-            async_get_username(st.session_state.awa.api, _user),
-            st.session_state.awa.complete_scores_compact(recent_scores_compact),
-        )
-
-    username: str
-    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo]
-    username, completed_recent_scores_compact = st.session_state.awa.run_coro(_save_recent_scores(user, include_fails))
-    with _conn.session as s:
-        # 插入到表 SCORE，如果遇到冲突，则放弃
-        # 准备数据
-        scores = []
-        for pk, _v in completed_recent_scores_compact.items():
-            score = asdict(
-                _v,
-                dict_factory=lambda items: {k.lstrip("_"): None if v is None else v.timestamp() if isinstance(v, datetime) else int(v) if isinstance(v, bool) else orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v for k, v in items},
-            )
-            score["score_id"] = pk
-            scores.append(score)
-        res = s.execute(
-            text(
-                """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP, IS_SPEED_DOWN,
-                                      INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
-                                      B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
-                                      B_PP_81IF, B_PP_67IF)
-                   VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
-                           :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
-                           :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
-                           :b_pp_81if, :b_pp_67if)
-                   ON CONFLICT DO NOTHING;""",
-            ),
-            params=scores,
-        )
-
-        len_diff = res.rowcount
-        s.commit()
-    return "%s: got/diff: %d/%d" % (
-        username,
-        len(completed_recent_scores_compact),
-        len_diff,
-    )
 
 
 def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = None) -> pd.DataFrame:
@@ -486,7 +449,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
     else:
         mods = []
     # 生成 osu_tools 所能接受的样式
-    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm, beatmap.hit_length)
+    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(mods)
     calculator = calculate_osu_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
     osupp_attr = next(calculator)
@@ -509,3 +472,71 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
         yaxis_title="Strain",
     )
     return fig
+
+
+def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
+    """以网格形式渲染任务"""
+
+    status_color = {
+        "pending": "#000000",
+        "success": "darkseagreen",
+        "error": "crimson",
+    }
+    # 使用 columns 网格布局
+    for idx, (task_id, status_mapping) in enumerate(tasks):
+        with st.container(border=True):
+            _status = status_mapping["status"]
+            _result = status_mapping["result"]
+            _time = status_mapping["time"]
+            _dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
+            _command_name, params_json = status_mapping["command"].split(" ", 1)
+            status_color.get(_status, "#808080")
+
+            st.text(_("Task ID: %s") % task_id)
+
+            # 任务信息
+            # todo: 真的需要这样做吗？
+            st.markdown(f"**command:** `{_command_name}`")
+            st.json(
+                [
+                    {
+                        "beatmap_spec": BeatmapSpec(*spec)._asdict() if (spec := p.get("beatmap")) is not None else None,
+                        "old_bid": p.get("old_bid"),
+                        "old_mods": p.get("old_mods"),
+                    }
+                    for p in orjson.loads(params_json)
+                ],
+                expanded=False,
+            )
+            st.caption(f"updated at: {_dt}")
+
+            # 状态显示
+            match _status:
+                case "pending":
+                    st.spinner(_("pending..."))
+                case "success":
+                    st.success("%s sub-tasks done" % _result)
+                case "error":
+                    st.error(_result)
+                case _:
+                    st.write(_result)
+
+
+def task_board():
+    tasks_to_show: list[tuple[RedisTaskId, dict[str, str]]] = []
+    for task_id in reversed(st.session_state.redis_tasks):
+        status_key = C.TASK_STATUS.value.format(task_id=task_id)
+        status_mapping: Optional[dict] = cast(Optional[dict], _r.hgetall(status_key))
+        if status_mapping:
+            tasks_to_show.append((task_id, status_mapping))
+
+    # 使用 tabs 分类显示
+    tab1, tab2, tab3, tab4 = st.tabs([":material/format_list_bulleted: all", ":material/pending: pending", ":material/check_circle: success", ":material/error: error"])
+    with tab1:
+        tasks_grid(tasks_to_show)
+    with tab2:
+        tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "pending"])
+    with tab3:
+        tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "success"])
+    with tab4:
+        tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "error"])

@@ -86,5 +86,5 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
 if __name__ == "__main__":
     download_dependencies("./osuawa/")
     multiprocessing.freeze_support()
-    streamlit._is_running_with_streamlit = True
+    streamlit._is_running_with_streamlit = True  # ty:ignore[unresolved-attribute]
     bootstrap.run("app.py", False, [], {})

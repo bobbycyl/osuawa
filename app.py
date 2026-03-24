@@ -5,11 +5,10 @@ import logging
 import os
 from html import escape as html_escape
 from typing import Optional, TYPE_CHECKING
-from uuid import UUID
 
 import requests
 import streamlit as st
-from babel import Locale
+from babel import Locale, UnknownLocaleError
 from clayutil.cmdparse import (
     CommandParser,
 )
@@ -19,8 +18,8 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
-from osuawa.components import load_value, register_commands
-from osuawa.utils import create_unique_picker
+from osuawa.components import get_session_id, load_value, register_commands, task_board
+from osuawa.utils import RedisTaskId, create_unique_picker, update_user_cache
 
 st.session_state._debugging_mode = False
 admins = st.secrets.args.admins
@@ -29,7 +28,9 @@ if TYPE_CHECKING:
     def _(text: str) -> str: ...
 
 
-def convert_locale(accept_language: str):
+def convert_locale(accept_language: Optional[str]):
+    if accept_language is None:
+        return "en_US"
     try:
         parsed_locale = Locale.parse(accept_language.split(",")[0], sep="-")
         converted_lang = "%s_%s" % (parsed_locale.language, parsed_locale.territory)
@@ -37,7 +38,7 @@ def convert_locale(accept_language: str):
             return "en_US"
         else:
             return converted_lang
-    except:
+    except (UnknownLocaleError, ValueError, AttributeError, IndexError):
         return "en_US"
 
 
@@ -54,8 +55,8 @@ def gettext_translate(text):
 
 @st.cache_data
 def init_logger():
-    fh = logging.FileHandler("./logs/streamlit.log", encoding="utf-8")
-    fh.setFormatter(logging.Formatter("[%(asctime)s] [%(name)s/%(levelname)s]: %(message)s"))
+    fh = logging.FileHandler(os.path.join(C.LOGS.value, "streamlit.log"), encoding="utf-8")
+    fh.setFormatter(logging.Formatter(st.get_option("logger.messageFormat")))
     if "streamlit" not in logger.get_logger("streamlit").handlers:
         logger.get_logger("streamlit").addHandler(fh)
     if st.session_state.username not in logger.get_logger("streamlit").handlers:
@@ -89,11 +90,13 @@ if "translate" not in st.session_state:
     if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
         os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
     load_value("uni_lang", convert_locale(st.context.locale))
+
     # 半持久化保存
-    if not os.path.exists("./.streamlit/.oauth"):
-        os.mkdir("./.streamlit/.oauth")
-    if not os.path.exists("./.streamlit/.components"):
-        os.mkdir("./.streamlit/.components")
+    if not os.path.exists(C.OAUTH_TOKEN_DIRECTORY.value):
+        os.mkdir(C.OAUTH_TOKEN_DIRECTORY.value)
+    if not os.path.exists(C.COMPONENTS_SHELVES_DIRECTORY.value):
+        os.mkdir(C.COMPONENTS_SHELVES_DIRECTORY.value)
+
     # 数据库需要以下表和字段
     # 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
     # 2. 表 SCORE，字段与 CompletedSimpleScoreInfo 大体一致，另附加 SCORE_ID 字段作为主键
@@ -121,6 +124,9 @@ pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visual
 pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist generator"))
 pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
 
+load_value("redis_tasks", [])
+# noinspection PyTypeHints
+st.session_state.redis_tasks: list[RedisTaskId]
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
@@ -171,7 +177,7 @@ if "awa" not in st.session_state:
     try:
         if "code" not in st.query_params:
             # check if ossapi token is pickled
-            if "ajs_anonymous_id" in st.context.cookies and os.path.exists("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
+            if "ajs_anonymous_id" in st.context.cookies and os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):
                 awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
                 prepare_bar.progress(67, text=get_an_osu_meme())
             else:
@@ -182,33 +188,37 @@ if "awa" not in st.session_state:
         else:
             code = st.query_params.code
             prepare_bar.progress(50, text=get_an_osu_meme())
-            r = requests.post(
+            _oauth_r = requests.post(
                 Awapi.TOKEN_URL.format(domain=domain),
                 headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
                 data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
             )
-            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, r.json().get("access_token"), r.json().get("refresh_token"))
+            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, _oauth_r.json().get("access_token"), _oauth_r.json().get("refresh_token"))
             awa.api._save_token(awa.api.session.token)
             st.query_params.pop("code")
             prepare_bar.progress(67, text=get_an_osu_meme())
         awa.tz = st.context.timezone
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
+        update_user_cache(st.session_state.user, st.session_state.username, [st.context.cookies["ajs_anonymous_id"]])
         if st.session_state._debugging_mode:
             from random import randint
 
             # 启用随机用户名
             st.session_state.username = "".join([chr(randint(ord("a"), ord("z"))) for _ in range(8)])
-            logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, UUID(get_script_run_ctx().session_id).hex))
+            ctx = get_script_run_ctx()
+            if ctx is None:
+                raise RuntimeError("no streamlit runtime")
+            logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, get_session_id()))
     except NotImplementedError:
         # 这一般是 token 过期了
-        if os.path.exists("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"]):
-            os.remove("./.streamlit/.oauth/%s.pickle" % st.context.cookies["ajs_anonymous_id"])
-        # st.warning(_("OAuth2 token or code has expired. Please remove the url parameter and refresh the page."))
+        if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):
+            os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]))
+        st.warning(_("OAuth2 token or code has expired. Please refresh the page."))
         prepare_bar.empty()
-        # 清除 query
-        st.query_params.clear()
-        st.rerun()
+        if "code" in st.query_params:
+            st.query_params.pop("code")
+        st.stop()
     prepare_bar.progress(100, text=get_an_osu_meme())
     if st.session_state.user in admins:
         st.session_state.token = ""
@@ -216,7 +226,7 @@ if "awa" not in st.session_state:
         st.session_state.perm = 4
     prepare_bar.empty()
 
-if st.session_state.perm < 4:
+if st.session_state.perm < 2:
     pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder])
 else:
     pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
@@ -261,7 +271,8 @@ if st.session_state.immersive_active:
 with st.sidebar:
     st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:")
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
-
+    if st.button(_("Tasks Board"), use_container_width=True, icon=":material/assignment:"):
+        st.dialog(_("Tasks Board"), width="large")(task_board)()
 # _page_manager = get_script_run_ctx().pages_manager
 # _current_page_script_hash = _page_manager.current_page_script_hash
 # _url_path = _page_manager.get_pages().get(_current_page_script_hash, None).get("url_pathname", "")
