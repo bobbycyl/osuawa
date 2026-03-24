@@ -2,8 +2,8 @@ import os.path
 import shutil
 import time
 from functools import partial
-from time import sleep
 from typing import Never, Optional, TYPE_CHECKING, cast
+from uuid import uuid4
 
 import orjson
 import pandas as pd
@@ -17,7 +17,7 @@ from streamlit import logger
 from osuawa import C, OsuPlaylist
 from osuawa.components import get_redis_connection, get_session_id, init_page, load_value, memorized_selectbox, save_value
 from osuawa.osuawa import Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, _create_tmp_playlist_p, _make_query_uppercase, generate_mods_from_lines, push_task, to_readable_mods
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, generate_mods_from_lines, push_task, safe_norm, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa
     # noinspection PyTypeHints
-    st.session_state.redis_tasks: list[str]
+    st.session_state.redis_tasks: list[RedisTaskId]
 
 init_page(_("Playlist generator") + " - osuawa")
 with st.sidebar:
@@ -177,10 +177,9 @@ def default(obj):
 
 
 # noinspection PyUnreachableCode
-def refresh(delay: Optional[float] = None, clear_cache: bool = False) -> Never:
-    if delay:
-        sleep(delay)
+def refresh(clear_cache: bool = False) -> Never:
     conn.reset()
+    st.session_state.aggrid_key = str(uuid4())
     if clear_cache:
         st.cache_data.clear()
     st.rerun()
@@ -212,12 +211,15 @@ def check_beatmap_exists(bid: int, mods: str) -> bool:
 
 @st.dialog(_("Export selected as a playlist"))
 def export_filtered_playlist():
-    parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
-    specs_x = [BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0) for bid, mods, skill, note in zip(selected_rows["BID"], parsed_mods_list, selected_rows["SKILL_SLOT"], selected_rows["NOTES"])]  # 直接用解析好的列表
-    tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
-    st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
-    with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
-        st.code(fi.read(), language="properties")
+    if selected_rows is None or len(selected_rows) == 0:
+        st.error(_("no beatmaps selected"))
+    else:
+        parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
+        specs_x = [BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0) for bid, mods, skill, note in zip(selected_rows["BID"], parsed_mods_list, selected_rows["SKILL_SLOT"], selected_rows["NOTES"])]  # 直接用解析好的列表
+        tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
+        st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
+        with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
+            st.code(fi.read(), language="properties")
 
 
 if st.session_state.perm >= 1:
@@ -293,8 +295,10 @@ if st.session_state.perm >= 1:
                         time.time(),
                     ),
                 )
-            # todo: 建议一个 empty，轮询状态
-            st.session_state.redis_tasks.append(push_task(r, "beatmap %s" % orjson.dumps([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
+            _task_id = push_task(r, "beatmap %s" % orjson.dumps([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
+            st.session_state.redis_tasks.append(_task_id)
+            logger.get_logger(st.session_state.username).info("pushed add playlist beatmap task %s" % _task_id)
+            st.toast(_("submitted %d beatmap(s) to add") % len(specs_input))
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -401,7 +405,7 @@ if st.session_state.perm >= 1:
         "SID",
         "ADD_TS",
     ]
-    df = df[desired_col_order]
+    df = df[desired_col_order].copy()
 
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_selection(selection_mode="multiple", use_checkbox=True, suppressRowClickSelection=True)
@@ -469,6 +473,8 @@ if st.session_state.perm >= 1:
 
     grid_options = gb.build()
 
+    if "aggrid_key" not in st.session_state:
+        st.session_state.aggrid_key = str(uuid4())
     grid_response = AgGrid(
         df,
         gridOptions=grid_options,
@@ -481,70 +487,97 @@ if st.session_state.perm >= 1:
         width="100%",
         # show_toolbar=True,
         allow_unsafe_jscode=True,
-        key="gen_playlist_grid",
+        key=st.session_state.aggrid_key,
     )
-    if grid_response["data"]:
-        edited_df = pd.DataFrame(grid_response["data"])
+    if grid_response.data:
+        edited_df = pd.DataFrame(grid_response.data)
     else:
         edited_df = pd.DataFrame()
-
-    selected_rows = grid_response["selected_rows"]
 
     col_save_n_refresh, col_blank, col_del = st.columns(spec=[0.6, 0.12, 0.28], gap="large")
     with col_save_n_refresh:
         with st.container(border=False, horizontal=True):
             if st.button(_("Commit"), use_container_width=True, icon=":material/database_upload:"):
-                if edited_df.empty:
-                    st.toast(_("no changes made"))
-                else:
-                    specs_recalculate: list[BeatmapSpec] = []
-                    olds_to_drop: list[tuple[str, bool]] = []  # (old MODS, RAW_MODS changed)
-                    for index, row in edited_df.iterrows():
-                        edited_bid, edited_mods = row["BID"], row["MODS"]
-                        # 由于 MODS 在这里尚未更改，因此还是可以根据 BID + MODS 的组合定位原始表格中的对应行
-                        original_row = df.loc[(df["BID"] == edited_bid) & (df["MODS"] == edited_mods)]
-                        if original_row.empty:
-                            st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_mods))
-                            continue
-                        # 由于 BID + MODS 为主键，因此这里应该只有一个结果
-                        original_row = original_row.iloc[0]
-                        # 在可修改列中如果有任意一项被修改了，那么就添加到重算列表中
+                EDITABLE = ["SKILL_SLOT", "STATUS", "COMMENTS", "POOL", "NOTES", "RAW_MODS"]
+                specs_recalculate: list[BeatmapSpec] = []
+                olds_to_drop: list[tuple[str, bool]] = []  # (old MODS, RAW_MODS changed)
+
+                # 先索引原始 df，加快查找效率
+                orig_indexed = {(int(row.BID), str(row.MODS)): {c: getattr(row, c) for c in EDITABLE + ["MODS", "SUGGESTOR", "ADD_TS"]} for row in df.itertuples()}
+                for edited_row in edited_df[["BID", "MODS"] + EDITABLE].itertuples():
+                    edited_bid = int(edited_row.BID)
+                    edited_mods = str(edited_row.MODS)
+                    # 由于 MODS 在这里尚未更改，因此还是可以根据 BID + MODS 的组合定位原始表格中的对应行
+                    # original_row = df.loc[(df["BID"].astype(int) == edited_bid) & (df["MODS"].astype(str) == edited_mods)]
+                    orig = orig_indexed.get((edited_bid, edited_mods))
+                    if orig is None:
+                        st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_mods))
+                        continue
+                    # 在可修改列中如果有任意一项被修改了，那么就添加到重算列表中
+                    if (
+                        safe_norm(edited_row.SKILL_SLOT) != safe_norm(orig["SKILL_SLOT"])
+                        or safe_norm(edited_row.STATUS, int) != safe_norm(orig["STATUS"], int)
+                        or safe_norm(edited_row.COMMENTS) != safe_norm(orig["COMMENTS"])
+                        or safe_norm(edited_row.POOL) != safe_norm(orig["POOL"])
+                        or safe_norm(edited_row.NOTES) != safe_norm(orig["NOTES"])
+                        or safe_norm(edited_row.RAW_MODS) != safe_norm(orig["RAW_MODS"])
+                    ):
                         # 由于 MODS 由 RAW_MODS 生成，因此 RAW_MODS 改变时，主键即改变
                         # 故如果 RAW_MODS 修改了，那么就认为需要先删除原始记录，然后再添加新记录
-                        new_primary = row["RAW_MODS"] != original_row["RAW_MODS"] and not (pd.isna(row["RAW_MODS"]) and pd.isna(original_row["RAW_MODS"]))
+                        new_primary = safe_norm(edited_row.RAW_MODS) != safe_norm(orig["RAW_MODS"])
                         try:
-                            specs_recalculate.append(BeatmapSpec(edited_bid, orjson.loads(row["RAW_MODS"]), row["SKILL_SLOT"], row["POOL"], row["NOTES"], row["STATUS"], row["COMMENTS"], original_row["SUGGESTOR"], original_row["ADD_TS"]))
+                            specs_recalculate.append(
+                                BeatmapSpec(
+                                    edited_bid,
+                                    orjson.loads(edited_row.RAW_MODS),
+                                    str(edited_row.SKILL_SLOT),
+                                    str(edited_row.POOL),
+                                    str(edited_row.NOTES),
+                                    int(edited_row.STATUS),
+                                    str(edited_row.COMMENTS),
+                                    str(orig["SUGGESTOR"]),
+                                    float(orig["ADD_TS"]),
+                                ),
+                            )
                         except orjson.JSONDecodeError:
-                            st.toast(_("invalid JSON: %s") % row["RAW_MODS"])
+                            st.toast(_("invalid JSON: %s") % edited_row.RAW_MODS)
                             st.stop()
-                        olds_to_drop.append((original_row["MODS"], new_primary))
-                    # 同理，为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
-                    beatmaps_to_upsert: list[BeatmapToUpdate] = []
-                    for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate):
-                        if old_to_drop[1]:
-                            beatmaps_to_upsert.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
-                        else:
-                            beatmaps_to_upsert.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
-                    st.session_state.redis_tasks.append(push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_upsert, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
-
-                refresh(1.5)
+                        except (ValueError, TypeError) as e:
+                            st.toast(_("invalid value: %s") % e)
+                            st.stop()
+                        olds_to_drop.append((str(orig["MODS"]), new_primary))
+                # 同理，为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
+                beatmaps_to_update: list[BeatmapToUpdate] = []
+                for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate):
+                    if old_to_drop[1]:
+                        beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
+                    else:
+                        beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
+                _task_id = push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_update, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
+                st.session_state.redis_tasks.append(_task_id)
+                logger.get_logger(st.session_state.username).info("pushed update playlist beatmap task %s" % _task_id)
+                st.toast(_("submitted %d beatmap(s) to update") % len(beatmaps_to_update))
+                refresh()
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh(clear_cache=True)
             if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
                 export_filtered_playlist()
-
+    selected_rows = grid_response.selected_rows
     with col_del:
         with st.container(border=False, horizontal_alignment="right"):
             if st.button(_("Delete"), type="primary", use_container_width=True, icon=":material/delete:"):
-                if len(selected_rows) == 0:
+                if selected_rows is None or len(selected_rows) == 0:
                     st.toast(_("no beatmaps selected"))
                 else:
                     required_rows = selected_rows[["BID", "MODS"]]
                     beatmaps_to_delete: list[BeatmapToUpdate] = []
                     for row in required_rows.itertuples(index=False):
-                        beatmaps_to_delete.append(BeatmapToUpdate(old_bid=row.BID, old_mods=row.MODS))
-                    st.session_state.redis_tasks.append(push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_delete, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
-                refresh(1.5)
+                        beatmaps_to_delete.append(BeatmapToUpdate(old_bid=int(row.BID), old_mods=str(row.MODS)))
+                    _task_id = push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_delete, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
+                    st.session_state.redis_tasks.append(_task_id)
+                    logger.get_logger(st.session_state.username).info("pushed delete playlist beatmap task %s" % _task_id)
+                    st.toast(_("submitted %d beatmap(s) to delete") % len(beatmaps_to_delete))
+                refresh()
 
 st.divider()
 
