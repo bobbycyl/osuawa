@@ -223,6 +223,10 @@ def export_filtered_playlist():
 
 
 if st.session_state.perm >= 1:
+    if "online_playlist_info" not in st.session_state or not st.session_state.online_playlist_info:
+        st.info(_("Auto refresh is disabled due to technical reasons. You might want to press the `%s` button to refresh the playlist.") % _("Refresh"))
+        st.session_state.online_playlist_info = True
+
     st.markdown(_("## Online Playlist Creator"))
     available_pools = conn.query(
         """SELECT DISTINCT POOL
@@ -237,12 +241,7 @@ if st.session_state.perm >= 1:
         col1, col2 = st.columns(2)
         with col1:
             urls_input = st.text_input(_("Beatmap URLs or IDs, split by spaces"))
-            # SLOTS 自动大写
             slot_input = st.text_input(_("Slot"))
-            if slot_input is None:
-                st.error(_("blank slot not allowed"))
-                st.stop()
-            slot_input = slot_input.upper()
             notes_input = st.text_input(_("Notes"))
         with col2:
             # 由于 form 不允许组件设置 on_change，因此这里要手动实现记忆功能
@@ -261,44 +260,49 @@ if st.session_state.perm >= 1:
             st.session_state.gen_form_pool = pool_input
             save_value("gen_form_pool")
             specs_input: list[BeatmapSpec] = []
-            if urls_input is None:
+            if slot_input is None or slot_input == "":
+                st.error(_("blank slot not allowed"))
+            elif urls_input is None or urls_input == "":
                 st.error(_("blank beatmap not allowed"))
-                st.stop()
-            urls_input_split = urls_input.split()
-            raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input or "")
+            else:
+                # SLOTS 自动大写
+                slot_input = slot_input[:2].upper() + slot_input[2:]
+                urls_input_split = urls_input.split()
+                raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input or "")
 
-            # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
-            for url_input in urls_input_split:
-                # 处理 BID
-                bid_input = int(url_input.rsplit("/", 1)[-1])
-                # 这里要提前转化 raw_mods 为 "; ".join(mods_ready)，一方面检验是否能序列化，另一方面查重并终止
-                try:
-                    mods_ready_input = to_readable_mods(raw_mods_input)
-                except (orjson.JSONDecodeError, ValueError, KeyError):
-                    st.error(_("invalid mods: %s") % raw_mods_input)
-                    continue
-                mods_input = "; ".join(mods_ready_input)
-                if check_beatmap_exists(bid_input, mods_input):
-                    st.warning(_("(%d %s) already exists, skipped" % (bid_input, mods_input)))
-                    continue
-                validate_restricted_identifier(st.session_state.gen_form_pool)
-                specs_input.append(
-                    BeatmapSpec(
-                        bid_input,
-                        raw_mods_input,
-                        slot_input,
-                        st.session_state.gen_form_pool or "",
-                        notes_input or "",
-                        0,
-                        "",
-                        st.session_state.username,
-                        time.time(),
-                    ),
-                )
-            _task_id = push_task(r, "beatmap %s" % orjson.dumps([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
-            st.session_state.redis_tasks.append(_task_id)
-            logger.get_logger(st.session_state.username).info("pushed add playlist beatmap task %s" % _task_id)
-            st.toast(_("submitted %d beatmap(s) to add") % len(specs_input))
+                # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
+                for url_input in urls_input_split:
+                    # 处理 BID
+                    bid_input = int(url_input.rsplit("/", 1)[-1])
+                    # 这里要提前转化 raw_mods 为 "; ".join(mods_ready)，一方面检验是否能序列化，另一方面查重并终止
+                    try:
+                        mods_ready_input = to_readable_mods(raw_mods_input)
+                    except (orjson.JSONDecodeError, ValueError, KeyError):
+                        st.error(_("invalid mods: %s") % raw_mods_input)
+                        continue
+                    mods_input = "; ".join(mods_ready_input)
+                    if check_beatmap_exists(bid_input, mods_input):
+                        st.toast(_("(%d %s) already exists, skipped" % (bid_input, mods_input)))
+                        continue
+                    validate_restricted_identifier(st.session_state.gen_form_pool)
+                    specs_input.append(
+                        BeatmapSpec(
+                            bid_input,
+                            raw_mods_input,
+                            slot_input,
+                            st.session_state.gen_form_pool or "",
+                            notes_input or "",
+                            0,
+                            "",
+                            st.session_state.username,
+                            time.time(),
+                        ),
+                    )
+                _task_id = push_task(r, "beatmap %s" % orjson.dumps([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
+                st.session_state.redis_tasks.append(_task_id)
+                save_value("redis_tasks")
+                logger.get_logger(st.session_state.username).info("pushed add playlist beatmap task %s" % _task_id)
+                st.toast(_("submitted %d beatmap(s) to add") % len(specs_input))
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -405,7 +409,7 @@ if st.session_state.perm >= 1:
         "SID",
         "ADD_TS",
     ]
-    df = df[desired_col_order].copy()
+    df: pd.DataFrame = df[desired_col_order].copy()
 
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_selection(selection_mode="multiple", use_checkbox=True, suppressRowClickSelection=True)
@@ -489,7 +493,7 @@ if st.session_state.perm >= 1:
         allow_unsafe_jscode=True,
         key=st.session_state.aggrid_key,
     )
-    if grid_response.data:
+    if grid_response.data is not None:
         edited_df = pd.DataFrame(grid_response.data)
     else:
         edited_df = pd.DataFrame()
@@ -504,7 +508,9 @@ if st.session_state.perm >= 1:
 
                 # 先索引原始 df，加快查找效率
                 orig_indexed = {(int(row.BID), str(row.MODS)): {c: getattr(row, c) for c in EDITABLE + ["MODS", "SUGGESTOR", "ADD_TS"]} for row in df.itertuples()}
+                specs_recalculate_valid = True
                 for edited_row in edited_df[["BID", "MODS"] + EDITABLE].itertuples():
+                    edited_row: tuple
                     edited_bid = int(edited_row.BID)
                     edited_mods = str(edited_row.MODS)
                     # 由于 MODS 在这里尚未更改，因此还是可以根据 BID + MODS 的组合定位原始表格中的对应行
@@ -541,23 +547,30 @@ if st.session_state.perm >= 1:
                             )
                         except orjson.JSONDecodeError:
                             st.toast(_("invalid JSON: %s") % edited_row.RAW_MODS)
-                            st.stop()
-                        except (ValueError, TypeError) as e:
-                            st.toast(_("invalid value: %s") % e)
-                            st.stop()
+                            specs_recalculate_valid = False
+                            break
+                        except (ValueError, TypeError):
+                            st.toast(_("invalid value: %s"))
+                            specs_recalculate_valid = False
+                            break
                         olds_to_drop.append((str(orig["MODS"]), new_primary))
                 # 同理，为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
-                beatmaps_to_update: list[BeatmapToUpdate] = []
-                for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate):
-                    if old_to_drop[1]:
-                        beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
-                    else:
-                        beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
-                _task_id = push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_update, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
-                st.session_state.redis_tasks.append(_task_id)
-                logger.get_logger(st.session_state.username).info("pushed update playlist beatmap task %s" % _task_id)
-                st.toast(_("submitted %d beatmap(s) to update") % len(beatmaps_to_update))
-                refresh()
+                if len(specs_recalculate) == 0:
+                    st.toast(_("no changes made"))
+                elif not specs_recalculate_valid:
+                    pass
+                else:
+                    beatmaps_to_update: list[BeatmapToUpdate] = []
+                    for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate):
+                        if old_to_drop[1]:
+                            beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
+                        else:
+                            beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
+                    _task_id = push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_update, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
+                    st.session_state.redis_tasks.append(_task_id)
+                    save_value("redis_tasks")
+                    logger.get_logger(st.session_state.username).info("pushed update playlist beatmap task %s" % _task_id)
+                    st.toast(_("submitted %d beatmap(s) to update") % len(beatmaps_to_update))
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh(clear_cache=True)
             if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
@@ -572,12 +585,13 @@ if st.session_state.perm >= 1:
                     required_rows = selected_rows[["BID", "MODS"]]
                     beatmaps_to_delete: list[BeatmapToUpdate] = []
                     for row in required_rows.itertuples(index=False):
+                        row: tuple
                         beatmaps_to_delete.append(BeatmapToUpdate(old_bid=int(row.BID), old_mods=str(row.MODS)))
                     _task_id = push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_delete, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
                     st.session_state.redis_tasks.append(_task_id)
+                    save_value("redis_tasks")
                     logger.get_logger(st.session_state.username).info("pushed delete playlist beatmap task %s" % _task_id)
                     st.toast(_("submitted %d beatmap(s) to delete") % len(beatmaps_to_delete))
-                refresh()
 
 st.divider()
 
