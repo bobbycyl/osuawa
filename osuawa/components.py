@@ -7,8 +7,9 @@ from collections import deque
 from datetime import date, datetime, time
 from secrets import token_hex
 from shutil import copyfile
-from typing import Any, Literal, Optional, TYPE_CHECKING
+from typing import Any, Literal, Optional, TYPE_CHECKING, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import orjson
 import pandas as pd
@@ -31,7 +32,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
+from osuawa.utils import CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
 
 if TYPE_CHECKING:
 
@@ -471,3 +472,65 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
         yaxis_title="Strain",
     )
     return fig
+
+
+def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
+    """以网格形式渲染任务"""
+
+    status_color = {
+        "pending": "#000000",
+        "success": "darkseagreen",
+        "error": "crimson",
+    }
+    # 使用 columns 网格布局
+    cols = st.columns(2)
+    for idx, (task_id, status_mapping) in enumerate(tasks):
+        with cols[(idx % 2)]:
+            with st.container(border=True):
+                # 状态指示器
+                _status = status_mapping["status"]
+                _result = status_mapping["result"]
+                _time = status_mapping["time"]
+                _dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
+                _command = status_mapping["command"]
+                status_color.get(_status, "#808080")
+
+                st.markdown(
+                    f"<div style='width: 10px; height: 10px; border-radius: 50%; " f"background-color: {status_color}; display: inline-block;'></div> " f"<span style='font-size: 12px; color: gray;'>ID: {task_id}</span>",
+                    unsafe_allow_html=True,
+                )
+
+                # 任务信息
+                st.markdown(f"**command:** `{_command}`")
+                st.caption(f"updated at: {_dt}")
+
+                # 状态显示
+                match _status:
+                    case "pending":
+                        st.spinner(_("pending..."))
+                    case "success":
+                        st.success("%s sub-tasks done" % _result)
+                    case "error":
+                        st.error(_result)
+                    case _:
+                        st.write(_result)
+
+
+def task_board():
+    tasks_to_show: list[tuple[RedisTaskId, dict[str, str]]] = []
+    for task_id in st.session_state.redis_tasks:
+        status_key = C.TASK_STATUS.value.format(task_id=task_id)
+        status_mapping: Optional[dict] = cast(Optional[dict], _r.hgetall(status_key))
+        if status_mapping:
+            tasks_to_show.append((task_id, status_mapping))
+
+    # 使用 tabs 分类显示
+    tab1, tab2, tab3, tab4 = st.tabs([":material/format_list_bulleted: all", ":material/pending: pending", ":material/check_circle: success", ":material/error: error"])
+    with tab1:
+        tasks_grid(tasks_to_show)
+    with tab2:
+        tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "pending"])
+    with tab3:
+        tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "success"])
+    with tab4:
+        tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "error"])

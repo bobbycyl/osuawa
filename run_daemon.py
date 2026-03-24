@@ -26,6 +26,10 @@ from osuawa.utils import BeatmapSpec, BeatmapToUpdate, C, CompletedPlaylistBeatm
 ST_CONFIG_FILENAME = "./.streamlit/config.toml"
 ST_SECRETS_FILENAME = "./.streamlit/secrets.toml"
 
+if not os.path.exists(C.LOGS.value):
+    os.mkdir(C.LOGS.value)
+if not os.path.exists(C.OAUTH_TOKEN_DIRECTORY.value):
+    os.mkdir(C.OAUTH_TOKEN_DIRECTORY.value)
 st_config = toml.load(ST_CONFIG_FILENAME)
 st_secrets = toml.load(ST_SECRETS_FILENAME)
 
@@ -225,9 +229,9 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
     # 如果 beatmap 不为 None，则第一位为 1
     # 如果 old_bid 和 old_mods 均不为 None，则第二位为 1
     # 如果结果为 00，则代表没有进行任何操作，raise ValueError
-    # 如果结果为 10，则代表新增谱面
+    # 如果结果为 10，则代表新增或原地更新谱面
     # 如果结果为 01，则代表删除谱面
-    # 如果结果为 11，则代表更新谱面
+    # 如果结果为 11，则代表更新原谱面模组
     action = 0b00
 
     if beatmap is not None:
@@ -289,13 +293,30 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
             raise ValueError("no changes made")
     verb_mapping = {
         0b01: "deleted",
-        0b10: "added",
-        0b11: "updated",
+        0b10: "updated",
+        0b11: "updated (%d %s) -> " % (action_bid, old_mods),
     }
     msg = "%s (%d %s)" % (verb_mapping[action], action_bid, action_mods)
-    if old_mods is not None:
-        msg += " from %s" % old_mods
     return msg
+
+
+def cleanup_ald_tasks_status():
+    """清理超过 1 小时未更新的任务状态"""
+    pattern = C.TASK_STATUS.value.format(task_id="*")
+    now = time()
+    cutoff = now - 3600  # 1小时前
+
+    for key in r.scan_iter(match=pattern):
+        # 获取任务的 time 字段
+        task_time = cast(Optional[str], r.hget(key, "time"))
+        if task_time:
+            try:
+                if float(task_time) < cutoff:
+                    r.delete(key)
+                    logger.info(f"cleaned up old task status: {key}")
+            except (ValueError, TypeError):
+                # 如果 time 字段格式不对，也删除
+                r.delete(key)
 
 
 def setup_scheduled_tasks():
@@ -304,12 +325,16 @@ def setup_scheduled_tasks():
         r,
         "update .*",
     )
+    schedule.every(1).hour.do(
+        cleanup_ald_tasks_status,
+    )
 
 
-def update_beatmaps(obj: list[BeatmapToUpdate]):
+def update_beatmaps(obj: list[BeatmapToUpdate]) -> str:
     beatmap_specs: list[BeatmapSpec] = []
     name = ""
     has_spec_list: list[bool] = []
+    msgs: list[str] = []
     for beatmap_to_update in obj:
         beatmap_spec: BeatmapSpec | list | None = beatmap_to_update.get("beatmap")  # JSON 反序列化时会自动转换为 list 类型，需要强制转换为 BeatmapSpec 类型
         if beatmap_spec is not None:
@@ -323,7 +348,8 @@ def update_beatmaps(obj: list[BeatmapToUpdate]):
         database_beatmap = database_beatmaps[i] if has_spec_list[i] else None
         old_bid = beatmap_to_update.get("old_bid")
         old_mods = beatmap_to_update.get("old_mods")
-        _update_beatmap(database_beatmap, old_bid, old_mods)
+        msgs.append(_update_beatmap(database_beatmap, old_bid, old_mods))
+    return "; ".join(msgs)
 
 
 if __name__ == "__main__":
@@ -340,13 +366,17 @@ if __name__ == "__main__":
     logger.setLevel(logging.DEBUG)
     logger.addHandler(ch)
     logger.addHandler(fh)
-    logger.info("Redis connected")
+    logger.info("redis connected")
 
+    push_task(
+        r,
+        "update .*",
+    )
     setup_scheduled_tasks()
 
     while True:
         try:
-            result: tuple[str, str] | None = cast(tuple[str, str], cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)))
+            result: Optional[tuple[str, str]] = cast(Optional[tuple[str, str]], cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)))
             if result is None:
                 continue
             task_info = result[1]
@@ -354,8 +384,8 @@ if __name__ == "__main__":
                 # task_info 结构为 uuid hex + command 的字符串拼接
                 task_id = task_info[:32]
                 task_cmd = task_info[32:]
-                logger.info(f"[{task_id}/started]: {task_cmd}")
                 g = cmdparser.parse_command(task_cmd)
+                logger.info(f"[{task_id}/started]: {task_cmd}")
                 while True:
                     try:
                         logger.info(f"[{task_id}/executing]: {next(g)}")
@@ -367,6 +397,7 @@ if __name__ == "__main__":
                                 "status": "success",
                                 "result": str(e.value),
                                 "time": time(),
+                                "command": task_cmd,
                             },
                         )
                         break
@@ -378,8 +409,11 @@ if __name__ == "__main__":
                                 "status": "error",
                                 "result": str(e),
                                 "time": time(),
+                                "command": task_cmd,
                             },
                         )
                         break
         except KeyboardInterrupt:
             break
+
+    logger.info("redis disconnected")

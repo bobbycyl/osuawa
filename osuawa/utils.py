@@ -571,6 +571,7 @@ def push_task(r: Redis, task_command: str) -> RedisTaskId:
             "status": "pending",
             "result": "",
             "time": time(),
+            "command": task_command,
         },
     )
     return RedisTaskId(task_id)
@@ -781,6 +782,12 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]
+
+
+def safe_norm(value, type_: type = str):
+    if pd.isna(value):
+        return None
+    return type_(value)
 
 
 def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:

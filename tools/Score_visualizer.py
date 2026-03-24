@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from typing import Optional, TYPE_CHECKING
 
 import pandas as pd
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
 init_page(_("Score visualizer") + " - osuawa")
 all_users = get_all_score_users()
 user = st.selectbox(_("user"), all_users)
-st.date_input(_("date range"), [pd.Timestamp.today() - pd.Timedelta(days=30), pd.Timestamp.today() + pd.Timedelta(days=1)], key="cat_date_range")
+st.date_input(_("date range"), [date.today() - timedelta(days=30), date.today() + timedelta(days=1)], key="cat_date_range")
 
 CO = "#FF6A6A"
 CC = "#4C95D9"
@@ -61,7 +62,7 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
     else:
         df2 = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     if st.session_state.cat_advanced_filter != "":
-        df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
+        df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter) or pd.DataFrame()
     else:
         df3 = df2
     return df3
