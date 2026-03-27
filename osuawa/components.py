@@ -32,7 +32,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import BeatmapSpec, CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
+from osuawa.utils import CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
 
 if TYPE_CHECKING:
 
@@ -482,44 +482,32 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
         "success": "darkseagreen",
         "error": "crimson",
     }
-    # 使用 columns 网格布局
+
     for idx, (task_id, status_mapping) in enumerate(tasks):
         with st.container(border=True):
-            _status = status_mapping["status"]
-            _result = status_mapping["result"]
+            status = status_mapping["status"]
+            _result = orjson.loads(status_mapping["result"])
+            final = _result["final"]
+            sub: list[str] = _result["sub"]
             _time = status_mapping["time"]
-            _dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
-            _command_name, params_json = status_mapping["command"].split(" ", 1)
-            status_color.get(_status, "#808080")
+            dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
+            status_color.get(status, "#808080")
 
-            st.text(_("Task ID: %s") % task_id)
-
-            # 任务信息
-            # todo: 真的需要这样做吗？
-            st.markdown(f"**command:** `{_command_name}`")
-            st.json(
-                [
-                    {
-                        "beatmap_spec": BeatmapSpec(*spec)._asdict() if (spec := p.get("beatmap")) is not None else None,
-                        "old_bid": p.get("old_bid"),
-                        "old_mods": p.get("old_mods"),
-                    }
-                    for p in orjson.loads(params_json)
-                ],
-                expanded=False,
-            )
-            st.caption(f"updated at: {_dt}")
+            st.text(_("Task %s") % task_id)
+            st.caption(f"updated at: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
 
             # 状态显示
-            match _status:
+            match status:
                 case "pending":
                     st.spinner(_("pending..."))
                 case "success":
-                    st.success("%s sub-tasks done" % _result)
+                    st.json(sub, expanded=False)
+                    st.success(final)
                 case "error":
-                    st.error(_result)
+                    st.json(sub, expanded=False)
+                    st.error(final)
                 case _:
-                    st.write(_result)
+                    st.json(_result, expanded=False)
 
 
 def task_board():

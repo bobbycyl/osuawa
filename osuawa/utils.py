@@ -571,7 +571,6 @@ def push_task(r: Redis, task_command: str) -> RedisTaskId:
             "status": "pending",
             "result": "",
             "time": time(),
-            "command": task_command,
         },
     )
     return RedisTaskId(task_id)

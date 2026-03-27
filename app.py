@@ -212,8 +212,9 @@ if "awa" not in st.session_state:
             logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, get_session_id()))
     except NotImplementedError:
         # 这一般是 token 过期了
-        if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):
+        if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])) and not st.session_state._debugging_mode:
             os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]))
+        # todo: 之前因为某些奇怪的原因把自动刷新去掉了，为了优化用户体验，以后可能还需要考虑如何加入自动刷新功能
         st.warning(_("OAuth2 token or code has expired. Please refresh the page."))
         prepare_bar.empty()
         if "code" in st.query_params:
