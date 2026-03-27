@@ -176,6 +176,15 @@ def default(obj):
     raise TypeError
 
 
+def push_beatmap_task(_b: list[BeatmapToUpdate], action: str) -> None:
+    _task_id = push_task(r, "beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
+    st.session_state.redis_tasks.append(_task_id)
+    save_value("redis_tasks")
+    msg = "task %s: %s %d beatmap(s)" % (_task_id, action, len(_b))
+    logger.get_logger(st.session_state.username).info(msg)
+    st.toast(msg)
+
+
 # noinspection PyUnreachableCode
 def refresh(clear_cache: bool = False) -> Never:
     conn.reset()
@@ -298,11 +307,7 @@ if st.session_state.perm >= 1:
                             time.time(),
                         ),
                     )
-                _task_id = push_task(r, "beatmap %s" % orjson.dumps([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
-                st.session_state.redis_tasks.append(_task_id)
-                save_value("redis_tasks")
-                logger.get_logger(st.session_state.username).info("pushed add playlist beatmap task %s" % _task_id)
-                st.toast(_("submitted %d beatmap(s) to add") % len(specs_input))
+                push_beatmap_task([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], _("add"))
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -566,16 +571,14 @@ if st.session_state.perm >= 1:
                             beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
                         else:
                             beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
-                    _task_id = push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_update, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
-                    st.session_state.redis_tasks.append(_task_id)
-                    save_value("redis_tasks")
-                    logger.get_logger(st.session_state.username).info("pushed update playlist beatmap task %s" % _task_id)
-                    st.toast(_("submitted %d beatmap(s) to update") % len(beatmaps_to_update))
+                    push_beatmap_task(beatmaps_to_update, _("update"))
             if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
                 refresh(clear_cache=True)
             if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
                 export_filtered_playlist()
+
     selected_rows = grid_response.selected_rows
+
     with col_del:
         with st.container(border=False, horizontal_alignment="right"):
             if st.button(_("Delete"), type="primary", use_container_width=True, icon=":material/delete:"):
@@ -587,11 +590,7 @@ if st.session_state.perm >= 1:
                     for row in required_rows.itertuples(index=False):
                         row: tuple
                         beatmaps_to_delete.append(BeatmapToUpdate(old_bid=int(row.BID), old_mods=str(row.MODS)))
-                    _task_id = push_task(r, "beatmap %s" % orjson.dumps(beatmaps_to_delete, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
-                    st.session_state.redis_tasks.append(_task_id)
-                    save_value("redis_tasks")
-                    logger.get_logger(st.session_state.username).info("pushed delete playlist beatmap task %s" % _task_id)
-                    st.toast(_("submitted %d beatmap(s) to delete") % len(beatmaps_to_delete))
+                    push_beatmap_task(beatmaps_to_delete, _("delete"))
 
 st.divider()
 

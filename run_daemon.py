@@ -9,8 +9,9 @@ import os
 import os.path
 from dataclasses import asdict
 from datetime import datetime
+from shutil import rmtree
 from time import time
-from typing import Optional, cast
+from typing import Literal, Optional, cast
 
 import orjson
 import redis
@@ -79,7 +80,7 @@ def commands():
             "beatmap",
             "update beatmaps",
             [
-                JsonStr("obj"),
+                JsonStr("obj", True),
             ],
             0,
             update_beatmaps,
@@ -210,10 +211,11 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     # 删除临时文件
     if os.path.exists(tmp_playlist_filename):
         os.remove(tmp_playlist_filename)
+    rmtree(tmp_playlist.tmp_dir)
     return playlist_beatmaps_db
 
 
-def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> str:
+def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> tuple[Literal[0b00, 0b01, 0b10, 0b11], int, str, Optional[str]]:
     """更新课题谱面（包括删除）
 
     如果 beatmap 不为 None，则 old_bid 必须为 None
@@ -221,18 +223,18 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
     :param beatmap: 欲更新的谱面
     :param old_bid: 欲删除的 BID（主键之一）
     :param old_mods: 欲删除的 MODS（主键之二）
-    :return 结果消息
+    :return (action, action_bid, action_mods, old_mods)
     """
     # 操作符号（二进制）: 0                0
     #                     ^                ^
-    #             第一位代表更新   第二位代表删除
+    #             第一位代表插入   第二位代表删除
     # 如果 beatmap 不为 None，则第一位为 1
     # 如果 old_bid 和 old_mods 均不为 None，则第二位为 1
     # 如果结果为 00，则代表没有进行任何操作，raise ValueError
-    # 如果结果为 10，则代表新增或原地更新谱面
     # 如果结果为 01，则代表删除谱面
+    # 如果结果为 10，则代表新增或原地更新谱面
     # 如果结果为 11，则代表更新原谱面模组
-    action = 0b00
+    action: Literal[0b00, 0b01, 0b10, 0b11] = 0b00
 
     if beatmap is not None:
         # 如果 beatmap 不为 None，old_bid 从 beatmap 中获取
@@ -240,6 +242,7 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
             # 提供 beatmap 意味着更新/修改，此时不允许删除操作
             raise ValueError("cannot update a beatmap from another bid")
         old_bid = beatmap["BID"]
+        # 由于主键约束，如果同时提供 beatmap 和 old_mods，则应该先删除老的谱面，再插入新的谱面
 
     with engine.begin() as conn:
         action_bid: int
@@ -291,13 +294,8 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
             )
         if action == 0b00:
             raise ValueError("no changes made")
-    verb_mapping = {
-        0b01: "deleted",
-        0b10: "updated",
-        0b11: "updated (%d %s) -> " % (action_bid, old_mods),
-    }
-    msg = "%s (%d %s)" % (verb_mapping[action], action_bid, action_mods)
-    return msg
+    mods_change = action_mods
+    return action, action_bid, mods_change, old_mods
 
 
 def cleanup_ald_tasks_status():
@@ -330,11 +328,14 @@ def setup_scheduled_tasks():
     )
 
 
-def update_beatmaps(obj: list[BeatmapToUpdate]) -> str:
+def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
+    if obj is None:
+        obj: list[BeatmapToUpdate] = []
     beatmap_specs: list[BeatmapSpec] = []
     name = ""
     has_spec_list: list[bool] = []
-    msgs: list[str] = []
+    update_list: list[tuple[int, str]] = []
+    delete_list: list[tuple[int, str]] = []
     for beatmap_to_update in obj:
         beatmap_spec: BeatmapSpec | list | None = beatmap_to_update.get("beatmap")  # JSON 反序列化时会自动转换为 list 类型，需要强制转换为 BeatmapSpec 类型
         if beatmap_spec is not None:
@@ -348,8 +349,31 @@ def update_beatmaps(obj: list[BeatmapToUpdate]) -> str:
         database_beatmap = database_beatmaps[i] if has_spec_list[i] else None
         old_bid = beatmap_to_update.get("old_bid")
         old_mods = beatmap_to_update.get("old_mods")
-        msgs.append(_update_beatmap(database_beatmap, old_bid, old_mods))
-    return "; ".join(msgs)
+        action, action_bid, action_mods, old_mods = _update_beatmap(database_beatmap, old_bid, old_mods)
+        match action:
+            case 0b01:  # delete
+                delete_list.append((action_bid, action_mods))
+            case 0b10:  # update
+                update_list.append((action_bid, action_mods))
+            case 0b11:  # update from old mods
+                update_list.append((action_bid, "%s -> %s" % (old_mods, action_mods)))
+
+    if len(update_list) > 1:
+        # > [(bid1, mods1), (bid2, mods2), ...]
+        update_str = "> %s" % str(update_list)
+    elif len(update_list) > 0:
+        # > (bid, mods)
+        update_str = "> (%s, %s)" % update_list[0]
+    else:
+        update_str = ""
+    if len(delete_list) > 1:
+        delete_str = "- %s" % str(delete_list)
+    elif len(delete_list) > 0:
+        delete_str = "- (%s, %s)" % delete_list[0]
+    else:
+        delete_str = ""
+
+    return ("%s; %s" % (update_str, delete_str)).strip("; ")
 
 
 if __name__ == "__main__":
@@ -387,17 +411,25 @@ if __name__ == "__main__":
                 g = cmdparser.parse_command(task_cmd)
                 logger.info(f"[{task_id}/started]: {task_cmd}")
                 while True:
+                    sub_task_results: list[str] = []
                     try:
-                        logger.info(f"[{task_id}/executing]: {next(g)}")
+                        # todo: 是否需要用 pickle + base64 完成通用序列化？目前暂时用 str 强制转换
+                        _sub_task_result = str(next(g))
+                        sub_task_results.append(_sub_task_result)
+                        logger.info(f"[{task_id}/executing]: {_sub_task_result}")
                     except StopIteration as e:
                         logger.info(f"[{task_id}/success]: {e.value} sub-tasks done")
                         r.hset(
                             C.TASK_STATUS.value.format(task_id=task_id),
                             mapping={
                                 "status": "success",
-                                "result": str(e.value),
+                                "result": orjson.dumps(
+                                    {
+                                        "final": str(e.value),
+                                        "sub": sub_task_results,
+                                    },
+                                ).decode(),
                                 "time": time(),
-                                "command": task_cmd,
                             },
                         )
                         break
@@ -407,9 +439,13 @@ if __name__ == "__main__":
                             C.TASK_STATUS.value.format(task_id=task_id),
                             mapping={
                                 "status": "error",
-                                "result": str(e),
+                                "result": orjson.dumps(
+                                    {
+                                        "final": str(e),
+                                        "sub": sub_task_results,
+                                    },
+                                ).decode(),
                                 "time": time(),
-                                "command": task_cmd,
                             },
                         )
                         break
