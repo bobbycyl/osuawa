@@ -227,10 +227,7 @@ if "awa" not in st.session_state:
         st.session_state.perm = 4
     prepare_bar.empty()
 
-if st.session_state.perm < 2:
-    pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder])
-else:
-    pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
+pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder]) if st.session_state.perm < 2 else st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
 init_logger()
 register_commands({"simple": True})
 

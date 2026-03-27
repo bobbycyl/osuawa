@@ -25,18 +25,12 @@ CC = "#4C95D9"
 
 
 def calc_pp_overall_main(data: pd.DataFrame, tag: Optional[str] = None) -> str:
-    if tag is None:
-        df_tag = data
-    else:
-        df_tag = data[data[tag]]
+    df_tag = data if tag is None else data[data[tag]]
     return "%.2f (%.2f%%)" % (df_tag["pp"].sum(), df_tag["pp"].sum() / data["pp"].sum() * 100)
 
 
 def calc_pp_overall_if(data: pd.DataFrame, tag: Optional[str] = None) -> str:
-    if tag is None:
-        df_tag = data
-    else:
-        df_tag = data[data[tag]]
+    df_tag = data if tag is None else data[data[tag]]
     got_pp = df_tag["pp"].sum()
     pp_100if = df_tag["b_pp_100if"].sum()
     pp_92if = df_tag["b_pp_92if"].sum()
@@ -46,10 +40,7 @@ def calc_pp_overall_if(data: pd.DataFrame, tag: Optional[str] = None) -> str:
 
 
 def calc_pp_overall_count(data: pd.DataFrame, tag: Optional[str] = None) -> str:
-    if tag is None:
-        df_tag = data
-    else:
-        df_tag = data[data[tag]]
+    df_tag = data if tag is None else data[data[tag]]
     return "%d (%.2f%%)" % (len(df_tag), len(df_tag) / len(data) * 100)
 
 

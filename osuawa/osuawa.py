@@ -509,13 +509,14 @@ class OsuPlaylist(object):
                 else:
                     extra_notes += "<br />%s: %s" % (column, element[column])  # type: ignore[literal-required]
 
-            if root_mod != last_root_mod and last_root_mod != "":
-                beatmap_info = """    </div>
+            beatmap_info = (
+                """    </div>
     <div class="p-4"><br /></div>
     <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
 """
-            else:
-                beatmap_info = ""
+                if root_mod != last_root_mod and last_root_mod != ""
+                else ""
+            )
             beatmap_info += f'''      <div class="group relative">
         <div
           class="relative h-32 rounded-lg overflow-hidden shadow-lg transition-all duration-300 transform group-hover:rounded-b-none group-hover:h-64 group-hover:-translate-y-3">

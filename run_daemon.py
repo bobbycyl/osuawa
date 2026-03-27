@@ -170,8 +170,8 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     try:
         tmp_playlist = OsuPlaylist(daemon_awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
         playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = daemon_awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
-    except:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup  # noqa: E722
-        raise ValueError("failed to parse the spec(s): %s" % beatmap_specs)
+    except Exception as e:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup  # noqa: E722
+        raise ValueError("failed to parse the spec(s): %s" % beatmap_specs) from e
     # playlist_beatmaps_raw 的顺序可能和传入的 specs 顺序不一致
     # 原始 beatmap 的键应包含如下
     # # BID, SID, Artist - Title (Creator) [Version], Stars, SR, BPM, Hit Length, Max Combo, CS, AR, OD, Mods, Notes, slot
@@ -410,8 +410,8 @@ if __name__ == "__main__":
                 task_cmd = task_info[32:]
                 g = cmdparser.parse_command(task_cmd)
                 logger.info(f"[{task_id}/started]: {task_cmd}")
+                sub_task_results: list[str] = []
                 while True:
-                    sub_task_results: list[str] = []
                     try:
                         # todo: 是否需要用 pickle + base64 完成通用序列化？目前暂时用 str 强制转换
                         _sub_task_result = str(next(g))

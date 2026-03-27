@@ -3,6 +3,7 @@ osuawa.py and utils.py should not contain i18n related text and streamlit relate
 """
 
 import asyncio
+import contextlib
 import os
 import re
 import uuid
@@ -245,19 +246,12 @@ def calc_accuracy(hit_window: float) -> float:
 
 
 def calc_preempt(original_ar: float, magnitude: float = 1.0) -> float:
-    if original_ar < 5.0:
-        preempt = 1200.0 + 600.0 * (5.0 - original_ar) / 5.0
-    else:
-        preempt = 1200.0 - 750 * (original_ar - 5.0) / 5.0
+    preempt = 1200.0 + 600.0 * (5.0 - original_ar) / 5.0 if original_ar < 5.0 else 1200.0 - 750 * (original_ar - 5.0) / 5.0
     return preempt / magnitude
 
 
 def calc_ar(preempt: float) -> float:
-    if preempt > 1200.0:
-        ar = 5.0 - (preempt - 1200.0) / 600 * 5.0
-    else:
-        ar = 5.0 + (1200.0 - preempt) / 750 * 5.0
-    return ar
+    return 5.0 - (preempt - 1200.0) / 600 * 5.0 if preempt > 1200.0 else 5.0 + (1200.0 - preempt) / 750 * 5.0
 
 
 class SimpleOsuDifficultyAttribute(object):
@@ -713,7 +707,7 @@ def get_size_and_count(path):
     elif os.path.isdir(path):
         total_size = 0
         total_count = 0
-        for root, dirs, filenames in os.walk(path):
+        for root, _dirs, filenames in os.walk(path):
             for filename in filenames:
                 filepath = os.path.join(str(root), str(filename))
                 total_size += os.path.getsize(filepath)
@@ -774,10 +768,8 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                 elif value == "false":
                     value = False
                 else:
-                    try:
+                    with contextlib.suppress(ValueError):
                         value = float(value)
-                    except ValueError:
-                        pass
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]

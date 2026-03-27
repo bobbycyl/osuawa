@@ -125,9 +125,8 @@ user_scores_current = st.session_state.awa.run_coro(
     ),
 )
 st.write(user_scores_current)
-with threading.Lock():
-    with open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w", encoding="utf-8") as fo:
-        fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
+with threading.Lock(), open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w", encoding="utf-8") as fo:
+    fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
 
 if st.button(_("clear all caches"), icon=":material/cleaning_services:"):
     st.cache_data.clear()
