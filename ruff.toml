@@ -1,5 +1,18 @@
+line-length = 255
+
 [lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+]
 ignore = [
     "E402",
+    "E501",
     "E731",
 ]

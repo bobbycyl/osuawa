@@ -164,7 +164,7 @@ def commands():
             _("save user recent scores"),
             [Int("user")],
             1,
-            lambda user: push_task(_r, "save %d" % user),
+            lambda user: push_task_with_session_state("save %d" % user),
         ),
         Command("score", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
         Command(
@@ -474,6 +474,13 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
     return fig
 
 
+def push_task_with_session_state(task_command: str) -> str:
+    _task_id = push_task(_r, task_command)
+    st.session_state.redis_tasks.append(_task_id)
+    save_value("redis_tasks")
+    return "queued task: `%s`" % _task_id
+
+
 def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
     """以网格形式渲染任务"""
 
@@ -483,7 +490,7 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
         "error": "crimson",
     }
 
-    for idx, (task_id, status_mapping) in enumerate(tasks):
+    for idx, (task_id, status_mapping) in enumerate(tasks, start=1):
         with st.container(border=True):
             status = status_mapping["status"]
             _result = orjson.loads(status_mapping["result"])
@@ -493,8 +500,7 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
             dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
             status_color.get(status, "#808080")
 
-            st.text(_("Task %s") % task_id)
-            st.caption(f"updated at: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.text(_("#%d: %s") % (idx, task_id))
 
             # 状态显示
             match status:
@@ -502,12 +508,14 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
                     st.spinner(_("pending..."))
                 case "success":
                     st.json(sub, expanded=False)
-                    st.success(final)
+                    st.success(_("%d sub-tasks done") % int(final))
                 case "error":
                     st.json(sub, expanded=False)
                     st.error(final)
                 case _:
                     st.json(_result, expanded=False)
+
+            st.caption(f"updated at: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def task_board():
