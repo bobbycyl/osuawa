@@ -1,5 +1,6 @@
+from collections.abc import Generator
 from time import sleep
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import streamlit as st
 from clayutil.cmdparse import (
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 init_page(_("Homepage") + " - osuawa")
 
 
-def run(g):
+def run(g: Generator[Any, Any, int]):
     while True:
         try:
             st.write(next(g))
@@ -28,7 +29,7 @@ def run(g):
             st.error(e)
             continue
         except StopIteration as e:
-            st.success(_("%d sub-tasks done") % e.value)
+            st.success(_("%d sub-tasks done") % (e.value or 0))
             break
         except (Error, NotImplementedError) as e:
             logger.get_logger("streamlit").exception(e)

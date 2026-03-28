@@ -81,12 +81,12 @@ def load_value(key: str, default_value: Any) -> None:
 
 def memorized_multiselect(label: str, key: str, options: list, default_value: Any) -> None:
     load_value(key, default_value)
-    st.multiselect(label, options, key=key, on_change=save_value, args=(key,))
+    st.multiselect(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled)
 
 
 def memorized_selectbox(label: str, key: str, options: list, default_value: Any) -> None:
     load_value(key, default_value)
-    st.selectbox(label, options, key=key, on_change=save_value, args=(key,))
+    st.selectbox(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled)
 
 
 def get_session_id() -> str:
