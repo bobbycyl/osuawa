@@ -493,9 +493,9 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
     for idx, (task_id, status_mapping) in enumerate(tasks, start=1):
         with st.container(border=True):
             status = status_mapping["status"]
-            _result = orjson.loads(status_mapping["result"])
-            final = _result["final"]
-            sub: list[str] = _result["sub"]
+            _result = orjson.loads(status_mapping["result"] or "{}")
+            final = _result.get("final", "0")
+            sub: list[str] = _result.get("sub", [])
             _time = status_mapping["time"]
             dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
             status_color.get(status, "#808080")
@@ -515,7 +515,7 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
                 case _:
                     st.json(_result, expanded=False)
 
-            st.caption(f"updated at: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.caption(f"updated at: {dt.strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
 
 
 def task_board():

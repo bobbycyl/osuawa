@@ -1,9 +1,9 @@
 clayutil @ git+https://github.com/bobbycyl/ClayUtilities.git
 osupp @ git+https://github.com/bobbycyl/osupp.git
+SQLAlchemy
 babel
 fonttools
 matplotlib
-mysqlclient
 numpy
 orjson
 ossapi[async]
@@ -12,8 +12,8 @@ pillow
 plotly
 psycopg2-binary
 py7zr
+pymysql
 redis
-SQLAlchemy
 schedule
 scipy
 slider
