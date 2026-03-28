@@ -839,7 +839,7 @@ def _make_query_uppercase(original_query_func):
 
 def _build_upsert(dialect: str, update_fields: list[str], conflict_columns: list[str]) -> str:
     """构建自适应的 upsert SQL 字符串"""
-    if dialect == "mysql":
+    if dialect[:5] == "mysql":
         updates = ", ".join([f"{k} = VALUES({k})" for k in update_fields])
         sql = f"ON DUPLICATE KEY UPDATE {updates}"
     else:
@@ -851,7 +851,7 @@ def _build_upsert(dialect: str, update_fields: list[str], conflict_columns: list
 
 def _build_update_ignore(dialect: str, body: str, conflict_columns: list[str]) -> str:
     """构建自适应的 update ignore SQL 字符串"""
-    if dialect == "mysql":
+    if dialect[:5] == "mysql":
         sql = f"{body[:6]} IGNORE {body[7:]}"
     else:
         suffix = f"ON CONFLICT ({', '.join(conflict_columns)}) DO NOTHING"
