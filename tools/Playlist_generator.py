@@ -188,7 +188,7 @@ def refresh(clear_cache: bool = False) -> Never:
     conn.reset()
     st.session_state.aggrid_key = str(uuid4())
     if clear_cache:
-        st.cache_data.clear()
+        pass
     st.rerun()
     raise  # 给 mypy 看的补丁
 
@@ -200,6 +200,7 @@ def generate_playlist(filename: str, css_style: Optional[int] = None):
     return playlist.generate()
 
 
+@st.cache_data(ttl=12)
 def check_beatmap_exists(bid: int, mods: str) -> bool:
     bid = int(bid)
     mods = str(mods)
@@ -239,7 +240,8 @@ if st.session_state.perm >= 1:
         """SELECT DISTINCT POOL
            FROM BEATMAP
            ORDER BY POOL""",
-        ttl=0,
+        ttl=12,
+        show_spinner=_("querying available pools"),
     )["POOL"].to_list()
     if len(available_pools) == 0:
         available_pools.append("_DEFAULT_POOL")
@@ -337,14 +339,16 @@ if st.session_state.perm >= 1:
            FROM BEATMAP
            GROUP BY BID
            HAVING COUNT(*) > 1""",
-        ttl=0,
+        ttl=12,
+        show_spinner=_("querying duplicate BIDs"),
     )["BID"].to_list()
     duplicate_songs_raw = conn.query(
         """SELECT U_ARTIST, U_TITLE
            FROM BEATMAP
            GROUP BY U_ARTIST, U_TITLE
            HAVING COUNT(*) > 1""",
-        ttl=0,
+        ttl=12,
+        show_spinner=_("querying duplicate song names"),
     )
     duplicate_songs = (duplicate_songs_raw["U_ARTIST"] + " " + duplicate_songs_raw["U_TITLE"]).to_list()
 
@@ -360,7 +364,7 @@ if st.session_state.perm >= 1:
     if st.session_state.gen_filter_status != -1:
         filter_query += " AND STATUS = :status"
         filter_params["status"] = st.session_state.gen_filter_status
-    df: pd.DataFrame = conn.query(filter_query, ttl=0, params=filter_params)
+    df: pd.DataFrame = conn.query(filter_query, ttl=12, show_spinner=_("querying the playlist"),params=filter_params)
 
     # keywords 的筛选用 pandas 完成，从 bid、sid、info、slot、mods、notes 中查找包含输入内容的条目
     if st.session_state.gen_filter_search:

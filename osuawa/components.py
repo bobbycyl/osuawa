@@ -314,6 +314,7 @@ def get_all_score_users() -> list[int]:
         FROM SCORE
         ORDER BY USER_ID""",
         ttl=0,
+        show_spinner=_("querying the user list"),
     )["USER_ID"].to_list()
 
 
