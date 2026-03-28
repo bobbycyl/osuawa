@@ -829,8 +829,8 @@ def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
 def _make_query_uppercase(original_query_func):
     """一个补丁，用于解决从数据库获取数据时列名小写的问题，使其与原始设计（使用 sqlite）保持一致"""
 
-    def wrapper(sql, ttl=None, **kwargs):
-        df = original_query_func(sql, ttl=ttl, **kwargs)
+    def wrapper(sql, ttl=None, show_spinner: bool | str = False, **kwargs):
+        df = original_query_func(sql, ttl=ttl, show_spinner=show_spinner, **kwargs)
         df.columns = df.columns.str.upper()
         return df
 
