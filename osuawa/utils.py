@@ -78,6 +78,15 @@ class ColorBar(Enum):
     YP_B = [251, 255, 213, 79, 92, 104, 111, 184, 222, 142, 0]
 
 
+@unique
+class ColorTextBar(Enum):
+    # https://github.com/ppy/osu/blob/master/osu.Game/Graphics/OsuColour.cs
+    XP = [9.0, 9.9, 10.6, 11.5, 12.4]
+    YP_R = [246, 255, 255, 198, 101]
+    YP_G = [240, 128, 78, 69, 99]
+    YP_B = [92, 104, 111, 185, 222]
+
+
 @filelock(3)
 def update_user_cache(user: int, username: str, ids: Optional[list[str]] = None, lck_name: str = "USER_CACHE") -> None:
     """
@@ -689,15 +698,28 @@ def calc_positive_percent(score: int | float | None, min_score: int | float, max
 
 
 def calc_star_rating_color(stars: float) -> str:
-    if stars < 0.1:
+    if stars < ColorBar.XP.value[0]:
         return "#aaaaaa"
-    elif stars > 9.0:
+    elif stars > ColorBar.XP.value[-1]:
         return "#000000"
     else:
         interp_r = np.interp(stars, ColorBar.XP.value, ColorBar.YP_R.value)
         interp_g = np.interp(stars, ColorBar.XP.value, ColorBar.YP_G.value)
         interp_b = np.interp(stars, ColorBar.XP.value, ColorBar.YP_B.value)
         return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))
+
+
+def calc_high_star_rating_text_color(stars: float, new_style: bool = True) -> str:
+    if stars < 6.5:
+        raise ValueError("stars must be at least 6.5")
+    elif stars < 9.0:
+        return "#f0dd55"
+    else:
+        interp_r = np.interp(stars, ColorTextBar.XP.value, ColorTextBar.YP_R.value)
+        interp_g = np.interp(stars, ColorTextBar.XP.value, ColorTextBar.YP_G.value)
+        interp_b = np.interp(stars, ColorTextBar.XP.value, ColorTextBar.YP_B.value)
+        return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))
+
 
 
 def get_size_and_count(path):
