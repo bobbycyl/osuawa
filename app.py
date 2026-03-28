@@ -52,7 +52,6 @@ def gettext_translate(text):
     return st.session_state.translate(text)
 
 
-@st.cache_data
 def init_logger():
     fh = logging.FileHandler(os.path.join(C.LOGS.value, "streamlit.log"), encoding="utf-8")
     fh.setFormatter(logging.Formatter(st.get_option("logger.messageFormat")))
