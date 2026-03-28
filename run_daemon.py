@@ -29,6 +29,22 @@ from osuawa.utils import BeatmapSpec, BeatmapToUpdate, C, CompletedPlaylistBeatm
 st_config = toml.load("./.streamlit/config.toml")
 st_secrets = toml.load("./.streamlit/secrets.toml")
 
+# 路径创建
+if not os.path.exists(C.LOGS.value):
+    os.mkdir(C.LOGS.value)
+if not os.path.exists(C.OUTPUT_DIRECTORY.value):
+    os.mkdir(C.OUTPUT_DIRECTORY.value)
+if not os.path.exists(C.STATIC_DIRECTORY.value):
+    os.mkdir(C.STATIC_DIRECTORY.value)
+if not os.path.exists(C.UPLOADED_DIRECTORY.value):
+    os.mkdir(C.UPLOADED_DIRECTORY.value)
+if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
+    os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
+if not os.path.exists(C.OAUTH_TOKEN_DIRECTORY.value):
+    os.mkdir(C.OAUTH_TOKEN_DIRECTORY.value)
+if not os.path.exists(C.COMPONENTS_SHELVES_DIRECTORY.value):
+    os.mkdir(C.COMPONENTS_SHELVES_DIRECTORY.value)
+
 # asyncio event loop
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
@@ -83,18 +99,6 @@ logger.info("redis connected")
 daemon_awa = Osuawa(loop, st_secrets["args"]["client_id"], st_secrets["args"]["client_secret"], None, [Scope.PUBLIC.value], Domain.OSU.value, "daemon", None, None)
 logger.info("osu! api initialized")
 sem = asyncio.Semaphore(1)
-
-# 半持久化保存
-if not os.path.exists(C.LOGS.value):
-    os.mkdir(C.LOGS.value)
-if not os.path.exists(C.OUTPUT_DIRECTORY.value):
-    os.mkdir(C.OUTPUT_DIRECTORY.value)
-if not os.path.exists(C.STATIC_DIRECTORY.value):
-    os.mkdir(C.STATIC_DIRECTORY.value)
-if not os.path.exists(C.UPLOADED_DIRECTORY.value):
-    os.mkdir(C.UPLOADED_DIRECTORY.value)
-if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
-    os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
 
 # 数据库需要以下表和字段
 # 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键

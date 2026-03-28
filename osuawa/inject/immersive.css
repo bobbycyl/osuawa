@@ -1,0 +1,18 @@
+section[data-testid="stSidebar"] {
+    display: none !important;
+}
+
+.stMainBlockContainer {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 1rem !important;
+    max-width: 100% !important;
+}
+
+div.stAgGrid {
+    height: 100vh !important;
+}
+
+header[data-testid="stHeader"] {
+    display: none !important;
+}

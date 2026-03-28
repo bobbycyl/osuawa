@@ -117,9 +117,6 @@ def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
         st.stop()
 
 
-project_dir = os.path.join(str(os.path.dirname(__file__)), "..")
-
-
 @st.cache_resource
 def get_redis_connection():
     r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
@@ -187,7 +184,7 @@ def commands():
 
 
 def files_action(action: Literal["show", "clean"], filename: Optional[str] = None) -> str:
-    if filename is not None and ".." in os.path.relpath(filename, project_dir):
+    if filename is not None and ".." in os.path.relpath(filename, os.path.abspath(".")):
         raise ValueError("parent directory access is not allowed")
     ret_md = ""
     match action:
@@ -198,32 +195,30 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
                 # 三个主要文件夹
                 # todo: components shelves 是否需要检查
                 ret_md += "## Storage\n\n"
-                for _path in [C.OUTPUT_DIRECTORY.value, C.UPLOADED_DIRECTORY.value, C.BEATMAPS_CACHE_DIRECTORY.value]:
-                    action_path = os.path.join(project_dir, _path)
+                for action_path in [C.OUTPUT_DIRECTORY.value, C.UPLOADED_DIRECTORY.value, C.BEATMAPS_CACHE_DIRECTORY.value]:
                     size, count = get_size_and_count(action_path)
                     size = format_size(size)
-                    # - **_path**: size, count
-                    ret_md += f"- **{_path}**: {size}, {count}\n\n"
+                    # - **action_path**: size, count
+                    ret_md += f"- **{action_path}**: {size}, {count}\n\n"
                 # 检查 *LCK ./*LCK
                 ret_md += "## Lock Files\n\n"
-                for _path in os.listdir(os.path.join(project_dir)):
-                    if _path.endswith(".LCK"):
-                        ret_md += f"- {_path}\n\n"
+                for action_path in os.listdir():
+                    if action_path.endswith(".LCK"):
+                        ret_md += f"- {action_path}\n\n"
                 # 检查 token pickle ./.streamlit/.oauth/*.pickle
                 ret_md += "## Token Pickles\n\n"
-                for _path in os.listdir(os.path.join(project_dir, C.OAUTH_TOKEN_DIRECTORY.value)):
-                    if _path.endswith(".pickle"):
-                        ret_md += f"- {_path}\n\n"
+                for action_path in os.listdir(C.OAUTH_TOKEN_DIRECTORY.value):
+                    if action_path.endswith(".pickle"):
+                        ret_md += f"- {action_path}\n\n"
             else:
-                _path = os.path.join(project_dir, filename)
-                if os.path.exists(_path):
-                    if os.path.isfile(_path):
+                if os.path.exists(filename):
+                    if os.path.isfile(filename):
                         # cat 前 10000 个字符
-                        with open(_path, "r", encoding="utf-8") as fi:
+                        with open(filename, "r", encoding="utf-8") as fi:
                             ret_md += fi.read(10000)
                             ret_md += "(truncated)\n\n"
                     else:
-                        size, count = get_size_and_count(_path)
+                        size, count = get_size_and_count(filename)
                         size = format_size(size)
                         ret_md += f"- **{filename}**: {size}, {count}\n\n"
         case "clean":
@@ -233,13 +228,12 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
             else:
                 # 删除文件或文件夹
                 ret_md += "# Clean Files\n\n"
-                _path = os.path.join(project_dir, filename)
-                if os.path.exists(_path):
-                    if os.path.isfile(_path):
-                        os.remove(_path)
+                if os.path.exists(filename):
+                    if os.path.isfile(filename):
+                        os.remove(filename)
                         ret_md += f"cleaned the file: {filename}"
                     else:
-                        shutil.rmtree(_path)
+                        shutil.rmtree(filename)
                         ret_md += f"cleaned the whole directory: {filename}"
                 else:
                     ret_md += f"{filename} not found"
@@ -250,7 +244,7 @@ def log_action(n: int = 100, keyword: Optional[str] = None) -> str:
     ret_md = "# Show last %d lines of logs" % n
     for log_filename in ["streamlit.log", "daemon.log"]:
         ret_md += "## %s" % log_filename
-        log_filename = os.path.join(project_dir, C.LOGS.value, log_filename)
+        log_filename = os.path.join(C.LOGS.value, log_filename)
         with open(log_filename, "r", encoding="utf-8") as fi:
             # 先拿到最后 N 行
             last_lines = deque(fi, maxlen=n)

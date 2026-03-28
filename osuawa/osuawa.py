@@ -31,37 +31,36 @@ import numpy as np
 import orjson
 import pandas as pd
 
-assets_dir: str = os.path.dirname(__file__)
+from .utils import (
+    C,
+    CompletedPlaylistBeatmap,
+    CompletedSimpleScoreInfo,
+    ExtendedSimpleScoreInfo,
+    ParsedPlaylistBeatmap,
+    SimpleOsuDifficultyAttribute,
+    SimpleScoreInfo,
+    assets_dir,
+    async_get_beatmaps_dict,
+    async_get_user_info,
+    calc_beatmap_attributes,
+    calc_high_star_rating_text_color,
+    calc_positive_percent,
+    calc_star_rating_color,
+    calculate_difficulty,
+    download_osu,
+    headers,
+    simple_user_dict,
+    strip_quotes,
+    to_readable_mods,
+)
+
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
 from clayutil.futil import Downloader, Properties
 from clayutil.validator import Integer
-
 from fontfallback import writing
-from ossapi.ossapiv2_async import Grant, OssapiAsync, Domain, Scope, Score, User, GameMode, Beatmap
-
-from .utils import (
-    ExtendedSimpleScoreInfo,
-    SimpleOsuDifficultyAttribute,
-    calc_beatmap_attributes,
-    calc_high_star_rating_text_color,
-    calc_positive_percent,
-    calc_star_rating_color,
-    download_osu,
-    CompletedSimpleScoreInfo,
-    async_get_beatmaps_dict,
-    strip_quotes,
-    to_readable_mods,
-    SimpleScoreInfo,
-    C,
-    headers,
-    async_get_user_info,
-    simple_user_dict,
-    calculate_difficulty,
-    ParsedPlaylistBeatmap,
-    CompletedPlaylistBeatmap,
-)
+from ossapi.ossapiv2_async import Beatmap, Domain, GameMode, Grant, OssapiAsync, Scope, Score, User
 
 assert datetime
 

@@ -18,7 +18,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import get_session_id, load_value, register_commands, task_board
-from osuawa.utils import RedisTaskId, create_unique_picker, update_user_cache
+from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code, update_user_cache
 
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
@@ -202,28 +202,7 @@ if "immersive_active" not in st.session_state:
 if "immersive_toggled" not in st.session_state:
     st.session_state.immersive_toggled = False
 
-IMMERSIVE_CSS = """
-<style>
-    section[data-testid="stSidebar"] {
-        display: none !important;
-    }
-
-    .stMainBlockContainer {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        padding-top: 1rem !important;
-        max-width: 100% !important;
-    }
-
-    div.stAgGrid { 
-        height: 100vh !important;
-    }
-
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
-</style>
-"""
+IMMERSIVE_CSS = read_injected_code("immersive.css")
 
 # 根据状态注入 CSS
 if st.session_state.immersive_active:
