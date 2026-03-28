@@ -713,7 +713,8 @@ def calc_high_star_rating_text_color(stars: float, new_style: bool = True) -> st
     if stars < 6.5:
         raise ValueError("stars must be at least 6.5")
     elif stars < 9.0:
-        return "#f0dd55"
+        # return "#f0dd55"
+        return "#f6f05c"
     else:
         interp_r = np.interp(stars, ColorTextBar.XP.value, ColorTextBar.YP_R.value)
         interp_g = np.interp(stars, ColorTextBar.XP.value, ColorTextBar.YP_G.value)
@@ -835,3 +836,25 @@ def _make_query_uppercase(original_query_func):
         return df
 
     return wrapper
+
+
+def _build_upsert(dialect: str, update_fields: list[str], conflict_columns: list[str]) -> str:
+    """构建自适应的 upsert SQL 字符串"""
+    if dialect == 'mysql':
+        updates = ', '.join([f"{k} = VALUES({k})" for k in update_fields])
+        sql = f"ON DUPLICATE KEY UPDATE {updates}"
+    else:
+        updates = ', '.join([f"{k} = EXCLUDED.{k}" for k in update_fields])
+        conflict = f"ON CONFLICT ({', '.join(conflict_columns)})"
+        sql = f"{conflict} DO UPDATE SET {updates}"
+    return sql
+
+
+def _build_update_ignore(dialect: str, body: str, conflict_columns: list[str]) -> str:
+    """构建自适应的 update ignore SQL 字符串"""
+    if dialect == "mysql":
+        sql = f"INSERT IGNORE INTO {body}"
+    else:
+        suffix = f"ON CONFLICT ({', '.join(conflict_columns)}) DO NOTHING"
+        sql = f"INSERT INTO {body} {suffix}"
+    return sql
