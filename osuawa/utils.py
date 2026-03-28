@@ -808,6 +808,14 @@ def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
     # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具
     # 然而，这个操作可能会需要完全重构 playlist 生成器的逻辑，因为其目前所使用的所有信息都是在线获取的
     # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
+
+    # 错误检查前置：预扫描 beatmap_specs，检查是否有重复的 bid
+    bid_set: set[int] = set()
+    for beatmap_spec in beatmap_specs:
+        if (_bid := beatmap_spec[0]) in bid_set:
+            raise ValueError(f"duplicated bid detected: {_bid}")
+        bid_set.add(_bid)
+
     pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
     if not os.path.exists(pool_path):
         os.mkdir(pool_path)

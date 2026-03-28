@@ -52,7 +52,7 @@ def gettext_translate(text):
     return st.session_state.translate(text)
 
 
-def init_logger():
+def init_logger_fh():
     fh = logging.FileHandler(os.path.join(C.LOGS.value, "streamlit.log"), encoding="utf-8")
     fh.setFormatter(logging.Formatter(st.get_option("logger.messageFormat")))
     if "streamlit" not in logger.get_logger("streamlit").handlers:
@@ -192,7 +192,9 @@ if "awa" not in st.session_state:
     prepare_bar.empty()
 
 pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder]) if st.session_state.perm < 2 else st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
-init_logger()
+if "fh_init" not in st.session_state:
+    st.session_state.fh_init = True
+    init_logger_fh()
 register_commands({"simple": True})
 
 if "immersive_active" not in st.session_state:
@@ -230,10 +232,14 @@ if st.session_state.immersive_active:
         st.toast(_("Press `F` to exit immersive mode."), icon=":material/collapse_content:")
         st.session_state.immersive_toggled = False
 
+# todo: 验证是否需要这个功能
+if "basic_interaction_enabled" not in st.session_state or st.session_state.get("require_basic_interaction", False):
+    st.session_state.basic_interaction_enabled = True
+
 with st.sidebar:
-    st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:")
+    st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:", disabled=not st.session_state.basic_interaction_enabled)
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
-    if st.button(_("Tasks Board"), use_container_width=True, icon=":material/assignment:"):
+    if st.button(_("Tasks Board"), use_container_width=True, icon=":material/assignment:", disabled=not st.session_state.basic_interaction_enabled):
         st.dialog(_("Tasks Board"), width="large")(task_board)()
 # _page_manager = get_script_run_ctx().pages_manager
 # _current_page_script_hash = _page_manager.current_page_script_hash

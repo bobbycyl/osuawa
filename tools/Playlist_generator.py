@@ -31,10 +31,12 @@ if TYPE_CHECKING:
     st.session_state.redis_tasks: list[RedisTaskId]
 
 init_page(_("Playlist generator") + " - osuawa")
+if "playlist_msg" not in st.session_state:
+    st.session_state.playlist_msg = ""
 with st.sidebar:
-    st.toggle(_("new style"), key="new_style", value=True)
+    st.toggle(_("new style"), key="new_style", value=True, disabled=not st.session_state.basic_interaction_enabled)
 
-conn = st.connection("osuawa", type="sql")
+conn = st.connection("osuawa", type="sql", ttl=3600)
 conn.query = _make_query_uppercase(conn.query)
 # todo: st.connection 为只读，写入由 daemon worker 负责
 uid = get_session_id()
@@ -176,21 +178,21 @@ def default(obj):
 
 
 def push_beatmap_task(_b: list[BeatmapToUpdate], action: str) -> None:
+    # todo: 由于 streamlit 的刷新机制，basic_interaction_enabled 在这里设置是无效的
     cmd = "beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()
     msg = push_task_with_session_state(cmd)
-    msg = "%s: %s %d beatmap(s)" % (msg, action, len(_b))
+    msg = "%s\n%s %d beatmap(s)" % (msg, action, len(_b))
     logger.get_logger(st.session_state.username).info(msg)
-    st.toast(msg)
+    st.session_state.playlist_msg = msg
+    refresh()
 
 
-# noinspection PyUnreachableCode
-def refresh(clear_cache: bool = False) -> Never:
+def refresh(clear_cache: bool = True) -> Never:
     conn.reset()
     st.session_state.aggrid_key = str(uuid4())
     if clear_cache:
-        pass
+        st.cache_data.clear()
     st.rerun()
-    raise  # 给 mypy 看的补丁
 
 
 @st.cache_data(show_spinner=False)
@@ -232,15 +234,17 @@ def export_filtered_playlist():
 
 if st.session_state.perm >= 1:
     if "online_playlist_info" not in st.session_state or not st.session_state.online_playlist_info:
-        st.info(_("Auto refresh on this page is disabled due to technical reasons. You might want to press the `%s` button to refresh the playlist.") % _("Refresh"))
+        st.info(_("Auto refresh on this page is disabled due to technical reasons. You might want to press the `%s` button manually to refresh the playlist.") % _("Refresh"))
         st.session_state.online_playlist_info = True
+    if st.session_state.playlist_msg != "":
+        with st.empty():
+            st.info(st.session_state.playlist_msg)
 
     st.markdown(_("## Online Playlist Creator"))
     available_pools = conn.query(
         """SELECT DISTINCT POOL
            FROM BEATMAP
            ORDER BY POOL""",
-        ttl=12,
         show_spinner=_("querying available pools"),
     )["POOL"].to_list()
     if len(available_pools) == 0:
@@ -339,15 +343,13 @@ if st.session_state.perm >= 1:
            FROM BEATMAP
            GROUP BY BID
            HAVING COUNT(*) > 1""",
-        ttl=12,
         show_spinner=_("querying duplicate BIDs"),
     )["BID"].to_list()
     duplicate_songs_raw = conn.query(
-        """SELECT U_ARTIST, U_TITLE
+        """SELECT U_ARTIST, U_TITLE, COUNT(*)
            FROM BEATMAP
            GROUP BY U_ARTIST, U_TITLE
            HAVING COUNT(*) > 1""",
-        ttl=12,
         show_spinner=_("querying duplicate song names"),
     )
     duplicate_songs = (duplicate_songs_raw["U_ARTIST"] + " " + duplicate_songs_raw["U_TITLE"]).to_list()
@@ -364,7 +366,7 @@ if st.session_state.perm >= 1:
     if st.session_state.gen_filter_status != -1:
         filter_query += " AND STATUS = :status"
         filter_params["status"] = st.session_state.gen_filter_status
-    df: pd.DataFrame = conn.query(filter_query, ttl=12, show_spinner=_("querying the playlist"),params=filter_params)
+    df: pd.DataFrame = conn.query(filter_query, show_spinner=_("querying the playlist"), params=filter_params)
 
     # keywords 的筛选用 pandas 完成，从 bid、sid、info、slot、mods、notes 中查找包含输入内容的条目
     if st.session_state.gen_filter_search:
@@ -427,7 +429,8 @@ if st.session_state.perm >= 1:
         "SID",
         "ADD_TS",
     ]
-    df: pd.DataFrame = df[desired_col_order].copy()
+    # 最终列名应该为 desired_col_order + 未在 desired_col_order 中的原始列名（保持原始顺序）
+    df: pd.DataFrame = df[desired_col_order + [col for col in df.columns if col not in desired_col_order]].copy()
 
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_selection(selection_mode="multiple", use_checkbox=True, suppressRowClickSelection=True)
@@ -487,11 +490,12 @@ if st.session_state.perm >= 1:
         cellEditor="agLargeTextCellEditor",
         cellEditorPopup=True,
     )
-    gb.configure_column("STATUS", header_name="Status", editable=True, cellEditor="agSelectCellEditor", cellEditorParams={"values": [0, 1, 2]}, width=25)
+    gb.configure_column("STATUS", header_name="Status", editable=True, cellEditor="agSelectCellEditor", cellEditorParams={"values": [0, 1, 2]}, width=25, filter=False)
 
     # 隐藏列
-    gb.configure_column("SID", hide=True)
-    gb.configure_column("ADD_TS", hide=True)
+    for col in df.columns:
+        if col[0] == "_" or col in ["SID", "ADD_TS", "U_ARTIST", "U_TITLE"]:
+            gb.configure_column(col, hide=True)
 
     grid_options = gb.build()
 
@@ -512,6 +516,7 @@ if st.session_state.perm >= 1:
         key=st.session_state.aggrid_key,
     )
     edited_df = grid_response.data.copy() if grid_response.data is not None else pd.DataFrame()
+    selected_rows = grid_response.selected_rows
 
     col_save_n_refresh, col_blank, col_del = st.columns(spec=[0.6, 0.12, 0.28], gap="large")
     with col_save_n_refresh, st.container(border=False, horizontal=True):
@@ -582,11 +587,9 @@ if st.session_state.perm >= 1:
                         beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
                 push_beatmap_task(beatmaps_to_update, _("update"))
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
-            refresh(clear_cache=True)
+            refresh()
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
             export_filtered_playlist()
-
-    selected_rows = grid_response.selected_rows
 
     with col_del, st.container(border=False, horizontal_alignment="right"):
         if st.button(_("Delete"), type="primary", use_container_width=True, icon=":material/delete:"):
