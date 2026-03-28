@@ -722,7 +722,6 @@ def calc_high_star_rating_text_color(stars: float, new_style: bool = True) -> st
         return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))
 
 
-
 def get_size_and_count(path):
     """获取文件或目录的总大小和文件总数"""
     if os.path.isfile(path):
@@ -840,11 +839,11 @@ def _make_query_uppercase(original_query_func):
 
 def _build_upsert(dialect: str, update_fields: list[str], conflict_columns: list[str]) -> str:
     """构建自适应的 upsert SQL 字符串"""
-    if dialect == 'mysql':
-        updates = ', '.join([f"{k} = VALUES({k})" for k in update_fields])
+    if dialect == "mysql":
+        updates = ", ".join([f"{k} = VALUES({k})" for k in update_fields])
         sql = f"ON DUPLICATE KEY UPDATE {updates}"
     else:
-        updates = ', '.join([f"{k} = EXCLUDED.{k}" for k in update_fields])
+        updates = ", ".join([f"{k} = EXCLUDED.{k}" for k in update_fields])
         conflict = f"ON CONFLICT ({', '.join(conflict_columns)})"
         sql = f"{conflict} DO UPDATE SET {updates}"
     return sql
@@ -853,8 +852,8 @@ def _build_upsert(dialect: str, update_fields: list[str], conflict_columns: list
 def _build_update_ignore(dialect: str, body: str, conflict_columns: list[str]) -> str:
     """构建自适应的 update ignore SQL 字符串"""
     if dialect == "mysql":
-        sql = f"INSERT IGNORE INTO {body}"
+        sql = f"{body[:6]} IGNORE {body[7:]}"
     else:
         suffix = f"ON CONFLICT ({', '.join(conflict_columns)}) DO NOTHING"
-        sql = f"INSERT INTO {body} {suffix}"
+        sql = f"{body} {suffix}"
     return sql

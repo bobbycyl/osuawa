@@ -278,6 +278,7 @@ if st.session_state.perm >= 1:
                 raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input or "")
 
                 # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
+                specs_input_valid = True
                 for url_input in urls_input_split:
                     # 处理 BID
                     bid_input = int(url_input.rsplit("/", 1)[-1])
@@ -286,7 +287,12 @@ if st.session_state.perm >= 1:
                         mods_ready_input = to_readable_mods(raw_mods_input)
                     except (orjson.JSONDecodeError, ValueError, KeyError):
                         st.error(_("invalid mods: %s") % raw_mods_input)
-                        continue
+                        specs_input_valid = False
+                        break
+                    if len(mods_ready_input) > 8:
+                        st.error(_("too many mods: %s") % raw_mods_input)
+                        specs_input_valid = False
+                        break
                     mods_input = "; ".join(mods_ready_input)
                     if check_beatmap_exists(bid_input, mods_input):
                         st.toast(_("(%d %s) already exists, skipped" % (bid_input, mods_input)))
@@ -305,7 +311,12 @@ if st.session_state.perm >= 1:
                             time.time(),
                         ),
                     )
-                push_beatmap_task([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], _("add"))
+                if len(specs_input) == 0:
+                    st.toast(_("no beatmaps input"))
+                elif not specs_input_valid:
+                    pass
+                else:
+                    push_beatmap_task([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], _("add"))
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])

@@ -13,7 +13,6 @@ from clayutil.cmdparse import (
     CommandParser,
 )
 from ossapi import Domain, Scope
-from sqlalchemy import text
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
@@ -21,7 +20,7 @@ from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import get_session_id, load_value, register_commands, task_board
 from osuawa.utils import RedisTaskId, create_unique_picker, update_user_cache
 
-st.session_state._debugging_mode = False
+st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
 if TYPE_CHECKING:
 
@@ -79,41 +78,7 @@ def toggle_immersive():
 
 
 if "translate" not in st.session_state:
-    if not os.path.exists(C.LOGS.value):
-        os.mkdir(C.LOGS.value)
-    if not os.path.exists(C.OUTPUT_DIRECTORY.value):
-        os.mkdir(C.OUTPUT_DIRECTORY.value)
-    if not os.path.exists(C.STATIC_DIRECTORY.value):
-        os.mkdir(C.STATIC_DIRECTORY.value)
-    if not os.path.exists(C.UPLOADED_DIRECTORY.value):
-        os.mkdir(C.UPLOADED_DIRECTORY.value)
-    if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
-        os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
     load_value("uni_lang", convert_locale(st.context.locale))
-
-    # 半持久化保存
-    if not os.path.exists(C.OAUTH_TOKEN_DIRECTORY.value):
-        os.mkdir(C.OAUTH_TOKEN_DIRECTORY.value)
-    if not os.path.exists(C.COMPONENTS_SHELVES_DIRECTORY.value):
-        os.mkdir(C.COMPONENTS_SHELVES_DIRECTORY.value)
-
-    # 数据库需要以下表和字段
-    # 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
-    # 2. 表 SCORE，字段与 CompletedSimpleScoreInfo 大体一致，另附加 SCORE_ID 字段作为主键
-    conn = st.connection("osuawa", type="sql", ttl=0)
-    with conn.session as s:
-        s.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS TEXT, NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, U_ARTIST TEXT, U_TITLE TEXT, PRIMARY KEY (BID, MODS));",
-            ),
-        )
-        s.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS SCORE(SCORE_ID BIGINT, BID BIGINT, USER_ID BIGINT, SCORE INT, ACCURACY REAL, MAX_COMBO INT, PASSED INT, PP REAL, MODS TEXT, TS REAL, STATISTICS TEXT, ST REAL, \
-                 CS REAL, HIT_WINDOW REAL, PREEMPT REAL, BPM REAL, HIT_LENGTH INT, IS_NF INT, IS_HD INT, IS_HIGH_AR INT, IS_LOW_AR INT, IS_VERY_LOW_AR INT, IS_SPEED_UP INT, IS_SPEED_DOWN INT, INFO TEXT, ORIGINAL_DIFFICULTY REAL, B_STAR_RATING REAL, B_MAX_COMBO INT, B_AIM_DIFFICULTY REAL, B_AIM_DIFFICULT_SLIDER_COUNT REAL, B_SPEED_DIFFICULTY REAL, B_SPEED_NOTE_COUNT REAL, B_SLIDER_FACTOR REAL, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_AIM_DIFFICULT_STRAIN_COUNT REAL, B_SPEED_DIFFICULT_STRAIN_COUNT REAL, PP_AIM REAL, PP_SPEED REAL, PP_ACCURACY REAL, B_PP_100IF_AIM REAL, B_PP_100IF_SPEED REAL, B_PP_100IF_ACCURACY REAL, B_PP_100IF REAL, B_PP_92IF REAL, B_PP_81IF REAL, B_PP_67IF REAL, PRIMARY KEY (SCORE_ID));",
-            ),
-        )
-        s.commit()
 
 # noinspection PyUnresolvedReferences
 builtins.__dict__["_"] = gettext_translate

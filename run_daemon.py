@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import os.path
@@ -22,22 +23,32 @@ from ossapi import Domain, Scope, Score
 from sqlalchemy import create_engine, text
 
 from osuawa import OsuPlaylist, Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, SimpleScoreInfo, _create_tmp_playlist_p, async_get_username, push_task
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, SimpleScoreInfo, _build_update_ignore, _build_upsert, _create_tmp_playlist_p, async_get_username, push_task
 
-ST_CONFIG_FILENAME = "./.streamlit/config.toml"
-ST_SECRETS_FILENAME = "./.streamlit/secrets.toml"
+# streamlit settings
+st_config = toml.load("./.streamlit/config.toml")
+st_secrets = toml.load("./.streamlit/secrets.toml")
 
-if not os.path.exists(C.LOGS.value):
-    os.mkdir(C.LOGS.value)
-if not os.path.exists(C.OAUTH_TOKEN_DIRECTORY.value):
-    os.mkdir(C.OAUTH_TOKEN_DIRECTORY.value)
-st_config = toml.load(ST_CONFIG_FILENAME)
-st_secrets = toml.load(ST_SECRETS_FILENAME)
-
+# asyncio event loop
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
+# logging
+formatter = logging.Formatter(st_config["logger"]["messageFormat"])
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(formatter)
+fh = logging.FileHandler(os.path.join(C.LOGS.value, "daemon.log"), encoding="utf-8")
+fh.setFormatter(formatter)
+logger = logging.getLogger("daemon")
+logger.setLevel(logging.DEBUG)
+logger.addHandler(ch)
+logger.addHandler(fh)
+logger.info("starting osuawa daemon...")
+
+# sql
 _url = st_secrets["connections"]["osuawa"].get("url")
+_ca_path: Optional[str] = None
 if _url is None:
     _dialect = st_secrets["connections"]["osuawa"]["dialect"]
     _host = st_secrets["connections"]["osuawa"]["host"]
@@ -45,14 +56,61 @@ if _url is None:
     _username = st_secrets["connections"]["osuawa"]["username"]
     _password = st_secrets["connections"]["osuawa"]["password"]
     _database = st_secrets["connections"]["osuawa"]["database"]
+    if _dialect == "mysql":
+        _dialect += "+pymysql"
     _url = "%s://%s:%s@%s:%s/%s" % (_dialect, _username, _password, _host, _port, _database)
-engine = create_engine(_url)
+    with contextlib.suppress(KeyError):
+        _ca_path = st_secrets["connections"]["osuawa"]["create_engine_kwargs"]["connect_args"]["ssl"]["ca"]
+else:
+    # 获取 dialect
+    _dialect = _url.split("://")[0].split("+")[0]
+engine = (
+    create_engine(_url)
+    if _ca_path is None
+    else create_engine(
+        _url,
+        connect_args={
+            "ssl_ca": _ca_path,
+        },
+    )
+)
+logger.info("sql connected: %s" % _url)
 
 r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+logger.info("redis connected")
 
 # Daemon 使用 Client Credentials Grant
 daemon_awa = Osuawa(loop, st_secrets["args"]["client_id"], st_secrets["args"]["client_secret"], None, [Scope.PUBLIC.value], Domain.OSU.value, "daemon", None, None)
+logger.info("osu! api initialized")
 sem = asyncio.Semaphore(1)
+
+# 半持久化保存
+if not os.path.exists(C.LOGS.value):
+    os.mkdir(C.LOGS.value)
+if not os.path.exists(C.OUTPUT_DIRECTORY.value):
+    os.mkdir(C.OUTPUT_DIRECTORY.value)
+if not os.path.exists(C.STATIC_DIRECTORY.value):
+    os.mkdir(C.STATIC_DIRECTORY.value)
+if not os.path.exists(C.UPLOADED_DIRECTORY.value):
+    os.mkdir(C.UPLOADED_DIRECTORY.value)
+if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
+    os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
+
+# 数据库需要以下表和字段
+# 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
+# 2. 表 SCORE，字段与 CompletedSimpleScoreInfo 大体一致，另附加 SCORE_ID 字段作为主键
+with engine.begin() as conn:
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS VARCHAR(32), NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, U_ARTIST TEXT, U_TITLE TEXT, PRIMARY KEY (BID, MODS));",
+        ),
+    )
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS SCORE(SCORE_ID BIGINT, BID BIGINT, USER_ID BIGINT, SCORE INT, ACCURACY REAL, MAX_COMBO INT, PASSED INT, PP REAL, MODS TEXT, TS REAL, STATISTICS TEXT, ST REAL, \
+             CS REAL, HIT_WINDOW REAL, PREEMPT REAL, BPM REAL, HIT_LENGTH INT, IS_NF INT, IS_HD INT, IS_HIGH_AR INT, IS_LOW_AR INT, IS_VERY_LOW_AR INT, IS_SPEED_UP INT, IS_SPEED_DOWN INT, INFO TEXT, ORIGINAL_DIFFICULTY REAL, B_STAR_RATING REAL, B_MAX_COMBO INT, B_AIM_DIFFICULTY REAL, B_AIM_DIFFICULT_SLIDER_COUNT REAL, B_SPEED_DIFFICULTY REAL, B_SPEED_NOTE_COUNT REAL, B_SLIDER_FACTOR REAL, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_AIM_DIFFICULT_STRAIN_COUNT REAL, B_SPEED_DIFFICULT_STRAIN_COUNT REAL, PP_AIM REAL, PP_SPEED REAL, PP_ACCURACY REAL, B_PP_100IF_AIM REAL, B_PP_100IF_SPEED REAL, B_PP_100IF_ACCURACY REAL, B_PP_100IF REAL, B_PP_92IF REAL, B_PP_81IF REAL, B_PP_67IF REAL, PRIMARY KEY (SCORE_ID));",
+        ),
+    )
 
 
 def commands():
@@ -124,15 +182,18 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
             scores.append(score)
         res = conn.execute(
             text(
-                """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP, IS_SPEED_DOWN,
-                                      INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
-                                      B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
-                                      B_PP_81IF, B_PP_67IF)
-                   VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
-                           :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
-                           :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
-                           :b_pp_81if, :b_pp_67if)
-                   ON CONFLICT DO NOTHING;""",
+                _build_update_ignore(
+                    _dialect,
+                    """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP, IS_SPEED_DOWN,
+                                          INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
+                                          B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
+                                          B_PP_81IF, B_PP_67IF)
+                       VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
+                               :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
+                               :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
+                               :b_pp_81if, :b_pp_67if)""",
+                    ["SCORE_ID"],
+                ),
             ),
             scores,
         )
@@ -267,28 +328,16 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
             action |= 2
             action_bid = beatmap["BID"]
             action_mods = beatmap["MODS"]
+            upsert_text = _build_upsert(
+                _dialect,
+                ["SKILL_SLOT", "SR", "BPM", "HIT_LENGTH", "MAX_COMBO", "CS", "AR", "OD", "MODS", "NOTES", "STATUS", "COMMENTS", "POOL", "SUGGESTOR", "RAW_MODS", "INFO"],
+                ["BID", "MODS"],
+            )  # ADD_TS 只会保留第一次创建记录时的值，后续不会被更新
             conn.execute(
                 text(
                     """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE)
-                       VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)
-                       ON CONFLICT (BID, MODS)
-                           DO UPDATE SET SKILL_SLOT = EXCLUDED.SKILL_SLOT,
-                                         SR         = EXCLUDED.SR,
-                                         BPM        = EXCLUDED.BPM,
-                                         HIT_LENGTH = EXCLUDED.HIT_LENGTH,
-                                         MAX_COMBO  = EXCLUDED.MAX_COMBO,
-                                         CS         = EXCLUDED.CS,
-                                         AR         = EXCLUDED.AR,
-                                         OD         = EXCLUDED.OD,
-                                         MODS       = EXCLUDED.MODS,
-                                         NOTES      = EXCLUDED.NOTES,
-                                         STATUS     = EXCLUDED.STATUS,
-                                         COMMENTS   = EXCLUDED.COMMENTS,
-                                         POOL       = EXCLUDED.POOL,
-                                         SUGGESTOR  = EXCLUDED.SUGGESTOR,
-                                         RAW_MODS   = EXCLUDED.RAW_MODS,
-                                         INFO       = EXCLUDED.INFO
-                    -- 注意：ADD_TS 只会保留第一次创建记录时的值，后续不会被更新""",
+                    VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)
+                    %s""" % upsert_text,
                 ),
                 parameters=beatmap,
             )
@@ -376,80 +425,69 @@ def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
     return ("%s; %s" % (update_str, delete_str)).strip("; ")
 
 
-if __name__ == "__main__":
-    cmdparser = CommandParser()
-    cmdparser.register_command(0, *commands())
+cmdparser = CommandParser()
+cmdparser.register_command(0, *commands())
+logger.info("tasks processor initialized")
 
-    formatter = logging.Formatter(st_config["logger"]["messageFormat"])
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(formatter)
-    fh = logging.FileHandler(os.path.join(C.LOGS.value, "daemon.log"), encoding="utf-8")
-    fh.setFormatter(formatter)
-    logger = logging.getLogger("daemon")
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-    logger.info("redis connected")
+push_task(
+    r,
+    "update .*",
+)
+setup_scheduled_tasks()
+cleanup_ald_tasks_status()
 
-    push_task(
-        r,
-        "update .*",
-    )
-    setup_scheduled_tasks()
+while True:
+    try:
+        result: Optional[tuple[str, str]] = cast(Optional[tuple[str, str]], cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)))
+        if result is None:
+            continue
+        task_info = result[1]
+        if task_info:
+            # task_info 结构为 uuid hex + command 的字符串拼接
+            task_id = task_info[:32]
+            task_cmd = task_info[32:]
+            g = cmdparser.parse_command(task_cmd)
+            logger.info(f"[{task_id}/started]: {task_cmd}")
+            sub_task_results: list[str] = []
+            while True:
+                try:
+                    # todo: 是否需要用 pickle + base64 完成通用序列化？目前暂时用 str 强制转换
+                    _sub_task_result = str(next(g))
+                    sub_task_results.append(_sub_task_result)
+                    logger.info(f"[{task_id}/executing]: {_sub_task_result}")
+                except StopIteration as e:
+                    logger.info(f"[{task_id}/success]: {e.value} sub-tasks done")
+                    r.hset(
+                        C.TASK_STATUS.value.format(task_id=task_id),
+                        mapping={
+                            "status": "success",
+                            "result": orjson.dumps(
+                                {
+                                    "final": str(e.value),
+                                    "sub": sub_task_results,
+                                },
+                            ).decode(),
+                            "time": time(),
+                        },
+                    )
+                    break
+                except Exception as e:
+                    logger.error(f"[{task_id}/error]: {e}", exc_info=True)
+                    r.hset(
+                        C.TASK_STATUS.value.format(task_id=task_id),
+                        mapping={
+                            "status": "error",
+                            "result": orjson.dumps(
+                                {
+                                    "final": str(e),
+                                    "sub": sub_task_results,
+                                },
+                            ).decode(),
+                            "time": time(),
+                        },
+                    )
+                    break
+    except KeyboardInterrupt:
+        break
 
-    while True:
-        try:
-            result: Optional[tuple[str, str]] = cast(Optional[tuple[str, str]], cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)))
-            if result is None:
-                continue
-            task_info = result[1]
-            if task_info:
-                # task_info 结构为 uuid hex + command 的字符串拼接
-                task_id = task_info[:32]
-                task_cmd = task_info[32:]
-                g = cmdparser.parse_command(task_cmd)
-                logger.info(f"[{task_id}/started]: {task_cmd}")
-                sub_task_results: list[str] = []
-                while True:
-                    try:
-                        # todo: 是否需要用 pickle + base64 完成通用序列化？目前暂时用 str 强制转换
-                        _sub_task_result = str(next(g))
-                        sub_task_results.append(_sub_task_result)
-                        logger.info(f"[{task_id}/executing]: {_sub_task_result}")
-                    except StopIteration as e:
-                        logger.info(f"[{task_id}/success]: {e.value} sub-tasks done")
-                        r.hset(
-                            C.TASK_STATUS.value.format(task_id=task_id),
-                            mapping={
-                                "status": "success",
-                                "result": orjson.dumps(
-                                    {
-                                        "final": str(e.value),
-                                        "sub": sub_task_results,
-                                    },
-                                ).decode(),
-                                "time": time(),
-                            },
-                        )
-                        break
-                    except Exception as e:
-                        logger.error(f"[{task_id}/error]: {e}", exc_info=True)
-                        r.hset(
-                            C.TASK_STATUS.value.format(task_id=task_id),
-                            mapping={
-                                "status": "error",
-                                "result": orjson.dumps(
-                                    {
-                                        "final": str(e),
-                                        "sub": sub_task_results,
-                                    },
-                                ).decode(),
-                                "time": time(),
-                            },
-                        )
-                        break
-        except KeyboardInterrupt:
-            break
-
-    logger.info("redis disconnected")
+logger.info("stopping osuawa daemon...")
