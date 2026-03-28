@@ -17,7 +17,7 @@ from streamlit import logger
 from osuawa import C, OsuPlaylist
 from osuawa.components import get_session_id, init_page, load_value, memorized_selectbox, push_task_with_session_state, save_value
 from osuawa.osuawa import Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, generate_mods_from_lines, safe_norm, to_readable_mods
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, generate_mods_from_lines, read_injected_code, safe_norm, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -40,135 +40,13 @@ conn = st.connection("osuawa", type="sql", ttl=3600)
 conn.query = _make_query_uppercase(conn.query)
 # todo: st.connection 为只读，写入由 daemon worker 负责
 uid = get_session_id()
-row_style_js_with_dup = JsCode(
-    """function(params) {
-    if (params.data._is_dup_bid) return { backgroundColor: 'crimson' };
-    if (params.data._is_dup_song) return { backgroundColor: 'lemonchiffon' };
-    if (params.data.STATUS == 1) return { backgroundColor: 'darkseagreen' };
-    if (params.data.STATUS == 2) return { backgroundColor: 'powderblue' };
-    return {};
-}
-""",
-)
-row_style_js = JsCode(
-    """function(params) {
-    if (params.data.STATUS == 1) return { backgroundColor: 'darkseagreen' };
-    if (params.data.STATUS == 2) return { backgroundColor: 'powderblue' };
-    return {};
-}
-""",
-)
-slot_cell_style_js = JsCode(
-    f"""function(params) {{
-    if (!params.value) return {{}};
-
-    let rootMod = params.value.toString().substring(0, 2).toUpperCase();
-    let colorMap = {orjson.dumps(OsuPlaylist.mod_color).decode()};
-
-    if (colorMap.hasOwnProperty(rootMod) && colorMap[rootMod]) {{
-        return {{
-            "backgroundColor": colorMap[rootMod],
-            "color": "white",
-            "fontWeight": "bold"
-        }};
-    }} else {{
-        return {{
-            "backgroundColor": "#eb50eb",
-            "color": "white",
-            "fontWeight": "bold"
-        }};
-    }}
-}}
-""",
-)
-copy_on_click_js = JsCode(
-    """function(event) {
-    let target = event.event.target;
-    while (target && !target.classList.contains('ag-cell')) {
-        target = target.parentElement;
-    }
-
-    if (target && event.value !== undefined && event.value !== null) {
-        navigator.clipboard.writeText(String(event.value))
-            .then(() => {
-                const oldTip = target.querySelector('.copy-tip');
-                if (oldTip) oldTip.remove();
-
-                const tip = document.createElement('span');
-                tip.className = 'copy-tip';
-                tip.innerText = 'Copied';
-
-                Object.assign(tip.style, {
-                    position: 'absolute',
-                    left: '60%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                    color: 'white',
-                    fontSize: '9px',
-                    padding: '1px 5px',
-                    borderRadius: '2px',
-                    zIndex: '1000',
-                    pointerEvents: 'none',
-                    opacity: '0',
-                    transition: 'opacity 0.15s linear'
-                });
-
-                target.appendChild(tip);
-
-                requestAnimationFrame(() => {
-                    tip.style.opacity = '1';
-                });
-
-                setTimeout(() => {
-                    tip.style.opacity = '0';
-                    setTimeout(() => tip.remove(), 150);
-                }, 300);
-            })
-            .catch(err => {
-                console.error('Failed to copy:', err);
-            });
-    }
-}
-""",
-)
-image_link_renderer = JsCode(
-    """class ImageLinkRenderer {
-    init(params) {
-        this.eGui = document.createElement('a');
-        this.eGui.href = params.value;
-        this.eGui.target = '_blank';
-
-        const img = document.createElement('img');
-        img.src = "%s" + params.data.BID + ".jpg"; 
-        img.style.height = "32px";
-        img.style.width = "70px";
-        img.style.objectFit = "cover";
-        img.style.borderRadius = "0px";
-
-        this.eGui.appendChild(img);
-    }
-    getGui() {
-        return this.eGui;
-    }
-    refresh(params) {
-        return false;
-    }
-}
-""" % ("../../app/" + C.UPLOADED_DIRECTORY.value.strip("./") + "/online/darkened-backgrounds/"),
-)
-st.markdown(
-    """<style>
-    iframe[title="st_aggrid.ag_grid"] {
-    }
-
-    .ag-cell {
-        transition: background-color 0.3s;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+row_style_with_dup = JsCode(read_injected_code("row_style_with_dup.js"))
+row_style = JsCode(read_injected_code("row_style.js"))
+slot_cell_style_js = JsCode(read_injected_code("slot_cell_style.js") % orjson.dumps(OsuPlaylist.mod_color).decode())
+copy_on_click_js = JsCode(read_injected_code("copy_on_click.js"))
+image_link_renderer = JsCode(read_injected_code("image_link_renderer.js") % ("../../app/" + C.UPLOADED_DIRECTORY.value.strip("./") + "/online/darkened-backgrounds/"))
+monaco_editor = JsCode(read_injected_code("monaco_editor.js"))
+st.markdown(read_injected_code("st_aggrid_style.css"), unsafe_allow_html=True)
 
 
 def default(obj):
@@ -184,7 +62,6 @@ def push_beatmap_task(_b: list[BeatmapToUpdate], action: str) -> None:
     msg = "%s\n%s %d beatmap(s)" % (msg, action, len(_b))
     logger.get_logger(st.session_state.username).info(msg)
     st.session_state.playlist_msg = msg
-    refresh()
 
 
 def refresh(clear_cache: bool = True) -> Never:
@@ -438,12 +315,14 @@ if st.session_state.perm >= 1:
         **dict(
             domLayout="normal",
             rowHeight=32,
-            getRowStyle=row_style_js_with_dup if highlight_dup else row_style_js,
+            getRowStyle=row_style_with_dup if highlight_dup else row_style,
             # autoSizeStrategy={'type': 'fitCellContents'},
-            suppressSizeToFit=True,
-            shouldPanelSectionsBeVisible=True,
+            suppressAutoSize=True,
             enableCellTextSelection=True,
             ensureDomOrder=True,
+            components={
+                "codeEditor": monaco_editor,
+            },
         ),
     )
     gb.configure_default_column(cellStyle={"padding-left": "4px", "padding-right": "4px"}, resizable=True, suppressSizeToFit=True)
@@ -487,7 +366,12 @@ if st.session_state.perm >= 1:
             "font-family": "monospace",
             "white-space": "pre-wrap",
         },
-        cellEditor="agLargeTextCellEditor",
+        cellEditor="codeEditor",
+        cellEditorParams={
+            "language": "json",
+            "theme": "vs-dark",
+            "columnName": "mods",
+        },
         cellEditorPopup=True,
     )
     gb.configure_column("STATUS", header_name="Status", editable=True, cellEditor="agSelectCellEditor", cellEditorParams={"values": [0, 1, 2]}, width=25, filter=False)

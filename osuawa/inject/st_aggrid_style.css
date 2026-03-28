@@ -1,0 +1,6 @@
+iframe[title="st_aggrid.ag_grid"] {
+}
+
+.ag-cell {
+    transition: background-color 0.3s;
+}

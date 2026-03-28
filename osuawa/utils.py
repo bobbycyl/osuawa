@@ -49,6 +49,8 @@ TYPE_MAPPING: dict[type, str] = {
     bytes: "BLOB",
 }
 
+assets_dir: str = os.path.dirname(__file__)
+
 
 @unique
 class C(Enum):
@@ -85,6 +87,33 @@ class ColorTextBar(Enum):
     YP_R = [246, 255, 255, 198, 101]
     YP_G = [240, 128, 78, 69, 99]
     YP_B = [92, 104, 111, 185, 222]
+
+
+def read_injected_code(filename: str) -> str:
+    """
+    读 inject 目录下的注入代码
+
+    如果是 css，返回 <style> 标签包裹的 css 内容
+    如果是 js 且顶层为函数，要求箭头函数，参数名为 params 或 event
+
+    :param filename: inject 文件名
+    :return: 文件内容
+    """
+    _path = os.path.join(assets_dir, "inject", filename)
+    match os.path.splitext(filename)[1]:
+        case ".css":
+            with open(_path, "r", encoding="utf-8") as fi:
+                return f"<style>{fi.read()}</style>"
+        case ".js":
+            with open(_path, "r", encoding="utf-8") as fi:
+                first_line = fi.readline().strip()
+                if first_line == "(params) => {":
+                    first_line = "function(params) {"
+                elif first_line == "(event) => {":
+                    first_line = "function(event) {"
+                return first_line + "\n" + fi.read()
+        case _:
+            raise ValueError("unsupported injected code type: %s" % filename)
 
 
 @filelock(3)
