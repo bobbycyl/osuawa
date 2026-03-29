@@ -198,11 +198,11 @@ if "awa" not in st.session_state:
         st.session_state.perm = 4
     prepare_bar.empty()
 
-pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder]) if st.session_state.perm < 2 else st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
 if "fh_init" not in st.session_state:
     st.session_state.fh_init = True
     init_logger_fh()
 register_commands({"simple": True})
+pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder]) if st.session_state.perm < 2 else st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
 
 if "immersive_active" not in st.session_state:
     st.session_state.immersive_active = False
