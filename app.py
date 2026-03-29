@@ -4,7 +4,7 @@ import gettext
 import logging
 import os
 from html import escape as html_escape
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, cast
 
 import requests
 import streamlit as st
@@ -55,10 +55,17 @@ def gettext_translate(text):
 def init_logger_fh():
     fh = logging.FileHandler(os.path.join(C.LOGS.value, "streamlit.log"), encoding="utf-8")
     fh.setFormatter(logging.Formatter(st.get_option("logger.messageFormat")))
-    if "streamlit" not in logger.get_logger("streamlit").handlers:
-        logger.get_logger("streamlit").addHandler(fh)
-    if st.session_state.username not in logger.get_logger("streamlit").handlers:
-        logger.get_logger(st.session_state.username).addHandler(fh)
+
+    def _init_logger_fh(_logger: logging.Logger):
+
+        if hasattr(_logger, "streamlit_custom_file_handler"):
+            _logger.removeHandler(cast(logging.Handler, _logger.streamlit_custom_file_handler))
+
+        _logger.streamlit_custom_file_handler = fh  # type: ignore[attr-defined]
+        _logger.addHandler(_logger.streamlit_custom_file_handler)  # type: ignore[attr-defined]
+
+    _init_logger_fh(logger.get_logger("streamlit"))
+    _init_logger_fh(logger.get_logger(st.session_state.username))
 
 
 def register_awa(ci, cs, ru, sc, dm, oauth_token: Optional[str] = None, oauth_refresh_token: Optional[str] = None):
