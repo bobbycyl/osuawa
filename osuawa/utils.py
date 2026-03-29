@@ -247,9 +247,15 @@ async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
         case _:
             return {
                 **base_dict,
+                "level": user_statistics.level,
                 "pp": user_statistics.pp,
                 "global_rank": user_statistics.global_rank,
                 "country_rank": user_statistics.country_rank,
+                "play_count": user_statistics.play_count,
+                "play_time": user_statistics.play_time,
+                "ranked_score": user_statistics.ranked_score,
+                "total_hits": user_statistics.total_hits,
+                "total_score": user_statistics.total_score,
             }
 
 
