@@ -223,7 +223,7 @@ class MonacoEditorCell {
             minimap: {enabled: false},
             scrollBeyondLastLine: false,
             wordWrap: "on",
-            tabSize: 2,
+            tabSize: 4,
             insertSpaces: true,
             formatOnPaste: false,
             formatOnType: false,

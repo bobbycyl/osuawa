@@ -19,6 +19,8 @@ scipy
 slider
 statsmodels
 streamlit
+streamlit-ace
 streamlit-aggrid
+tabulate
 websockets
 zai-sdk

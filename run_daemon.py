@@ -364,7 +364,7 @@ def cleanup_ald_tasks_status():
             try:
                 if float(task_time) < cutoff:
                     r.delete(key)
-                    logger.info(f"cleaned up old task status: {key}")
+                    logger.info(f"cleaned up {key}")
             except (ValueError, TypeError):
                 # 如果 time 字段格式不对，也删除
                 r.delete(key)
