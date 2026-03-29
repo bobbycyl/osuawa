@@ -147,7 +147,7 @@ def commands():
             "tail logs",
             [Int("n", True), Str("keyword", True)],
             3,
-            log_action,
+            tail_log,
         ),
         Command(
             "where",
@@ -240,7 +240,7 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
     return ret_md
 
 
-def log_action(n: int = 100, keyword: Optional[str] = None) -> str:
+def tail_log(n: int = 100, keyword: Optional[str] = None) -> str:
     ret_md = "# Show last %d lines of logs" % n
     for log_filename in ["streamlit.log", "daemon.log"]:
         ret_md += "## %s" % log_filename
