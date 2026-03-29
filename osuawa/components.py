@@ -262,7 +262,7 @@ def tail_log(n: int = 100, keyword: Optional[str] = None) -> str:
         ret_md += "```log\n"
         # strip() 防止末尾多余空行
         ret_md += "".join(results).strip()
-        ret_md += "\n```"
+        ret_md += "\n```\n"
     return ret_md
 
 
