@@ -20,5 +20,6 @@ slider
 statsmodels
 streamlit
 streamlit-aggrid
+tabulate
 websockets
 zai-sdk
