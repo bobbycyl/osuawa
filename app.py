@@ -3,7 +3,9 @@ import builtins
 import gettext
 import logging
 import os
+import pickle
 from html import escape as html_escape
+from time import time
 from typing import Optional, TYPE_CHECKING, cast
 
 import requests
@@ -17,8 +19,8 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
-from osuawa.components import get_session_id, load_value, register_commands, task_board
-from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code, update_user_cache
+from osuawa.components import delete_user_cache, get_session_id, load_value, register_commands, task_board, update_user_cache
+from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code
 
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
@@ -145,11 +147,16 @@ if "awa" not in st.session_state:
     scopes = [Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]
     domain = Domain.OSU.value
     prepare_bar.progress(35, text=get_an_osu_meme())
+
+    # 由于刷新 token 的任务已经完全交由 daemon 处理，所以这里只需要读取 token 文件即可
     try:
         if "code" not in st.query_params:
-            # check if ossapi token is pickled
+            # check if oauth token is pickled
             if "ajs_anonymous_id" in st.context.cookies and os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):
-                awa = register_awa(client_id, client_secret, redirect_url, scopes, domain)
+                with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "rb") as fi_b:
+                    _oauth_token = pickle.load(fi_b)
+                with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "rb") as fi_b:
+                    _refresh_token = pickle.load(fi_b)
                 prepare_bar.progress(67, text=get_an_osu_meme())
             else:
                 st.info(_("Please click the button below to authorize the app."))
@@ -163,34 +170,45 @@ if "awa" not in st.session_state:
                 Awapi.TOKEN_URL.format(domain=domain),
                 headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
                 data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
-            )
-            awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, _oauth_r.json().get("access_token"), _oauth_r.json().get("refresh_token"))
-            awa.api._save_token(awa.api.session.token)
+            ).json()
+            if _oauth_r.get("error"):
+                raise NotImplementedError(_oauth_r.get("error_description"))
             st.query_params.pop("code")
+            _oauth_token = _oauth_r.get("access_token")
+            _refresh_token = _oauth_r.get("refresh_token")
             prepare_bar.progress(67, text=get_an_osu_meme())
+
+        awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, _oauth_token, _refresh_token)
+        # set variables
         awa.tz = st.context.timezone
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
-        update_user_cache(st.session_state.user, st.session_state.username, [st.context.cookies["ajs_anonymous_id"]])
-        if st.session_state._debugging_mode:
-            from random import randint
-
-            # 启用随机用户名
-            st.session_state.username = "".join([chr(randint(ord("a"), ord("z"))) for _ in range(8)])
-            ctx = get_script_run_ctx()
-            if ctx is None:
-                raise RuntimeError("no streamlit runtime")
-            logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, get_session_id()))
-    except NotImplementedError:
-        # 这一般是 token 过期了
-        if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])) and not st.session_state._debugging_mode:
-            os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]))
-        # todo: 之前因为某些奇怪的原因把自动刷新去掉了，为了优化用户体验，以后可能还需要考虑如何加入自动刷新功能
-        st.warning(_("OAuth2 token or code has expired. Please refresh the page."))
+        # save token
+        with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "wb") as fi_b:
+            pickle.dump(_oauth_token, fi_b)
+        with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "wb") as fi_b:
+            pickle.dump(_refresh_token, fi_b)
+    except Exception as e:
+        # 由于自动刷新功能由 daemon 承担，这里理论上不会触发
+        if not st.session_state._debugging_mode:
+            delete_user_cache(st.context.cookies["ajs_anonymous_id"])
+        st.error(str(e))
         prepare_bar.empty()
         if "code" in st.query_params:
             st.query_params.pop("code")
         st.stop()
+    update_user_cache(st.session_state.user, st.session_state.username, st.context.cookies["ajs_anonymous_id"], time())
+
+    if st.session_state._debugging_mode:
+        from random import randint
+
+        # 启用随机用户名
+        st.session_state.username = "".join([chr(randint(ord("a"), ord("z"))) for _ in range(8)])
+        ctx = get_script_run_ctx()
+        if ctx is None:
+            raise RuntimeError("no streamlit runtime")
+        logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, get_session_id()))
+
     prepare_bar.progress(100, text=get_an_osu_meme())
     if st.session_state.user in admins:
         st.session_state.token = ""

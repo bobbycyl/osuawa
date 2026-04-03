@@ -20,7 +20,7 @@ import numpy as np
 import orjson
 import pandas as pd
 import typing_extensions
-from clayutil.futil import Downloader, Properties, filelock
+from clayutil.futil import Downloader, Properties
 from clayutil.sutil import md5sum
 from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
 from osupp.core import init_osu_tools
@@ -63,7 +63,6 @@ class C(Enum):
 
     OAUTH_TOKEN_DIRECTORY = "./.streamlit/.oauth/"
     COMPONENTS_SHELVES_DIRECTORY = "./.streamlit/.components/"
-    USER_CACHE = "./.streamlit/user_cache.json"
 
     TASK_QUEUE = "awatasks:queue"
     TASK_STATUS = "awatask:status:{task_id}"
@@ -114,44 +113,6 @@ def read_injected_code(filename: str) -> str:
                 return first_line + "\n" + fi.read()
         case _:
             raise ValueError("unsupported injected code type: %s" % filename)
-
-
-@filelock(3)
-def update_user_cache(user: int, username: str, ids: Optional[list[str]] = None, lck_name: str = "USER_CACHE") -> None:
-    """
-    :param user: osu! user ID
-    :param username: osu! username
-    :param ids: 设备识别 id 列表，None 则执行 invalidate 操作
-    :param lck_name:
-    """
-    if not os.path.exists(C.USER_CACHE.value):
-        with open(C.USER_CACHE.value, "wb") as fo_b:
-            fo_b.write(orjson.dumps({}))
-    with open(C.USER_CACHE.value, "rb") as fi_b:
-        user_cache = orjson.loads(fi_b.read())
-    # {user: {"username": username, "id": [id_0, id_1, ...]}}
-    if ids is None:
-        user_cache[user] = {"username": username, "id": []}
-    else:
-        if user not in user_cache:
-            user_cache[user] = {"username": username, "id": ids}
-        else:  # append id
-            user_cache[user] = {
-                "username": user_cache[user]["username"],
-                "id": list(set(user_cache[user]["id"] + ids)),
-            }
-    with open(C.USER_CACHE.value, "wb") as fo_b:
-        fo_b.write(orjson.dumps({str(k): v for k, v in user_cache.items()}))
-
-
-def get_cached_user(user: int) -> dict[str, Any]:
-    if not os.path.exists(C.USER_CACHE.value):
-        raise FileNotFoundError("user cache not exists: %s" % C.USER_CACHE.value)
-    with open(C.USER_CACHE.value, "rb") as fi_b:
-        user_cache = orjson.loads(fi_b.read())
-    if str(user) not in user_cache:
-        raise KeyError("user %d not being cached" % user)
-    return user_cache[str(user)]
 
 
 def strip_quotes(text: str) -> str:
@@ -880,23 +841,23 @@ def _make_query_uppercase(original_query_func):
     return wrapper
 
 
-def _build_upsert(dialect: str, update_fields: list[str], conflict_columns: list[str]) -> str:
+def _build_upsert(dialect: str, update_fields: list[str], primary_keys: list[str]) -> str:
     """构建自适应的 upsert SQL 字符串"""
     if dialect[:5] == "mysql":
         updates = ", ".join([f"{k} = VALUES({k})" for k in update_fields])
         sql = f"ON DUPLICATE KEY UPDATE {updates}"
     else:
         updates = ", ".join([f"{k} = EXCLUDED.{k}" for k in update_fields])
-        conflict = f"ON CONFLICT ({', '.join(conflict_columns)})"
+        conflict = f"ON CONFLICT ({', '.join(primary_keys)})"
         sql = f"{conflict} DO UPDATE SET {updates}"
     return sql
 
 
-def _build_update_ignore(dialect: str, body: str, conflict_columns: list[str]) -> str:
+def _build_update_ignore(dialect: str, body: str, primary_keys: list[str]) -> str:
     """构建自适应的 update ignore SQL 字符串"""
     if dialect[:5] == "mysql":
         sql = f"{body[:6]} IGNORE {body[7:]}"
     else:
-        suffix = f"ON CONFLICT ({', '.join(conflict_columns)}) DO NOTHING"
+        suffix = f"ON CONFLICT ({', '.join(primary_keys)}) DO NOTHING"
         sql = f"{body} {suffix}"
     return sql

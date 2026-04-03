@@ -32,7 +32,7 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
+from osuawa.utils import CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _build_upsert, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
 
 if TYPE_CHECKING:
 
@@ -180,6 +180,8 @@ def commands():
         ),
         Command("cat", _("show user recent scores (only saved scores are available)"), [Int("user")], 0, cat),
         Command("prev", _("draw strain graph of an osu! standard beatmap"), [Int("beatmap"), Str("mod_settings", True)], 0, draw_strain_graph),
+        Command("sessions", _("show all live sessions"), [], 0, query_all_sessions),
+        Command("invalidate", _("invalidate all sessions"), [], 0, invalidate_user_cache),
     ]
 
 
@@ -467,6 +469,62 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
         yaxis_title="Strain",
     )
     return fig
+
+
+def query_all_sessions() -> pd.DataFrame:
+    df = _conn.query("SELECT * FROM USER_CACHE WHERE USER_ID = %d" % st.session_state.user)
+    df["LAST_SEEN_TS"] = cast(pd.Series, pd.to_datetime(df["LAST_SEEN_TS"], utc=True)).dt.tz_convert(st.session_state.awa.tz)
+    return df
+
+
+def delete_user_cache(aid: str) -> None:
+    with _conn.session as s:
+        s.execute(
+            text(
+                "DELETE FROM USER_CACHE WHERE AID = :aid",
+            ),
+            params={"aid": aid},
+        )
+    if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid)):
+        os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid))
+
+
+def invalidate_user_cache(user: int) -> None:
+    with _conn.session as s:
+        # 首先查询所有 aid，删除本地缓存的 token pickle
+        res = s.execute(
+            text(
+                "SELECT AID FROM USER_CACHE WHERE USER_ID = :user",
+            ),
+            params={"user": user},
+        )
+        aids = [x[0] for x in res.fetchall()]
+        for aid in aids:
+            if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid)):
+                os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid))
+        s.execute(
+            text(
+                "DELETE FROM USER_CACHE WHERE USER_ID = :user",
+            ),
+            params={"user": user},
+        )
+
+
+def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -> None:
+    with _conn.session as s:
+        upsert_text = _build_upsert(
+            st.secrets.connections.osuawa.get("dialect") or st.secrets.connections.osuawa.url.split("://")[0].split("+")[0],
+            ["USER_ID", "USERNAME", "AID", "LAST_SEEN_TS"],
+            ["AID"],
+        )
+        s.execute(
+            text(
+                """INSERT INTO USER_CACHE(USER_ID, USERNAME, AID, LAST_SEEN_TS)
+                VALUES(:user, :username, :aid, :last_seen_ts)
+                %s""" % upsert_text,
+            ),
+            params={"user": user, "username": username, "aid": aid, "last_seen_ts": last_seen_ts},
+        )
 
 
 def push_task_with_session_state(task_command: str) -> str:
