@@ -8,7 +8,7 @@
 
 ## 软件要求
 
-Python 3.12、.NET 8.0
+Python 3.12、.NET 8.0、SQL(Sqlite, PostgreSQL 或 MySQL)、Redis
 
 ## 快速开始
 

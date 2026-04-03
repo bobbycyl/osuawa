@@ -10,7 +10,7 @@ current tools: Score Visualizer, Playlist Generator and Recorder
 
 ## Requirements
 
-Python 3.12, .NET 8.0
+Python 3.12, .NET 8.0, SQL(Sqlite, PostgreSQL or MySQL), Redis
 
 ## Getting Started
 
