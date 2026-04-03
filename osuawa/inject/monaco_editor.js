@@ -4,7 +4,8 @@ class MonacoEditorCell {
         this.editor = null;
         this.keyHandler = null;
         this.clickHandler = null;
-        this.isClosing = false; // 防止重复关闭
+        this.isClosing = false;
+        this.isOpening = false;
     }
 
     init(params) {
@@ -46,7 +47,6 @@ class MonacoEditorCell {
         `;
         preview.textContent = this.value || "Click to edit.";
 
-        // 悬停效果
         preview.onmouseenter = () => {
             preview.style.background = "#e8e8e8";
             preview.style.borderColor = "#999";
@@ -57,7 +57,7 @@ class MonacoEditorCell {
         };
 
         this.clickHandler = (e) => {
-            e.stopPropagation(); // 防止触发 aggrid 的编辑
+            e.stopPropagation();
             this.openEditor();
         };
         preview.addEventListener("click", this.clickHandler);
@@ -68,7 +68,8 @@ class MonacoEditorCell {
     }
 
     async openEditor() {
-        if (this.modal || this.isClosing) return;
+        if (this.modal || this.isClosing || this.isOpening) return;
+        this.isOpening = true;
 
         try {
             if (!window.monaco) await this.loadMonaco();
@@ -77,6 +78,10 @@ class MonacoEditorCell {
             this.setupEventListeners();
         } catch (err) {
             console.error("Failed to load Monaco Editor:", err);
+            this.isClosing = false;
+            this.modal = null;
+        } finally {
+            this.isOpening = false;
         }
     }
 
@@ -87,7 +92,6 @@ class MonacoEditorCell {
                 return;
             }
 
-            // 避免重复加载
             if (window.__monacoLoading) {
                 const check = setInterval(() => {
                     if (window.monaco) {
@@ -95,6 +99,11 @@ class MonacoEditorCell {
                         resolve();
                     }
                 }, 100);
+
+                setTimeout(() => {
+                    clearInterval(check);
+                    reject(new Error("Monaco Editor load timeout"));
+                }, 5000);
                 return;
             }
 
@@ -144,7 +153,6 @@ class MonacoEditorCell {
             display: flex; flex-direction: column; overflow: hidden;
         `;
 
-        // 标题栏 - 使用独立ID避免冲突
         const uid = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
         const titleBar = document.createElement("div");
         titleBar.style.cssText = `
@@ -153,38 +161,55 @@ class MonacoEditorCell {
             display: flex; justify-content: space-between;
             align-items: center; user-select: none;
         `;
-        titleBar.innerHTML = `
-            <span style="color: #fff; font-size: 14px; font-weight: 500;">
-                ✏️ ${this.editorTitle}
-            </span>
-            <div style="display: flex; gap: 8px;">
-                <button id="monaco-save-${uid}" style="
-                    background: transparent;
-                    border: none;
-                    color: rgba(255, 255, 255, 0.65);
-                    padding: 6px 16px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    font-weight: 500;
-                    border: 0.5px solid rgba(48, 48, 48, 0);
-                " onmouseover="this.style.border='0.5px solid rgba(127,127,127,0.4)'; this.style.color='rgba(255,255,255,0.9)'" 
-                onmouseout="this.style.border='0.5px solid rgba(48,48,48,0)'; this.style.color='rgba(255,255,255,0.65)'">Save (Ctrl+S)</button>
-                
-                <button id="monaco-cancel-${uid}" style="
-                    background: transparent;
-                    border: none;
-                    color: rgba(255, 255, 255, 0.65);
-                    padding: 6px 16px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    font-weight: 500;
-                    border: 0.5px solid rgba(48, 48, 48, 0);
-                " onmouseover="this.style.border='0.5px solid rgba(240,98,161,0.4)'; this.style.color='rgba(255,255,255,0.9)'" 
-                onmouseout="this.style.border='0.5px solid rgba(48,48,48,0)'; this.style.color='rgba(255,255,255,0.65)'">Close (Esc)</button>
-            </div>
+
+        const titleSpan = document.createElement("span");
+        titleSpan.style.cssText = "color: #fff; font-size: 14px; font-weight: 500;";
+        titleSpan.textContent = "✏️ " + this.editorTitle;
+
+        const btnGroup = document.createElement("div");
+        btnGroup.style.cssText = "display: flex; gap: 8px;";
+
+        const baseBtnStyle = `
+            background: transparent;
+            border: 0.5px solid rgba(48, 48, 48, 0);
+            color: rgba(255, 255, 255, 0.65);
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
         `;
+
+        const saveBtn = document.createElement("button");
+        saveBtn.id = `monaco-save-${uid}`;
+        saveBtn.style.cssText = baseBtnStyle;
+        saveBtn.textContent = "Save (Ctrl+S)";
+        saveBtn.onmouseover = () => {
+            saveBtn.style.border = "0.5px solid rgba(127,127,127,0.4)";
+            saveBtn.style.color = "rgba(255,255,255,0.9)";
+        };
+        saveBtn.onmouseout = () => {
+            saveBtn.style.border = "0.5px solid rgba(48,48,48,0)";
+            saveBtn.style.color = "rgba(255,255,255,0.65)";
+        };
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.id = `monaco-cancel-${uid}`;
+        cancelBtn.style.cssText = baseBtnStyle;
+        cancelBtn.textContent = "Close (Esc)";
+        cancelBtn.onmouseover = () => {
+            cancelBtn.style.border = "0.5px solid rgba(240,98,161,0.4)";
+            cancelBtn.style.color = "rgba(255,255,255,0.9)";
+        };
+        cancelBtn.onmouseout = () => {
+            cancelBtn.style.border = "0.5px solid rgba(48,48,48,0)";
+            cancelBtn.style.color = "rgba(255,255,255,0.65)";
+        };
+
+        btnGroup.appendChild(saveBtn);
+        btnGroup.appendChild(cancelBtn);
+        titleBar.appendChild(titleSpan);
+        titleBar.appendChild(btnGroup);
 
         this.editorContainer = document.createElement("div");
         this.editorContainer.style.cssText = `
@@ -200,11 +225,10 @@ class MonacoEditorCell {
             overlay,
             dialog,
             uid,
-            saveBtn: document.getElementById(`monaco-save-${uid}`),
-            cancelBtn: document.getElementById(`monaco-cancel-${uid}`),
+            saveBtn,
+            cancelBtn,
         };
 
-        // 点击遮罩关闭
         this.overlayClickHandler = (e) => {
             if (e.target === overlay) this.closeEditor();
         };
@@ -242,16 +266,15 @@ class MonacoEditorCell {
             this.preview.textContent = this.value || "Click to edit.";
             this.params.setValue(this.value);
             this.closeEditor();
-            this.params.stopEditing();
+            setTimeout(() => this.params.stopEditing(), 0);
         };
 
         const handleCancel = () => {
             if (this.isClosing) return;
             this.closeEditor();
-            this.params.stopEditing();
+            setTimeout(() => this.params.stopEditing(), 0);
         };
 
-        // 绑定按钮
         if (this.modal.saveBtn) {
             this.saveBtnHandler = handleSave;
             this.modal.saveBtn.onclick = this.saveBtnHandler;
@@ -261,12 +284,9 @@ class MonacoEditorCell {
             this.modal.cancelBtn.onclick = this.cancelBtnHandler;
         }
 
-        // 键盘事件 - 使用捕获阶段但检查目标
         this.keyHandler = (e) => {
-            // 只在编辑器激活时处理
             if (!this.editor || this.isClosing) return;
 
-            // 检查焦点是否在编辑器内
             const isEditorFocused =
                 this.editor.hasTextFocus() ||
                 this.editorContainer.contains(document.activeElement);
@@ -294,7 +314,6 @@ class MonacoEditorCell {
 
         document.addEventListener("keydown", this.keyHandler, true);
 
-        // 处理窗口大小变化
         this.resizeHandler = () => {
             if (this.editor) this.editor.layout();
         };
@@ -305,7 +324,6 @@ class MonacoEditorCell {
         if (!this.modal || this.isClosing) return;
         this.isClosing = true;
 
-        // 移除所有事件监听
         if (this.keyHandler) {
             document.removeEventListener("keydown", this.keyHandler, true);
             this.keyHandler = null;
@@ -323,7 +341,6 @@ class MonacoEditorCell {
             );
         }
 
-        // 销毁编辑器
         if (this.editor) {
             try {
                 this.editor.dispose();
@@ -333,7 +350,6 @@ class MonacoEditorCell {
             this.editor = null;
         }
 
-        // 移除DOM
         if (this.modal.overlay && this.modal.overlay.parentNode) {
             this.modal.overlay.parentNode.removeChild(this.modal.overlay);
         }
@@ -355,11 +371,12 @@ class MonacoEditorCell {
         return true;
     }
 
-    // AG Grid 销毁回调
     destroy() {
         this.closeEditor();
+
         if (this.preview && this.clickHandler) {
             this.preview.removeEventListener("click", this.clickHandler);
+            this.clickHandler = null;
         }
         if (this.eGui) {
             this.eGui.innerHTML = "";
