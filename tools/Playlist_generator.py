@@ -59,7 +59,7 @@ def push_beatmap_task(_b: list[BeatmapToUpdate], action: str) -> None:
     # todo: 由于 streamlit 的刷新机制，basic_interaction_enabled 在这里设置是无效的
     cmd = "beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()
     msg = push_task_with_session_state(cmd)
-    msg = "%s\n%s %d beatmap(s)" % (msg, action, len(_b))
+    msg = "%s: %s %d beatmap(s)" % (msg, action, len(_b))
     logger.get_logger(st.session_state.username).info(msg)
     st.session_state.playlist_msg = msg
 

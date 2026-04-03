@@ -87,7 +87,7 @@ class Awapi(OssapiAsync):
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
     def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> Never:
-        raise NotImplementedError()
+        raise NotImplementedError("new authorization grant not allowed")
 
 
 class Osuawa(object):

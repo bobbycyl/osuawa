@@ -8,6 +8,7 @@ import contextlib
 import logging
 import os
 import os.path
+import pickle
 from dataclasses import asdict
 from datetime import datetime
 from shutil import rmtree
@@ -16,34 +17,46 @@ from typing import Literal, Optional, cast
 
 import orjson
 import redis
+import requests
 import schedule
 import toml
 from clayutil.cmdparse import CollectionField as Coll, Command, CommandParser, IntegerField as Int, JSONStringField as JsonStr
 from ossapi import Domain, Scope, Score
 from sqlalchemy import create_engine, text
 
-from osuawa import OsuPlaylist, Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, SimpleScoreInfo, _build_update_ignore, _build_upsert, _create_tmp_playlist_p, async_get_username, push_task
+from osuawa import Awapi, OsuPlaylist, Osuawa
+from osuawa.utils import (
+    BeatmapSpec,
+    BeatmapToUpdate,
+    C,
+    CompletedPlaylistBeatmap,
+    CompletedSimpleScoreInfo,
+    DatabasePlaylistBeatmap,
+    SimpleScoreInfo,
+    _build_update_ignore,
+    _build_upsert,
+    _create_tmp_playlist_p,
+    async_get_username,
+    push_task,
+)
 
 # streamlit settings
 st_config = toml.load("./.streamlit/config.toml")
 st_secrets = toml.load("./.streamlit/secrets.toml")
 
 # 路径创建
-if not os.path.exists(C.LOGS.value):
-    os.mkdir(C.LOGS.value)
-if not os.path.exists(C.OUTPUT_DIRECTORY.value):
-    os.mkdir(C.OUTPUT_DIRECTORY.value)
-if not os.path.exists(C.STATIC_DIRECTORY.value):
-    os.mkdir(C.STATIC_DIRECTORY.value)
-if not os.path.exists(C.UPLOADED_DIRECTORY.value):
-    os.mkdir(C.UPLOADED_DIRECTORY.value)
-if not os.path.exists(C.BEATMAPS_CACHE_DIRECTORY.value):
-    os.mkdir(C.BEATMAPS_CACHE_DIRECTORY.value)
-if not os.path.exists(C.OAUTH_TOKEN_DIRECTORY.value):
-    os.mkdir(C.OAUTH_TOKEN_DIRECTORY.value)
-if not os.path.exists(C.COMPONENTS_SHELVES_DIRECTORY.value):
-    os.mkdir(C.COMPONENTS_SHELVES_DIRECTORY.value)
+for _path in [
+    C.LOGS.value,
+    C.OUTPUT_DIRECTORY.value,
+    C.STATIC_DIRECTORY.value,
+    C.UPLOADED_DIRECTORY.value,
+    C.BEATMAPS_CACHE_DIRECTORY.value,
+    C.OAUTH_TOKEN_DIRECTORY.value,
+    os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh"),
+    C.COMPONENTS_SHELVES_DIRECTORY.value,
+]:
+    if not os.path.exists(_path):
+        os.mkdir(_path)
 
 # asyncio event loop
 loop = asyncio.new_event_loop()
@@ -103,16 +116,22 @@ sem = asyncio.Semaphore(1)
 # 数据库需要以下表和字段
 # 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
 # 2. 表 SCORE，字段与 CompletedSimpleScoreInfo 大体一致，另附加 SCORE_ID 字段作为主键
-with engine.begin() as conn:
-    conn.execute(
+# 3. 表 USER_CACHE，字段固定为 USER_ID, USERNAME, AID, LAST_SEEN_TS，AID 为主键
+with engine.begin() as _conn:
+    _conn.execute(
         text(
             "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS VARCHAR(255), NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, U_ARTIST TEXT, U_TITLE TEXT, PRIMARY KEY (BID, MODS));",
         ),
     )
-    conn.execute(
+    _conn.execute(
         text(
             "CREATE TABLE IF NOT EXISTS SCORE(SCORE_ID BIGINT, BID BIGINT, USER_ID BIGINT, SCORE INT, ACCURACY REAL, MAX_COMBO INT, PASSED INT, PP REAL, MODS TEXT, TS REAL, STATISTICS TEXT, ST REAL, \
              CS REAL, HIT_WINDOW REAL, PREEMPT REAL, BPM REAL, HIT_LENGTH INT, IS_NF INT, IS_HD INT, IS_HIGH_AR INT, IS_LOW_AR INT, IS_VERY_LOW_AR INT, IS_SPEED_UP INT, IS_SPEED_DOWN INT, INFO TEXT, ORIGINAL_DIFFICULTY REAL, B_STAR_RATING REAL, B_MAX_COMBO INT, B_AIM_DIFFICULTY REAL, B_AIM_DIFFICULT_SLIDER_COUNT REAL, B_SPEED_DIFFICULTY REAL, B_SPEED_NOTE_COUNT REAL, B_SLIDER_FACTOR REAL, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_AIM_DIFFICULT_STRAIN_COUNT REAL, B_SPEED_DIFFICULT_STRAIN_COUNT REAL, PP_AIM REAL, PP_SPEED REAL, PP_ACCURACY REAL, B_PP_100IF_AIM REAL, B_PP_100IF_SPEED REAL, B_PP_100IF_ACCURACY REAL, B_PP_100IF REAL, B_PP_92IF REAL, B_PP_81IF REAL, B_PP_67IF REAL, PRIMARY KEY (SCORE_ID));",
+        ),
+    )
+    _conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS USER_CACHE(USER_ID BIGINT, USERNAME TEXT, AID VARCHAR(36), LAST_SEEN_TS REAL, PRIMARY KEY (AID));",
         ),
     )
 
@@ -343,7 +362,7 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
                     VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)
                     %s""" % upsert_text,
                 ),
-                parameters=beatmap,
+                beatmap,
             )
         if action == 0b00:
             raise ValueError("no changes made")
@@ -370,6 +389,42 @@ def cleanup_ald_tasks_status():
                 r.delete(key)
 
 
+def refresh_oauth_token():
+    for filename in os.listdir(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh")):
+        aid = os.path.splitext(filename)[0]
+        with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", filename), "rb") as fi_b:
+            refresh_token = pickle.load(fi_b)
+        _oauth_r = requests.post(
+            Awapi.TOKEN_URL.format(domain=Domain.OSU.value),
+            headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "client_id": st_secrets["args"]["client_id"],
+                "client_secret": st_secrets["args"]["client_secret"],
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "scope": " ".join([Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]),
+            },
+        ).json()
+        if _oauth_r.get("error"):
+            logger.error(f"refresh token for {aid} failed: {_oauth_r.get('error_description')}")
+            # 删除文件并删除数据库中的记录
+            os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, filename))
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "DELETE FROM USER_CACHE WHERE AID = :aid",
+                    ),
+                    {"aid": aid},
+                )
+        else:
+            # 数据库中的数据无需更新，只需要写入两个 token 文件即可
+            with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, filename), "wb") as fi_b:
+                pickle.dump(_oauth_r.get("access_token"), fi_b)
+            with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", filename), "wb") as fi_b:
+                pickle.dump(_oauth_r.get("refresh_token"), fi_b)
+            logger.info(f"refreshed token for {aid}")
+
+
 def setup_scheduled_tasks():
     schedule.every(12).hours.do(
         push_task,
@@ -378,6 +433,9 @@ def setup_scheduled_tasks():
     )
     schedule.every(1).hour.do(
         cleanup_ald_tasks_status,
+    )
+    schedule.every(16).hours.do(
+        refresh_oauth_token,
     )
 
 
@@ -439,6 +497,7 @@ push_task(
 )
 setup_scheduled_tasks()
 cleanup_ald_tasks_status()
+refresh_oauth_token()
 
 while True:
     try:
