@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-03 22:09+0800\n"
-"PO-Revision-Date: 2026-04-04 01:09+0800\n"
+"POT-Creation-Date: 2026-04-04 20:14+0800\n"
+"PO-Revision-Date: 2026-04-04 20:16+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -36,47 +36,47 @@ msgstr "请稍候……"
 msgid "Welcome!"
 msgstr "欢迎使用！"
 
-#: Home.py:321
-msgid "select a command"
+#: Home.py:318
+msgid "Select a command"
 msgstr "选择一个命令"
 
-#: Home.py:326
+#: Home.py:323
 #, python-format
 msgid "**description**: %s"
 msgstr "**命令描述**：%s"
 
-#: Home.py:327
+#: Home.py:324
 #, python-format
 msgid "**usage**: %s"
 msgstr "**使用方法**：%s"
 
-#: Home.py:360
+#: Home.py:357
 msgid "enabled"
 msgstr "启用"
 
-#: Home.py:376
-msgid "preview the command"
+#: Home.py:373
+msgid "Preview the command"
 msgstr "预览命令"
 
-#: Home.py:382
-msgid "run"
-msgstr "执行"
+#: Home.py:379
+msgid "Run"
+msgstr "运行"
 
-#: Home.py:394
+#: Home.py:391
 msgid "How can I help you?"
 msgstr "有什么我能帮你的吗？"
 
-#: Home.py:412
+#: Home.py:409
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
 #: app.py:96 tools/Score_visualizer.py:18
-msgid "Score visualizer"
+msgid "Score Visualizer"
 msgstr "查成分"
 
 #: app.py:97 tools/Playlist_generator.py:33
-msgid "Playlist generator"
+msgid "Playlist Generator"
 msgstr "做课题"
 
 #: app.py:98 tools/Recorder.py:24
@@ -120,7 +120,7 @@ msgid "Calculating how long your wrist can last."
 msgstr "正在计算你的手腕还能坚持多久。"
 
 #: app.py:117
-msgid "This loading bar moves slower than a 128 BPM song."
+msgid "This loading bar moves slower than a 128-BPM song."
 msgstr "这进度条动得比 128 BPM 的歌还慢。"
 
 #: app.py:118
@@ -142,18 +142,18 @@ msgstr "正在启动星……啊不对，加载星数。"
 
 #: app.py:122
 msgid "My ACC is expanding and contracting with temperature."
-msgstr "我的 ACC 正在热胀冷缩。"
+msgstr "我的准确率正在热胀冷缩。"
 
 #: app.py:123
 msgid "Generating fake SS screenshots..."
 msgstr "正在生成虚假的 SS 截图。"
 
 #: app.py:124
-msgid "Loading miss hit sound... 404 Not Found."
+msgid "Loading miss hitsound... 404 Not Found."
 msgstr "正在加载 miss 击打音效…… 404 你访问的页面不存在。"
 
 #: app.py:125
-msgid "How is your HP thicker than MMORPG bosses?"
+msgid "Why is your HP thicker than MMORPG bosses?"
 msgstr "你的血条怎么比大型多人在线角色扮演游戏的头目还厚？"
 
 #: app.py:126
@@ -198,21 +198,21 @@ msgid "There are no bugs, only undocumented features."
 msgstr "没有 bug，只有未标明特性。"
 
 #: app.py:136
-msgid "The loading bar is actually random length, stop staring at it."
+msgid "The loading bar is actually of random length, stop staring at it."
 msgstr "进度条是随机的，别盯着它了。"
 
 #: app.py:137
 #, python-format
-msgid "If I told you it’s 99%% loaded, would you believe me?"
+msgid "If I told you it were 99%% loaded, would you believe me?"
 msgstr "如果我说已经加载了 99%% 了，你会信吗？"
 
 #: app.py:138
-msgid "Analyzing your play history... seems you like Tech maps?"
+msgid "Analyzing your play history... it seems you like Tech maps?"
 msgstr "正在分析你的游玩历史……似乎你喜欢 Tech 图？"
 
 #: app.py:139
 msgid "Stop looking at the Accuracy, enjoy the music!"
-msgstr "别关注 ACC 了，享受音乐！"
+msgstr "别关注准确率了，享受音乐！"
 
 #: app.py:140
 msgid "Loading... (This tip is also part of the loading process)"
@@ -239,51 +239,51 @@ msgid "Immersive Mode"
 msgstr "沉浸模式"
 
 #: app.py:246 app.py:247
-msgid "Tasks Board"
+msgid "Task Board"
 msgstr "任务面板"
 
 #: osuawa/components.py:116
-msgid "Failed to initialize the osu!api wrapper. Please refresh the page."
-msgstr "初始化 osu!api 失败，请刷新页面。"
+msgid "Failed to initialize the osu! api wrapper. Please refresh the page."
+msgstr "初始化 osu! api 失败，请刷新页面。"
 
 #: osuawa/components.py:133
-msgid "register command parser"
+msgid "Register command parser"
 msgstr "注册命令解析器"
 
 #: osuawa/components.py:154
-msgid "get user info"
+msgid "Get user info"
 msgstr "获取用户信息"
 
 #: osuawa/components.py:161
-msgid "save user recent scores"
+msgid "Save user's recent scores"
 msgstr "保存用户最近分数"
 
 #: osuawa/components.py:166
-msgid "get and show score"
+msgid "Get and display score"
 msgstr "展示分数"
 
 #: osuawa/components.py:169
-msgid "get and show user scores of a beatmap"
+msgid "Get and display user scores of a beatmap"
 msgstr "展示用户谱面分数"
 
 #: osuawa/components.py:176
-msgid "generate local playlists"
+msgid "Generate local playlists"
 msgstr "生成本地课题"
 
 #: osuawa/components.py:181
-msgid "show user recent scores (only saved scores are available)"
+msgid "Display user's recent scores (only saved scores are available)"
 msgstr "展示用户最近分数（需要先保存分数）"
 
 #: osuawa/components.py:182
-msgid "draw strain graph of an osu! standard beatmap"
+msgid "Draw strain graph of an osu!standard beatmap"
 msgstr "绘制 osu! 标准模式谱面的负载折线图"
 
 #: osuawa/components.py:183
-msgid "show all live sessions"
+msgid "Display all active sessions"
 msgstr "展示所有活跃会话"
 
 #: osuawa/components.py:184
-msgid "invalidate all sessions"
+msgid "Invalidate all sessions"
 msgstr "无效化所有会话"
 
 #: osuawa/components.py:286
@@ -333,7 +333,7 @@ msgid ""
 msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。"
 
 #: osuawa/components.py:439
-msgid "only osu! standard beatmap supported"
+msgid "only osu!standard beatmap supported"
 msgstr "仅支持 osu! 标准模式谱面"
 
 #: osuawa/components.py:556
@@ -346,11 +346,11 @@ msgid "pending..."
 msgstr "待定……"
 
 #: tools/Playlist_generator.py:37
-msgid "new style"
+msgid "New Style"
 msgstr "新样式"
 
 #: tools/Playlist_generator.py:99
-msgid "Export selected as a playlist"
+msgid "Export selection as a playlist"
 msgstr "将选中行导出为课题"
 
 #: tools/Playlist_generator.py:102 tools/Playlist_generator.py:481
@@ -362,7 +362,8 @@ msgstr "未选中任何谱面"
 msgid ""
 "Auto refresh on this page is disabled due to technical reasons. You might "
 "want to press the `%s` button manually to refresh the playlist."
-msgstr "由于技术原因，此页面已禁用自动刷新。你可以按`%s`按钮手动刷新课题。"
+msgstr ""
+"由于技术原因，此页面已禁用自动刷新。你可以点击 `%s` 按钮手动刷新课题。"
 
 #: tools/Playlist_generator.py:114 tools/Playlist_generator.py:473
 msgid "Refresh"
@@ -381,7 +382,7 @@ msgid "Add beatmap"
 msgstr "添加谱面"
 
 #: tools/Playlist_generator.py:133
-msgid "Beatmap URLs or IDs, split by spaces"
+msgid "Beatmap URLs or IDs, separated by spaces"
 msgstr "谱面链接或BID，用空格分隔"
 
 #: tools/Playlist_generator.py:134
@@ -444,7 +445,7 @@ msgid "Search"
 msgstr "搜索"
 
 #: tools/Playlist_generator.py:211
-msgid "Search in BID, slot, notes and so on..."
+msgid "Search in BID, slot, notes etc."
 msgstr "在全库中搜索……"
 
 #: tools/Playlist_generator.py:213
@@ -452,8 +453,8 @@ msgid "Highlight duplicates"
 msgstr "高亮重复项"
 
 #: tools/Playlist_generator.py:214
-msgid "Sort as match"
-msgstr "比赛图池排序"
+msgid "Match sorting"
+msgstr "赛图排序"
 
 #: tools/Playlist_generator.py:223
 msgid "querying duplicate BIDs"
@@ -511,11 +512,11 @@ msgid "## Generate from a file"
 msgstr "## 使用课题源文件生成"
 
 #: tools/Playlist_generator.py:493
-msgid "choose a file"
+msgid "Choose a file"
 msgstr "选择文件"
 
 #: tools/Playlist_generator.py:526
-msgid "download the resources"
+msgid "Download the resources"
 msgstr "下载资源"
 
 #: tools/Recorder.py:71
@@ -523,7 +524,7 @@ msgid "invalid user ids"
 msgstr "无效用户 ID"
 
 #: tools/Recorder.py:92
-msgid "full info"
+msgid "Full info"
 msgstr "完整信息"
 
 #: tools/Recorder.py:96
@@ -531,19 +532,19 @@ msgid "## tosu Panel"
 msgstr "## tosu 面板"
 
 #: tools/Recorder.py:98
-msgid "table options"
+msgid "Table options"
 msgstr "表格选项"
 
 #: tools/Recorder.py:99 tools/Score_visualizer.py:131
-msgid "mods filter (regex)"
+msgid "Mods filter (regex)"
 msgstr "模组筛选（正则表达式）"
 
 #: tools/Recorder.py:100
-msgid "best only"
+msgid "Best only"
 msgstr "仅最好成绩"
 
 #: tools/Recorder.py:101
-msgid "prettify"
+msgid "Prettify"
 msgstr "美化输出"
 
 #: tools/Recorder.py:103
@@ -551,11 +552,11 @@ msgid "friends"
 msgstr "好友"
 
 #: tools/Recorder.py:104
-msgid "submit"
+msgid "Submit"
 msgstr "提交"
 
 #: tools/Recorder.py:105
-msgid "manually add user ids"
+msgid "Manually add user ids"
 msgstr "手动添加用户 ID"
 
 #: tools/Recorder.py:109
@@ -575,15 +576,15 @@ msgid "Limit"
 msgstr "数量限制"
 
 #: tools/Recorder.py:131
-msgid "clear all caches"
-msgstr "清除缓存"
+msgid "Clear all caches"
+msgstr "清除所有缓存"
 
 #: tools/Score_visualizer.py:20
-msgid "user"
+msgid "User"
 msgstr "用户"
 
 #: tools/Score_visualizer.py:21
-msgid "date range"
+msgid "Date range"
 msgstr "日期范围"
 
 #: tools/Score_visualizer.py:105
@@ -591,7 +592,7 @@ msgid "no scores found"
 msgstr "暂无本地分数"
 
 #: tools/Score_visualizer.py:108
-msgid "user profile"
+msgid "User profile"
 msgstr "用户主页"
 
 #: tools/Score_visualizer.py:111
@@ -603,23 +604,23 @@ msgid "Filtering"
 msgstr "筛选"
 
 #: tools/Score_visualizer.py:132
-msgid "star rating"
+msgid "Star rating"
 msgstr "难度星数"
 
 #: tools/Score_visualizer.py:133
-msgid "passed only"
+msgid "Passed only"
 msgstr "排除失败成绩"
 
 #: tools/Score_visualizer.py:134
-msgid "common mods only"
+msgid "Common mods only"
 msgstr "仅常见模组"
 
 #: tools/Score_visualizer.py:136
-msgid "custom columns"
+msgid "Custom columns"
 msgstr "自定义列"
 
 #: tools/Score_visualizer.py:161
-msgid "advanced filter"
+msgid "Advanced filter"
 msgstr "高级筛选"
 
 #: tools/Score_visualizer.py:166
@@ -627,7 +628,7 @@ msgid "## Playing Preferences"
 msgstr "## 游玩偏好"
 
 #: tools/Score_visualizer.py:167
-msgid "compared to"
+msgid "Compared to"
 msgstr "比较方"
 
 #: tools/Score_visualizer.py:199
@@ -635,7 +636,7 @@ msgid "Statistics"
 msgstr "统计数据"
 
 #: tools/Score_visualizer.py:203
-msgid "index"
+msgid "Index"
 msgstr "指标"
 
 #: tools/Score_visualizer.py:217 tools/Score_visualizer.py:220
@@ -648,57 +649,9 @@ msgid "## Skills Analysis"
 msgstr "## 能力分析"
 
 #: tools/Score_visualizer.py:256
-msgid "more complex charts"
+msgid "More complex charts"
 msgstr "使用复杂图表"
 
 #: tools/Score_visualizer.py:290
 msgid "## Filtered Data"
 msgstr "## 目前筛选数据"
-
-#~ msgid "Type \"help\" to get started."
-#~ msgstr "键入“help”以开始。"
-
-#, fuzzy
-#~ msgid "OAuth2 token or code has expired. Please refresh the page."
-#~ msgstr "授权已过期，请移除查询参数并刷新页面。"
-
-#~ msgid "update user recent scores"
-#~ msgstr "更新用户最近分数"
-
-#, python-format
-#~ msgid "failed to parse the spec(s): %s"
-#~ msgstr "解析课题规格失败：%s"
-
-#, python-format
-#~ msgid "slot too short: %s"
-#~ msgstr "图池位过短：%s"
-
-#, python-format
-#~ msgid "slot too long: %s"
-#~ msgstr "图池位过长：%s"
-
-#~ msgid "user not found"
-#~ msgstr "用户不存在"
-
-#, python-format
-#~ msgid "uncaught exception: %s"
-#~ msgstr "未捕获异常：%s"
-
-#~ msgid "registering a client..."
-#~ msgstr "正在注册客户端……"
-
-#~ msgid "Please upload a file first."
-#~ msgstr "请先上传文件。"
-
-#~ msgid "wide page layout"
-#~ msgstr "宽页布局"
-
-#~ msgid "User IDs"
-#~ msgstr "用户 ID 列表"
-
-#~ msgid "client refreshed"
-#~ msgstr "客户端已刷新"
-
-#, python-format
-#~ msgid "Next update in %d seconds"
-#~ msgstr "%d 秒后更新"

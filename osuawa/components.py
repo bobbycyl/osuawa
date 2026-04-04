@@ -113,7 +113,7 @@ def init_page(page_title: str, force_val: Optional[bool] = None) -> None:
     try:
         assert isinstance(st.session_state.awa, Osuawa)
     except (AttributeError, AssertionError):
-        st.error(_("Failed to initialize the osu!api wrapper. Please refresh the page."))
+        st.error(_("Failed to initialize the osu! api wrapper. Please refresh the page."))
         st.stop()
 
 
@@ -130,58 +130,58 @@ def commands():
     return [
         Command(
             "reg",
-            _("register command parser"),
+            _("Register command parser"),
             [JsonStr("obj", True)],
             0,
             register_commands,
         ),
         Command(
             "fman",
-            "show or clean files",
+            "Show or clean files",
             [Str("action"), Str("filename", True)],
             4,
             files_action,
         ),
         Command(
             "logfilter",
-            "tail logs",
+            "Tail logs",
             [Int("n", True), Str("keyword", True)],
             3,
             tail_log,
         ),
         Command(
             "where",
-            _("get user info"),
+            _("Get user info"),
             [Str("username")],
             0,
             st.session_state.awa.get_user_info,
         ),
         Command(
             "save",
-            _("save user recent scores"),
+            _("Save user's recent scores"),
             [Int("user")],
             1,
             lambda user: push_task_with_session_state("save %d" % user),
         ),
-        Command("score", _("get and show score"), [Int("score_id")], 0, st.session_state.awa.get_score),
+        Command("score", _("Get and display score"), [Int("score_id")], 0, st.session_state.awa.get_score),
         Command(
             "scores",
-            _("get and show user scores of a beatmap"),
+            _("Get and display user scores of a beatmap"),
             [Int("beatmap"), Int("user", True)],
             0,
             st.session_state.awa.get_user_beatmap_scores,
         ),
         Command(
             "gen",
-            _("generate local playlists"),
+            _("Generate local playlists"),
             [Bool("fast_mode", True), Bool("output_zip", True)],
             4,
             generate_all_playlists,
         ),
-        Command("cat", _("show user recent scores (only saved scores are available)"), [Int("user")], 0, cat),
-        Command("prev", _("draw strain graph of an osu! standard beatmap"), [Int("beatmap"), Str("mod_settings", True)], 0, draw_strain_graph),
-        Command("sessions", _("show all live sessions"), [], 0, query_all_sessions),
-        Command("invalidate", _("invalidate all sessions"), [], 0, invalidate_user_cache),
+        Command("cat", _("Display user's recent scores (only saved scores are available)"), [Int("user")], 0, cat),
+        Command("prev", _("Draw strain graph of an osu!standard beatmap"), [Int("beatmap"), Str("mod_settings", True)], 0, draw_strain_graph),
+        Command("sessions", _("Display all active sessions"), [], 0, query_all_sessions),
+        Command("invalidate", _("Invalidate all sessions"), [], 0, invalidate_user_cache),
     ]
 
 
@@ -436,7 +436,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
     beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api.beatmap(bid))
     if beatmap.mode != GameMode.OSU:
-        raise CommandError(_("only osu! standard beatmap supported"))
+        raise CommandError(_("only osu!standard beatmap supported"))
     download_osu(beatmap)
 
     if mod_settings is not None:

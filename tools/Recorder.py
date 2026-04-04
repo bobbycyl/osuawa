@@ -89,20 +89,20 @@ def tosu_main() -> None:
             st.dataframe(df.style.apply(tosu_df_style, axis=1), column_order=column_order, hide_index=True)
         else:
             st.dataframe(df)
-        with st.expander(_("full info")):
+        with st.expander(_("Full info")):
             st.write(obj)
 
 
 st.markdown(_("## tosu Panel"))
 st.text_input("tosu URL", value="ws://127.0.0.1:24050/", key="rec_tosu_url")
-with st.expander(_("table options")):
-    st.text_input(_("mods filter (regex)"), key="rec_tosu_mods")
-    st.toggle(_("best only"), key="rec_tosu_best")
-    st.toggle(_("prettify"), value=True, key="rec_tosu_prettify")
+with st.expander(_("Table options")):
+    st.text_input(_("Mods filter (regex)"), key="rec_tosu_mods")
+    st.toggle(_("Best only"), key="rec_tosu_best")
+    st.toggle(_("Prettify"), value=True, key="rec_tosu_prettify")
 with st.form("quickly add friend ids"):
     quickly_selected_friend_usernames: list[str] = st.multiselect(_("friends"), list(friends().values()))
-    st.form_submit_button(_("submit"))
-st.text_input(_("manually add user ids"), value="[%d]" % st.session_state.user, key="rec_user_ids")
+    st.form_submit_button(_("Submit"))
+st.text_input(_("Manually add user ids"), value="[%d]" % st.session_state.user, key="rec_user_ids")
 try:
     tosu_main()
 except (ConnectionError, ConnectionRefusedError, TimeoutError):
@@ -128,5 +128,5 @@ st.write(user_scores_current)
 with threading.Lock(), open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w", encoding="utf-8") as fo:
     fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
 
-if st.button(_("clear all caches"), icon=":material/cleaning_services:"):
+if st.button(_("Clear all caches"), icon=":material/cleaning_services:"):
     st.cache_data.clear()

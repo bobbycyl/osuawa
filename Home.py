@@ -157,12 +157,10 @@ if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "glm-4-flash"
 
 if "messages" not in st.session_state:
-    st.session_state.llm_messages = cast(
-        list[dict[str, Any]],
-        [
-            {
-                "role": "system",
-                "content": """你是一个 osu! 游戏助手。当用户询问玩家和谱面相关信息时，请使用可用的工具进行查询。
+    st.session_state.llm_messages = [
+        {
+            "role": "system",
+            "content": """你是一个 osu! 游戏助手。当用户询问玩家和谱面相关信息时，请使用可用的工具进行查询。
 
 重要的使用规则：
 1. 当用户提到某个玩家名并询问 PP、排名、数据等信息时，立即使用 get_user_info 工具查询；
@@ -171,9 +169,8 @@ if "messages" not in st.session_state:
 
 示例：
 1. 当用户询问某位玩家在指定谱面上的成绩时，先调用 get_user_info 工具获取 user_id，再调用 get_user_beatmap_scores 工具查询成绩。""",
-            },
-        ],
-    )
+        },
+    ]
 
 
 def execute_tool_call(tool_call: dict[str, Any]) -> str:
@@ -318,7 +315,7 @@ def home_form():
     # 命令面板
     available_commands = st.session_state.cmdparser.data
     # 一个 select_box 选择命令，根据选择的命令，生成参数数量、参数类型、参数描述的输入框
-    st.selectbox(_("select a command"), available_commands.keys(), key="home_command_selector")
+    st.selectbox(_("Select a command"), available_commands.keys(), key="home_command_selector")
     # 参数有以下类型
     # IntegerField, FloatField, BoolField, StringField, JSONStringField, CollectionField, CustomField
     min_param_len, max_param_len, command_usage = available_commands[st.session_state.home_command_selector].info
@@ -373,13 +370,13 @@ def home_form():
             if type(_v) is bool:
                 _v = "true" if _v else "false"
             parts.append(str(_v))
-    with st.expander(_("preview the command"), icon=":material/preview:"):
+    with st.expander(_("Preview the command"), icon=":material/preview:"):
         st.json(parts)
     st.session_state["input"] = " ".join(parts)
 
 
 home_form()
-st.button(_("run"), width="stretch", type="primary", on_click=submit)
+st.button(_("Run"), width="stretch", type="primary", on_click=submit)
 
 if st.session_state.perm >= 1:
     st.divider()
