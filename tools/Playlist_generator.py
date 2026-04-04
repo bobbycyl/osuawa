@@ -30,11 +30,11 @@ if TYPE_CHECKING:
     # noinspection PyTypeHints
     st.session_state.redis_tasks: list[RedisTaskId]
 
-init_page(_("Playlist generator") + " - osuawa")
+init_page(_("Playlist Generator") + " - osuawa")
 if "playlist_msg" not in st.session_state:
     st.session_state.playlist_msg = ""
 with st.sidebar:
-    st.toggle(_("new style"), key="new_style", value=True, disabled=not st.session_state.basic_interaction_enabled)
+    st.toggle(_("New Style"), key="new_style", value=True, disabled=not st.session_state.basic_interaction_enabled)
 
 conn = st.connection("osuawa", type="sql", ttl=3600)
 conn.query = _make_query_uppercase(conn.query)
@@ -96,7 +96,7 @@ def check_beatmap_exists(bid: int, mods: str) -> bool:
     return res > 0
 
 
-@st.dialog(_("Export selected as a playlist"))
+@st.dialog(_("Export selection as a playlist"))
 def export_filtered_playlist():
     if selected_rows is None or len(selected_rows) == 0:
         st.error(_("no beatmaps selected"))
@@ -130,7 +130,7 @@ if st.session_state.perm >= 1:
     with st.form(_("Add beatmap")):
         col1, col2 = st.columns(2)
         with col1:
-            urls_input = st.text_input(_("Beatmap URLs or IDs, split by spaces"))
+            urls_input = st.text_input(_("Beatmap URLs or IDs, separated by spaces"))
             slot_input = st.text_input(_("Slot"))
             notes_input = st.text_input(_("Notes"))
         with col2:
@@ -208,10 +208,10 @@ if st.session_state.perm >= 1:
         with filter_col2:
             memorized_selectbox(_("Status"), "gen_filter_status", [-1, 0, 1, 2], -1)
         with filter_col3:
-            st.text_input(_("Search"), key="gen_filter_search", placeholder=_("Search in BID, slot, notes and so on..."))
+            st.text_input(_("Search"), key="gen_filter_search", placeholder=_("Search in BID, slot, notes etc."))
         with ctrl_col1:
             highlight_dup = st.checkbox(_("Highlight duplicates"), value=True)
-            match_slot_sort = st.checkbox(_("Sort as match"), value=False)
+            match_slot_sort = st.checkbox(_("Match sorting"), value=False)
 
     # 查询重复的 BID 与曲目，用于后期查询结果表格渲染。重复的 BID 行要标记为红色，重复的曲目行要标记为黄色
     # U_ARTIST + U_TITLE 用于曲目识别
@@ -490,7 +490,7 @@ if st.session_state.perm >= 1:
 st.divider()
 
 st.markdown(_("## Generate from a file"))
-uploaded_file = st.file_uploader(_("choose a file"), type=["properties"])
+uploaded_file = st.file_uploader(_("Choose a file"), type=["properties"])
 if uploaded_file is not None:
     if isinstance(uploaded_file, list):
         st.error("multiple files not allowed")
@@ -523,4 +523,4 @@ if uploaded_file is not None:
     st.dataframe(table, hide_index=True)
     compress_as_zip(session_path, zip_filename)
     with open(zip_filename, "rb") as zfi:
-        st.download_button(label=_("download the resources"), file_name="%s.zip" % uid, data=zfi)
+        st.download_button(label=_("Download the resources"), file_name="%s.zip" % uid, data=zfi)

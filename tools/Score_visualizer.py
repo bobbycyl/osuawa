@@ -15,10 +15,10 @@ if TYPE_CHECKING:
     def _(text: str) -> str: ...
 
 
-init_page(_("Score visualizer") + " - osuawa")
+init_page(_("Score Visualizer") + " - osuawa")
 all_users = get_all_score_users()
-user = st.selectbox(_("user"), all_users)
-st.date_input(_("date range"), [date.today() - timedelta(days=30), date.today() + timedelta(days=1)], key="cat_date_range")
+user = st.selectbox(_("User"), all_users)
+st.date_input(_("Date range"), [date.today() - timedelta(days=30), date.today() + timedelta(days=1)], key="cat_date_range")
 
 CO = "#FF6A6A"
 CC = "#4C95D9"
@@ -105,7 +105,7 @@ if len(df) == 0:
     st.error(_("no scores found"))
     st.stop()
 dfp = df[df["passed"]]
-st.link_button(_("user profile"), f"https://osu.ppy.sh/users/{user}")
+st.link_button(_("User profile"), f"https://osu.ppy.sh/users/{user}")
 
 with st.container(border=True):
     st.markdown(_("## PP Overall"))
@@ -128,12 +128,12 @@ got/100/92/81/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_
     )
 
 with st.expander(_("Filtering")):
-    st.text_input(_("mods filter (regex)"), key="cat_mods")
-    st.slider(_("star rating"), 0.0, 10.0, (1.5, 8.5), key="cat_sr_range")
-    st.checkbox(_("passed only"), key="cat_passed")
-    st.checkbox(_("common mods only"), key="cat_acm")
+    st.text_input(_("Mods filter (regex)"), key="cat_mods")
+    st.slider(_("Star rating"), 0.0, 10.0, (1.5, 8.5), key="cat_sr_range")
+    st.checkbox(_("Passed only"), key="cat_passed")
+    st.checkbox(_("Common mods only"), key="cat_acm")
     memorized_multiselect(
-        _("custom columns"),
+        _("Custom columns"),
         "cat_col",
         list(df.columns),
         [
@@ -158,13 +158,13 @@ with st.expander(_("Filtering")):
             "bid",
         ],
     )
-    st.text_input(_("advanced filter"), key="cat_advanced_filter")
+    st.text_input(_("Advanced filter"), key="cat_advanced_filter")
 
 df_o = apply_filter(df)
 
 with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
-    comp_user = st.selectbox(_("compared to"), all_users)
+    comp_user = st.selectbox(_("Compared to"), all_users)
     df_c = get_scores_dataframe(comp_user, (begin_date, end_date))
     stats_indexes = [
         "accuracy",
@@ -200,7 +200,7 @@ with st.container(border=True):
         st.dataframe(df_o_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
         st.dataframe(df_c_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
 
-    memorized_selectbox(_("index"), "cat_comp_index", stats_indexes, "b_star_rating")
+    memorized_selectbox(_("Index"), "cat_comp_index", stats_indexes, "b_star_rating")
 
     # 根据用户选择的指标，将两个玩家的数据放在同一张表与图中呈现
     df_o_ind = df_o[st.session_state.cat_comp_index]
@@ -253,7 +253,7 @@ with st.container(border=True):
 
 with st.container(border=True):
     st.markdown(_("## Skills Analysis"))
-    enable_complex = st.checkbox(_("more complex charts"))
+    enable_complex = st.checkbox(_("More complex charts"))
     try:
         if enable_complex:
             col1, col2 = st.columns(2)

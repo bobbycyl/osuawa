@@ -93,8 +93,8 @@ builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  # 想要绕过 load_value、save_value 就必须使用这种方式
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
-pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score visualizer"))
-pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist generator"))
+pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score Visualizer"))
+pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist Generator"))
 pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
 
 load_value("redis_tasks", [])
@@ -114,15 +114,15 @@ if "awa" not in st.session_state:
         _("I've got a slider break!"),
         _("Shh, don’t tell anyone what this tool is built with."),
         _("Calculating how long your wrist can last."),
-        _("This loading bar moves slower than a 128 BPM song."),
+        _("This loading bar moves slower than a 128-BPM song."),
         _("Tip: You can nod your head to the beat even if the loading bar is stuck."),
         _("I want a rhythm-pulsing progress bar like Lazer’s."),
         _("Pooling is a headache."),
         _("Loading Stellar Railway... Wait, I meant star rating."),
         _("My ACC is expanding and contracting with temperature."),
         _("Generating fake SS screenshots..."),
-        _("Loading miss hit sound... 404 Not Found."),
-        _("How is your HP thicker than MMORPG bosses?"),
+        _("Loading miss hitsound... 404 Not Found."),
+        _("Why is your HP thicker than MMORPG bosses?"),
         _("I'm not a fan of DT."),
         _("Calculating how much patience you need..."),
         _('Loading "my hand slipped" excuse generator...'),
@@ -133,9 +133,9 @@ if "awa" not in st.session_state:
         _("Refactoring spaghetti code? No, just piling it up."),
         _("If you see this tip for more than 5 seconds, the thread is probably dead."),
         _("There are no bugs, only undocumented features."),
-        _("The loading bar is actually random length, stop staring at it."),
-        _("If I told you it’s 99%% loaded, would you believe me?") % (),
-        _("Analyzing your play history... seems you like Tech maps?"),
+        _("The loading bar is actually of random length, stop staring at it."),
+        _("If I told you it were 99%% loaded, would you believe me?") % (),
+        _("Analyzing your play history... it seems you like Tech maps?"),
         _("Stop looking at the Accuracy, enjoy the music!"),
         _("Loading... (This tip is also part of the loading process)"),
     ]
@@ -243,8 +243,8 @@ if "basic_interaction_enabled" not in st.session_state or st.session_state.get("
 with st.sidebar:
     st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:", disabled=not st.session_state.basic_interaction_enabled)
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
-    if st.button(_("Tasks Board"), use_container_width=True, icon=":material/assignment:", disabled=not st.session_state.basic_interaction_enabled):
-        st.dialog(_("Tasks Board"), width="large")(task_board)()
+    if st.button(_("Task Board"), use_container_width=True, icon=":material/assignment:", disabled=not st.session_state.basic_interaction_enabled):
+        st.dialog(_("Task Board"), width="large")(task_board)()
 # _page_manager = get_script_run_ctx().pages_manager
 # _current_page_script_hash = _page_manager.current_page_script_hash
 # _url_path = _page_manager.get_pages().get(_current_page_script_hash, None).get("url_pathname", "")
