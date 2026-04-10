@@ -241,10 +241,14 @@ if "basic_interaction_enabled" not in st.session_state or st.session_state.get("
     st.session_state.basic_interaction_enabled = True
 
 with st.sidebar:
-    st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:", disabled=not st.session_state.basic_interaction_enabled)
+    if not st.session_state.immersive_active:
+        st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:", disabled=not st.session_state.basic_interaction_enabled)
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
     if st.button(_("Task Board"), use_container_width=True, icon=":material/assignment:", disabled=not st.session_state.basic_interaction_enabled):
         st.dialog(_("Task Board"), width="large")(task_board)()
+if st.session_state.immersive_active:
+    with st.container(gap="xxsmall"):
+        st.button(_("Exit Immersive Mode"), on_click=toggle_immersive, type="tertiary", shortcut="F", icon=":material/collapse_content:", disabled=not st.session_state.basic_interaction_enabled)
 # _page_manager = get_script_run_ctx().pages_manager
 # _current_page_script_hash = _page_manager.current_page_script_hash
 # _url_path = _page_manager.get_pages().get(_current_page_script_hash, None).get("url_pathname", "")
