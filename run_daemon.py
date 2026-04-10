@@ -374,10 +374,10 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
 
 
 def cleanup_ald_tasks_status():
-    """清理超过 1 小时未更新的任务状态"""
+    """清理超过 72 小时未更新的任务状态"""
     pattern = C.TASK_STATUS.value.format(task_id="*")
     now = time()
-    cutoff = now - 3600  # 1小时前
+    cutoff = now - 72 * 3600
 
     for key in r.scan_iter(match=pattern):
         # 获取任务的 time 字段
