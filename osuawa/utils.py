@@ -14,7 +14,7 @@ from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
 from time import sleep, time, time_ns
-from typing import Any, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
+from typing import Any, Literal, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
 
 import numpy as np
 import orjson
@@ -28,6 +28,7 @@ from redis import Redis
 
 init_osu_tools(os.path.join(str(os.path.dirname(__file__)), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
 from osupp.core import OsuRuleset
+from osupp.util import validate_mod_setting_value
 
 # noinspection PyUnusedImports
 from osupp.difficulty import calculate_difficulty as calculate_difficulty, get_all_mods
@@ -292,18 +293,17 @@ class SimpleOsuDifficultyAttribute(object):
             for setting_name, setting_value in _settings.items():
                 if setting_name not in all_osu_mods[acronym]:
                     raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
-                expected_type: type[str | float | bool] = all_osu_mods[acronym][setting_name]
-                if not isinstance(setting_value, expected_type):
+                expected_type: Literal["boolean", "number", "string"] = all_osu_mods[acronym][setting_name]
+                if not validate_mod_setting_value(setting_value, expected_type):
                     raise ValueError(
-                        "setting '%s' for mod '%s' should be of type '%s' (got '%s')"
+                        "setting '%s' for mod '%s' should be of type '%s'"
                         % (
                             setting_name,
                             acronym,
-                            expected_type.__name__,
-                            type(setting_value).__name__,
+                            expected_type,
                         ),
                     )
-                if expected_type is bool:
+                if expected_type == "boolean":
                     setting_value = "true" if setting_value else "false"
                 self.osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
         if "NF" in mods_dict:

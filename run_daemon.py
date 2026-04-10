@@ -203,25 +203,28 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
             )
             score["score_id"] = pk
             scores.append(score)
-        res = conn.execute(
-            text(
-                _build_update_ignore(
-                    _dialect,
-                    """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP, IS_SPEED_DOWN,
-                                          INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
-                                          B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
-                                          B_PP_81IF, B_PP_67IF)
-                       VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
-                               :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
-                               :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
-                               :b_pp_81if, :b_pp_67if)""",
-                    ["SCORE_ID"],
+        if len(scores) > 0:
+            res = conn.execute(
+                text(
+                    _build_update_ignore(
+                        _dialect,
+                        """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP, IS_SPEED_DOWN,
+                                              INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
+                                              B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
+                                              B_PP_81IF, B_PP_67IF)
+                           VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
+                                   :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
+                                   :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
+                                   :b_pp_81if, :b_pp_67if)""",
+                        ["SCORE_ID"],
+                    ),
                 ),
-            ),
-            scores,
-        )
+                scores,
+            )
 
-        len_diff = res.rowcount
+            len_diff = res.rowcount
+        else:
+            len_diff = 0
     # noinspection PyStringFormat
     return "%s: got/diff: %d/%d" % (
         username,
@@ -408,7 +411,10 @@ def refresh_oauth_token():
         if _oauth_r.get("error"):
             logger.error(f"refresh token for {aid} failed: {_oauth_r.get('error_description')}")
             # 删除文件并删除数据库中的记录
-            os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, filename))
+            if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, filename)):
+                os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, filename))
+            if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", filename)):
+                os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", filename))
             with engine.begin() as conn:
                 conn.execute(
                     text(
