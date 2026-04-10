@@ -367,7 +367,7 @@ def home_form():
     for i in range(max_param_len):
         if st.session_state["home_param_%d_enabled" % i]:
             _v = st.session_state["home_param_%d" % i]
-            if type(_v) is bool:
+            if isinstance(_v, bool):
                 _v = "true" if _v else "false"
             parts.append(str(_v))
     with st.expander(_("Preview the command"), icon=":material/preview:"):
