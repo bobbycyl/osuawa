@@ -3,9 +3,9 @@ section[data-testid="stSidebar"] {
 }
 
 .stMainBlockContainer {
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-    padding-top: 1rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    padding-top: 0 !important;
     max-width: 100% !important;
 }
 
