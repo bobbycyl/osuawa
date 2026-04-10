@@ -473,7 +473,9 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
 
 def query_all_sessions() -> pd.DataFrame:
     df = _conn.query("SELECT * FROM USER_CACHE WHERE USER_ID = %d" % st.session_state.user)
-    df["LAST_SEEN_TS"] = cast(pd.Series, pd.to_datetime(df["LAST_SEEN_TS"], utc=True)).dt.tz_convert(st.session_state.awa.tz)
+    df["LAST_SEEN_TS"] = cast(pd.Series, pd.to_datetime(df["LAST_SEEN_TS"], unit="s")).dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz)
+    df.rename(columns={"AID": "ajs_anonymous_id", "LAST_SEEN_TS": "last_seen_datetime"}, inplace=True)
+    df.drop(columns=["USER_ID", "USERNAME"], inplace=True)
     return df
 
 
@@ -514,7 +516,7 @@ def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -
     with _conn.session as s:
         upsert_text = _build_upsert(
             st.secrets.connections.osuawa.get("dialect") or st.secrets.connections.osuawa.url.split("://")[0].split("+")[0],
-            ["USER_ID", "USERNAME", "AID", "LAST_SEEN_TS"],
+            ["USER_ID", "USERNAME", "LAST_SEEN_TS"],
             ["AID"],
         )
         s.execute(
@@ -525,6 +527,7 @@ def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -
             ),
             params={"user": user, "username": username, "aid": aid, "last_seen_ts": last_seen_ts},
         )
+        s.commit()
 
 
 def push_task_with_session_state(task_command: str) -> str:
