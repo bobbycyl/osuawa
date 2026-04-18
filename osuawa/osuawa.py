@@ -25,7 +25,7 @@ from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Never, Optional, cast
+from typing import Any, Never, Optional, cast, LiteralString, Literal
 
 import numpy as np
 import orjson
@@ -37,7 +37,7 @@ from .utils import (
     CompletedSimpleScoreInfo,
     ExtendedSimpleScoreInfo,
     ParsedPlaylistBeatmap,
-    SimpleOsuDifficultyAttribute,
+    SimpleDifficultyAttribute,
     SimpleScoreInfo,
     assets_dir,
     async_get_beatmaps_dict,
@@ -450,19 +450,17 @@ class OsuPlaylist(object):
         # 处理NM, FM, TB
         root_mod: str = raw_mods[0]["acronym"]
         last_root_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
-        is_fm = False
-        mods = raw_mods.copy()  # 只能使用官方 Mods 的用这个变量
+        is_fm = root_mod == "FM" or root_mod == "F+"
+        mods = raw_mods[1:].copy()  # 只能使用官方 Mods 的用这个变量
         for j in range(len(raw_mods)):
-            # 如果非官方 Mods 缩写在列表中，则处理过后剔除该 Mod
-            if raw_mods[j]["acronym"] in self.custom_mods_acronym:
-                if raw_mods[j]["acronym"] == "FM" or raw_mods[j]["acronym"] == "F+":
-                    is_fm = True
-                mods.pop(j)
+            # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 root_mod 存在）
+            if _cur_mod := raw_mods[j]["acronym"] in self.custom_mods_acronym:
+                raise ValueError("unknown mod %s" % _cur_mod)
         mods_ready: list[str] = to_readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
 
         # 下载谱面与计算难度
         download_osu(b)
-        my_attr = SimpleOsuDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
+        my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
         my_attr.set_mods(mods)
         osupp_attr = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
         stars1 = osupp_attr["star_rating"]
@@ -507,7 +505,8 @@ class OsuPlaylist(object):
                 if column == "mods":
                     continue
                 else:
-                    extra_notes += "<br />%s: %s" % (column, element[column])  # type: ignore[literal-required]
+                    column = cast(Literal["_"], column)
+                    extra_notes += "<br />%s: %s" % (column, element[column])
 
             beatmap_info = (
                 """    </div>
@@ -648,7 +647,8 @@ class OsuPlaylist(object):
             if column == "mods":
                 continue
             else:
-                completed_beatmap[column] = element[column]  # type: ignore[literal-required]
+                column = cast(Literal["_"], column)
+                completed_beatmap[column] = element[column]
         return completed_beatmap
 
     async def playlist_task(self) -> list[CompletedPlaylistBeatmap]:

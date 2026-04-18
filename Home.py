@@ -150,8 +150,14 @@ tools = [
     },
 ]
 
+
 # client 初始化
-client = ZhipuAiClient(api_key=st.secrets.args.api_key)
+@st.cache_resource
+def get_ai_client():
+    return ZhipuAiClient(api_key=st.secrets.args.api_key)
+
+
+client = get_ai_client()
 
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "glm-4-flash"
@@ -164,11 +170,13 @@ if "messages" not in st.session_state:
 
 重要的使用规则：
 1. 当用户提到某个玩家名并询问 PP、排名、数据等信息时，立即使用 get_user_info 工具查询；
-2. 不需要等待用户明确说"用户名为xxx"或"玩家xxx"，只要看到疑似游戏玩家名字就主动查询；
-3. osu! 用户名中间可以包含空格，首尾可能有"-"、"["、"]"等特殊字符，这些也是用户名的一部分，不要擅自 strip 或 trim；
+2. 不需要等待用户明确说 "用户名为xxx" 或 "玩家xxx"，只要看到疑似游戏玩家名字就主动查询；
+3. osu! 用户名中间可以包含空格，首尾可能有 "-"、"["、"]" 等特殊字符，这些也是用户名的一部分，不要擅自 strip 或 trim；
+4. 部分有关玩家信息的函数可以省略 user 参数，缺省值为当前登录用户 (user_id=%d, username=%s)。
 
 示例：
-1. 当用户询问某位玩家在指定谱面上的成绩时，先调用 get_user_info 工具获取 user_id，再调用 get_user_beatmap_scores 工具查询成绩。""",
+1. 当用户询问非自己的某位玩家在指定谱面上的成绩时，先调用 get_user_info 工具获取 user_id，再调用 get_user_beatmap_scores 工具查询成绩。"""
+            % (st.session_state.user, st.session_state.username),
         },
     ]
 
@@ -311,7 +319,8 @@ def process_streaming_with_tools():
 
 @st.fragment
 def home_form():
-    st.session_state.cmdparser: CommandParser  # type: ignore
+    # noinspection PyTypeHints
+    st.session_state.cmdparser: CommandParser
     # 命令面板
     available_commands = st.session_state.cmdparser.data
     # 一个 select_box 选择命令，根据选择的命令，生成参数数量、参数类型、参数描述的输入框
