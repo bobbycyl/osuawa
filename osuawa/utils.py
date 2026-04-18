@@ -8,7 +8,7 @@ import os
 import re
 import uuid
 from dataclasses import dataclass, fields
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
@@ -414,6 +414,12 @@ class SimpleScoreInfo(object):
     ts: datetime
     statistics: dict[str, Optional[int]]
     st: Optional[datetime]
+
+    def __post_init__(self):
+        # ts 和 st 转换为 UTC
+        self.ts = self.ts.astimezone(timezone.utc)
+        if self.st:
+            self.st = self.st.astimezone(timezone.utc)
 
     @classmethod
     def from_score(cls, score: Score):
