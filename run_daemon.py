@@ -189,8 +189,6 @@ def get_all_score_users() -> list[int]:
 
 
 def save_recent_scores(user: int, include_fails: bool = True) -> str:
-    username: str
-    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo]
     username, completed_recent_scores_compact = daemon_awa.run_coro(async_save_recent_scores(user, include_fails))
     with engine.begin() as conn:
         # 插入到表 SCORE，如果遇到冲突，则放弃
@@ -202,6 +200,7 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
                 dict_factory=lambda items: {k.lstrip("_"): None if v is None else v.timestamp() if isinstance(v, datetime) else int(v) if isinstance(v, bool) else orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v for k, v in items},
             )
             score["score_id"] = pk
+            # todo: 默认的时间是倒序的，是否有必要转换为正序？（可能只是一些强迫症需求罢了）
             scores.append(score)
         if len(scores) > 0:
             res = conn.execute(
