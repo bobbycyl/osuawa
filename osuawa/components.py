@@ -7,7 +7,7 @@ from collections import deque
 from datetime import date, datetime, time
 from secrets import token_hex
 from shutil import copyfile
-from typing import Any, Literal, Optional, TYPE_CHECKING, cast
+from typing import Any, Literal, Optional, TYPE_CHECKING, cast, overload
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,7 @@ from clayutil.cmdparse import (
     StringField as Str,
 )
 from ossapi import Beatmap, GameMode
+from osupp.difficulty import ModEntry
 from osupp.performance import calculate_osu_performance
 from plotly.graph_objs import Figure
 from sqlalchemy import text
@@ -32,7 +33,22 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.utils import CompletedSimpleScoreInfo, RedisTaskId, SimpleOsuDifficultyAttribute, _build_upsert, _make_query_uppercase, download_osu, format_size, generate_mods_from_lines, get_size_and_count, push_task
+from osuawa.utils import (
+    CompletedSimpleScoreInfo,
+    RedisTaskId,
+    SimpleDifficultyAttribute,
+    _build_upsert,
+    _make_query_uppercase,
+    catch_mod_entries,
+    download_osu,
+    format_size,
+    generate_mods_from_lines,
+    get_size_and_count,
+    mania_mod_entries,
+    osu_mod_entries,
+    push_task,
+    taiko_mod_entries,
+)
 
 if TYPE_CHECKING:
 
@@ -43,9 +59,6 @@ if TYPE_CHECKING:
 
 _conn = st.connection("osuawa", type="sql", ttl=60)
 _conn.query = _make_query_uppercase(_conn.query)
-
-
-# todo: st.connection 为只读，写入由 daemon worker 负责
 
 
 def save_value(key: str) -> None:
@@ -446,7 +459,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
     else:
         mods = []
     # 生成 osu_tools 所能接受的样式
-    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
+    my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(mods)
     calculator = calculate_osu_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
     osupp_attr = next(calculator)
@@ -535,6 +548,140 @@ def push_task_with_session_state(task_command: str) -> str:
     st.session_state.redis_tasks.append(_task_id)
     save_value("redis_tasks")
     return "queued task: `%s`" % _task_id
+
+
+def _mod_customization(key_suffix: int, all_mods: list[ModEntry]) -> list[str]:
+    _mod_key = "modgen_mod_%d" % key_suffix
+    ret = []
+    with st.container(horizontal=True):
+        st.selectbox(_("Mod"), [mod_entry["Acronym"] for mod_entry in all_mods], key=_mod_key, index=None, placeholder=_("Select a mod"), label_visibility="collapsed")
+        with st.container(gap="xxsmall"):
+            if st.session_state[_mod_key] is not None:
+                ret.append(st.session_state[_mod_key])
+                for _mod_index in range(len(all_mods)):
+                    if all_mods[_mod_index]["Acronym"] == st.session_state[_mod_key]:
+                        break
+                else:
+                    st.error(_("mod not found"))
+                _settings = all_mods[_mod_index]["Settings"]
+                for _setting in _settings:
+                    _name = _setting["Name"]
+                    _type = _setting["Type"]
+                    _mod_setting_key = "modgen_mod_%d_%s_%s" % (key_suffix, _name, _type)
+                    _desc = _setting["Description"]
+                    _enum_values = _setting["EnumValues"]
+                    _default = _setting["Default"] or _setting["UnderlyingValue"]
+                    if _default is None:
+                        # 如果实在没有默认值，姑且根据 _type 决定默认值
+                        match _type:
+                            case "boolean":
+                                _default = False
+                            case "number":
+                                _default = 0.0
+                            case "string":
+                                _default = ""
+                            case "enum":
+                                assert _enum_values is not None
+                                _default = _enum_values[0]
+                    _default = cast(Any, _default)  # 阻止类型推断
+                    match _type:
+                        case "boolean":
+                            st.toggle(_name, value=_default, key=_mod_setting_key, help=_desc)
+                        case "number":
+                            st.number_input(_name, value=_default, key=_mod_setting_key, help=_desc)
+                        case "string":
+                            st.text_input(_name, value=_default, key=_mod_setting_key, help=_desc)
+                        case "enum":
+                            assert _enum_values is not None
+                            st.selectbox(_name, options=_enum_values, index=_enum_values.index(_default), key=_mod_setting_key, help=_desc)
+                    # 如果选中值非不是默认值，才添加模组设置
+                    if st.session_state[_mod_setting_key] != _default:
+                        ret.append("%s_%s=%s" % (st.session_state[_mod_key], _name, st.session_state[_mod_setting_key]))
+    return ret
+
+
+def _add_mod():
+    st.session_state.modgen_selected.append(st.session_state.modgen_increment)
+    st.session_state.modgen_increment += 1
+
+
+def _del_mod(suffix: int):
+    st.session_state.modgen_selected.remove(suffix)
+
+
+@overload
+def mods_generator(ret_type: Literal[0]) -> list[str]: ...
+
+
+@overload
+def mods_generator(ret_type: Literal[1]) -> list[dict[str, str | dict[str, str | float | bool]]]: ...
+
+
+@overload
+def mods_generator() -> None: ...
+
+
+def mods_generator(ret_type: Optional[Literal[0, 1]] = None):
+    # todo: load from existing
+    ruleset = st.segmented_control(_("Ruleset"), options=["osu", "taiko", "catch", "mania"], key="modgen_ruleset", default="osu", width="stretch")
+    match ruleset:
+        case "osu":
+            all_mods = osu_mod_entries
+        case "taiko":
+            all_mods = taiko_mod_entries
+        case "catch":
+            all_mods = catch_mod_entries
+        case "mania":
+            all_mods = mania_mod_entries
+        case _:
+            all_mods = osu_mod_entries
+    lines: list[str] = []
+    if "modgen_increment" not in st.session_state:
+        st.session_state.modgen_increment = 0
+    if "modgen_selected" not in st.session_state:
+        # 这是一个整型列表，用于储存选中的模组索引
+        st.session_state.modgen_selected = []
+    if "modgen_ret" not in st.session_state:
+        st.session_state.modgen_ret = deque(maxlen=1)
+    # st.write(st.session_state.modgen_increment)
+    # st.write(st.session_state.modgen_selected)
+
+    for modgen_suffix in st.session_state.modgen_selected:
+        col_content, col_del = st.columns([0.85, 0.15])
+        with col_content:
+            lines.extend(_mod_customization(modgen_suffix, all_mods))
+        with col_del:
+            st.button(
+                _("Delete"),
+                key="modgen_del_%d" % modgen_suffix,
+                type="primary",
+                width="stretch",
+                on_click=_del_mod,
+                args=(modgen_suffix,),
+            )
+
+    col_blank, col_add = st.columns([0.85, 0.15])
+    with col_blank:
+        st.space()
+    with col_add:
+        st.button(_("Add"), on_click=_add_mod)
+
+    with st.expander(_("Preview")):
+        st.code("\n".join(lines), language="properties")
+        mods = generate_mods_from_lines("SP", "\n".join(lines))
+        mods.remove({"acronym": "SP"})
+        st.json(mods)
+
+    match ret_type:
+        case 0:
+            return lines
+        case 1:
+            return mods
+        case _:
+            if st.session_state.perm >= 1 and st.button(_("Apply to the form"), width="stretch", type="primary"):
+                st.session_state.modgen_ret.appendleft((lines, mods))
+                st.rerun()
+            return None
 
 
 def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):

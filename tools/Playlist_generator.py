@@ -15,7 +15,7 @@ from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 
 from osuawa import C, OsuPlaylist
-from osuawa.components import get_session_id, init_page, load_value, memorized_selectbox, push_task_with_session_state, save_value
+from osuawa.components import get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, save_value
 from osuawa.osuawa import Osuawa
 from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, generate_mods_from_lines, read_injected_code, safe_norm, to_readable_mods
 
@@ -34,11 +34,12 @@ init_page(_("Playlist Generator") + " - osuawa")
 if "playlist_msg" not in st.session_state:
     st.session_state.playlist_msg = ""
 with st.sidebar:
+    if st.button(_("Mod Generator"), use_container_width=True, icon=":material/sync_alt:", disabled=not st.session_state.basic_interaction_enabled):
+        st.dialog(_("Mod Generator"))(mods_generator)()
     st.toggle(_("New Style"), key="new_style", value=True, disabled=not st.session_state.basic_interaction_enabled)
 
 conn = st.connection("osuawa", type="sql", ttl=3600)
 conn.query = _make_query_uppercase(conn.query)
-# todo: st.connection 为只读，写入由 daemon worker 负责
 uid = get_session_id()
 row_style_with_dup = JsCode(read_injected_code("row_style_with_dup.js"))
 row_style = JsCode(read_injected_code("row_style.js"))
@@ -143,7 +144,9 @@ if st.session_state.perm >= 1:
                 except ValueError:
                     _pool_index = 0
             pool_input = st.selectbox(_("Pool"), available_pools, index=_pool_index, accept_new_options=True)
-            mod_settings_input = st.text_area(_("Mod Settings"), height="stretch")
+            if "modgen_ret" in st.session_state and len(st.session_state.modgen_ret) > 0:
+                st.session_state.gen_form_mod_settings = "\n".join(st.session_state.modgen_ret.pop()[0])
+            mod_settings_input = st.text_area(_("Mod Settings"), height="stretch", key="gen_form_mod_settings", placeholder="Tip: You can use `%s` to set mods." % _("Mod Generator"))
             # status_input = st.slider(_("Status"), 0, 2, 0)
         submitted = st.form_submit_button(_("Add"), use_container_width=True)
         if submitted:

@@ -63,8 +63,8 @@ def init_logger_fh():
         if hasattr(_logger, "streamlit_custom_file_handler"):
             _logger.removeHandler(cast(logging.Handler, _logger.streamlit_custom_file_handler))
 
-        _logger.streamlit_custom_file_handler = fh  # type: ignore[attr-defined]
-        _logger.addHandler(_logger.streamlit_custom_file_handler)  # type: ignore[attr-defined]
+        _logger.streamlit_custom_file_handler = fh  # type: ignore
+        _logger.addHandler(_logger.streamlit_custom_file_handler)  # type: ignore
 
     _init_logger_fh(logger.get_logger("streamlit"))
     _init_logger_fh(logger.get_logger(st.session_state.username))
@@ -203,7 +203,7 @@ if "awa" not in st.session_state:
         from random import randint
 
         # 启用随机用户名
-        st.session_state.username = "".join([chr(randint(ord("a"), ord("z"))) for _ in range(8)])
+        st.session_state.username = "".join([chr(randint(ord("a"), ord("z"))) for _i in range(8)])
         ctx = get_script_run_ctx()
         if ctx is None:
             raise RuntimeError("no streamlit runtime")

@@ -20,26 +20,33 @@ import numpy as np
 import orjson
 import pandas as pd
 import typing_extensions
+from PerformanceCalculator import ProcessorWorkingBeatmap
 from clayutil.futil import Downloader, Properties
 from clayutil.sutil import md5sum
-from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact  # 避免与 rosu.Beatmap、slider.Beatmap 冲突
-from osupp.core import init_osu_tools
-from redis import Redis
-
-init_osu_tools(os.path.join(str(os.path.dirname(__file__)), "..", "osu-tools", "PerformanceCalculator", "bin", "Release", "net8.0"))
-from osupp.core import OsuRuleset
-from osupp.util import validate_mod_setting_value
-
-# noinspection PyUnusedImports
-from osupp.difficulty import calculate_difficulty as calculate_difficulty, get_all_mods
+from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact
+from osu.Game.Rulesets.Catch import CatchRuleset
+from osu.Game.Rulesets.Mania import ManiaRuleset
+from osu.Game.Rulesets.Osu import OsuRuleset
+from osu.Game.Rulesets.Taiko import TaikoRuleset
+from osupp.difficulty import get_all_mods, calculate_difficulty as calculate_difficulty
 from osupp.performance import OsuPerformance, calculate_osu_performance
+from osupp.util import validate_mod_setting_value
+from redis import Redis
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",
     "User-Agent": "osuawa",
 }
 LANGUAGES = ["en_US", "zh_CN"]
-all_osu_mods = {mod_info["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_info["Settings"]) for mod_info in get_all_mods(OsuRuleset())}
+osu_mod_entries = get_all_mods(OsuRuleset())
+all_osu_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
+taiko_mod_entries = get_all_mods(TaikoRuleset())
+all_taiko_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
+catch_mod_entries = get_all_mods(CatchRuleset())
+all_catch_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
+mania_mod_entries = get_all_mods(ManiaRuleset())
+all_mania_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
+
 sem = BoundedSemaphore()
 
 TYPE_MAPPING: dict[type, str] = {
@@ -260,9 +267,65 @@ def calc_ar(preempt: float) -> float:
     return 5.0 - (preempt - 1200.0) / 600 * 5.0 if preempt > 1200.0 else 5.0 + (1200.0 - preempt) / 750 * 5.0
 
 
-class SimpleOsuDifficultyAttribute(object):
+class SimpleDifficultyAttribute(object):
 
-    def __init__(self, cs: float, accuracy: float, ar: float, bpm: float, hit_length: int):
+    @classmethod
+    def validate_and_transform_mods(cls, mods: list, ruleset_id: Optional[Literal[0, 1, 2, 3]] = None, beatmap_path: Optional[str] = None) -> tuple[dict[str, Any], list[str], list[str]]:
+        """验证并转换标准 mods 列表
+
+        :param mods: 模组列表
+        :param ruleset_id: 游戏模式 ID，若为 None 则默认使用当前谱面的模式 ID
+        :param beatmap_path: 谱面文件路径
+        :return: ({acronym, settings}, osu_tool_mods, osu_tool_mod_options)
+        """
+        match ruleset_id:
+            case 0:
+                all_mods = all_osu_mods
+            case 1:
+                all_mods = all_taiko_mods
+            case 2:
+                all_mods = all_catch_mods
+            case 3:
+                all_mods = all_mania_mods
+            case _:
+                if beatmap_path is None:
+                    raise ValueError("cannot determine the ruleset")
+                working_beatmap = ProcessorWorkingBeatmap(beatmap_path)
+                ruleset_id: Literal[0, 1, 2, 3] = cast(
+                    Literal[0, 1, 2, 3],
+                    working_beatmap.BeatmapInfo.Ruleset.OnlineID,
+                )
+                return cls.validate_and_transform_mods(mods, ruleset_id)
+
+        mods_dict = {}  # {acronym, settings}
+        osu_tool_mods: list[str] = []
+        osu_tool_mod_options: list[str] = []
+        for mod in mods:
+            acronym = mod["acronym"]
+            if acronym not in all_mods:
+                raise ValueError("unknown mod '%s'" % acronym)
+            _settings = mod.get("settings", {})
+            mods_dict[acronym] = _settings
+            osu_tool_mods.append(acronym)
+            for setting_name, setting_value in _settings.items():
+                if setting_name not in all_mods[acronym]:
+                    raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
+                expected_type: Literal["boolean", "number", "string", "enum"] = all_mods[acronym][setting_name]
+                if not validate_mod_setting_value(setting_value, expected_type):
+                    raise ValueError(
+                        "setting '%s' for mod '%s' should be of type '%s'"
+                        % (
+                            setting_name,
+                            acronym,
+                            expected_type,
+                        ),
+                    )
+                if expected_type == "boolean":
+                    setting_value = "true" if setting_value else "false"
+                osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
+        return mods_dict, osu_tool_mods, osu_tool_mod_options
+
+    def __init__(self, cs: float, accuracy: float, ar: float, bpm: float, hit_length: int, ruleset_id: Literal[0, 1, 2, 3] = 0):
         self.cs = cs
         self.accuracy = accuracy
         self.hit_window = calc_hit_window(self.accuracy)
@@ -280,32 +343,10 @@ class SimpleOsuDifficultyAttribute(object):
         self.is_speed_down = False
         self.osu_tool_mods: list[str] = []  # [acronym]
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
+        self.ruleset_id = ruleset_id
 
     def set_mods(self, mods: list):
-        mods_dict = {}  # {acronym, settings}
-        for mod in mods:
-            acronym = mod["acronym"]
-            if acronym not in all_osu_mods:
-                raise ValueError("unknown mod '%s'" % acronym)
-            _settings = mod.get("settings", {})
-            mods_dict[acronym] = _settings
-            self.osu_tool_mods.append(acronym)
-            for setting_name, setting_value in _settings.items():
-                if setting_name not in all_osu_mods[acronym]:
-                    raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
-                expected_type: Literal["boolean", "number", "string"] = all_osu_mods[acronym][setting_name]
-                if not validate_mod_setting_value(setting_value, expected_type):
-                    raise ValueError(
-                        "setting '%s' for mod '%s' should be of type '%s'"
-                        % (
-                            setting_name,
-                            acronym,
-                            expected_type,
-                        ),
-                    )
-                if expected_type == "boolean":
-                    setting_value = "true" if setting_value else "false"
-                self.osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
+        mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
         if "NF" in mods_dict:
             self.is_nf = True
         if "HD" in mods_dict:
@@ -479,6 +520,8 @@ class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_item
     mods: list[dict[str, Any]]
     notes: str
     beatmap: Beatmap
+    # 以下是低版本补丁
+    _: str
 
 
 # noinspection PyArgumentList
@@ -502,9 +545,12 @@ CompletedPlaylistBeatmap = typing_extensions.TypedDict(
         "Notes": str,
         "_Artist": str,
         "_Title": str,
+        # 以下是低版本补丁
+        "slot": str,
+        "_": str,
     },
     total=False,
-    extra_items=str,
+    extra_items=Any,
 )
 
 
@@ -592,7 +638,7 @@ def download_osu(beatmap: Beatmap):
 
 def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
-    my_attr = SimpleOsuDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
+    my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(score._mods)
     download_osu(beatmap)
     calculator = calculate_osu_performance(
@@ -779,8 +825,10 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                     mods_dict[acronym] = {}
                 # 这里的 value 默认只是字符串
                 # 这里不对输入的 mod_setting 类型进行检查，只进行类型推断转换
-                # 实际上，mod_setting 一共有三种可能的类型，分别是字符串型、数字型、逻辑型
-                # 这里与 osu_tools 不同的是，强制要求逻辑型用全小写的 true 或 false 表示
+                # 实际上，mod_setting 一共有三种可能的类型，分别是字符串型、浮点型、逻辑型
+                # 这里与 osu-tools 不同的是：
+                # 1. 强制要求逻辑型用全小写的 true 或 false 表示
+                # 2. 强制要求枚举型用字符串表示（不支持浮点数强制转换为整型）
                 if value == "true":
                     value = True
                 elif value == "false":

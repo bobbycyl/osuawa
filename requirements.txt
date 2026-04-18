@@ -22,5 +22,6 @@ streamlit
 streamlit-ace
 streamlit-aggrid
 tabulate
+typing-extensions
 websockets
 zai-sdk
