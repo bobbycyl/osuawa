@@ -39,13 +39,17 @@ headers = {
 }
 LANGUAGES = ["en_US", "zh_CN"]
 osu_mod_entries = get_all_mods(OsuRuleset())
-all_osu_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
+osu_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
+osu_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in osu_mod_entries}
 taiko_mod_entries = get_all_mods(TaikoRuleset())
-all_taiko_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
+taiko_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
+taiko_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in taiko_mod_entries}
 catch_mod_entries = get_all_mods(CatchRuleset())
-all_catch_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
+catch_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
+catch_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in catch_mod_entries}
 mania_mod_entries = get_all_mods(ManiaRuleset())
-all_mania_mods = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
+mania_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
+mania_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in mania_mod_entries}
 
 sem = BoundedSemaphore()
 
@@ -270,23 +274,27 @@ def calc_ar(preempt: float) -> float:
 class SimpleDifficultyAttribute(object):
 
     @classmethod
-    def validate_and_transform_mods(cls, mods: list, ruleset_id: Optional[Literal[0, 1, 2, 3]] = None, beatmap_path: Optional[str] = None) -> tuple[dict[str, Any], list[str], list[str]]:
+    def validate_and_transform_mods(cls, mods: list[dict[str, Any]], ruleset_id: Optional[Literal[0, 1, 2, 3]] = None, beatmap_path: Optional[str] = None) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str]]:
         """验证并转换标准 mods 列表
 
         :param mods: 模组列表
         :param ruleset_id: 游戏模式 ID，若为 None 则默认使用当前谱面的模式 ID
         :param beatmap_path: 谱面文件路径
-        :return: ({acronym, settings}, osu_tool_mods, osu_tool_mod_options)
+        :return: (sorted_mods, {acronym, settings}, osu_tool_mods, osu_tool_mod_options)
         """
         match ruleset_id:
             case 0:
-                all_mods = all_osu_mods
+                all_mods = osu_mod_settings
+                all_mod_types = osu_mod_types
             case 1:
-                all_mods = all_taiko_mods
+                all_mods = taiko_mod_settings
+                all_mod_types = taiko_mod_types
             case 2:
-                all_mods = all_catch_mods
+                all_mods = catch_mod_settings
+                all_mod_types = catch_mod_types
             case 3:
-                all_mods = all_mania_mods
+                all_mods = mania_mod_settings
+                all_mod_types = mania_mod_types
             case _:
                 if beatmap_path is None:
                     raise ValueError("cannot determine the ruleset")
@@ -297,13 +305,43 @@ class SimpleDifficultyAttribute(object):
                 )
                 return cls.validate_and_transform_mods(mods, ruleset_id)
 
+        # sorted_mods 的顺序如下：
+        # 1. 首先把所有 mods 分为五堆："DifficultyReduction", "DifficultyIncrease", "Automation", "Conversion", "Fun", "System"
+        # 2. 每一堆内，按照 acronym 字符串排序
+        # 3. 拼接所有堆，得到 sorted_mods
+        _mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy = [], [], [], [], [], []
+
+        sorted_mods = []
         mods_dict = {}  # {acronym, settings}
         osu_tool_mods: list[str] = []
         osu_tool_mod_options: list[str] = []
+
+        # 需要两次遍历 mods，一次用来排序，一次用来验证和转换
         for mod in mods:
             acronym = mod["acronym"]
             if acronym not in all_mods:
                 raise ValueError("unknown mod '%s'" % acronym)
+            _type = all_mod_types[acronym]
+            match _type:
+                case "DifficultyReduction":
+                    _mods_dr.append(mod)
+                case "DifficultyIncrease":
+                    _mods_di.append(mod)
+                case "Automation":
+                    _mods_au.append(mod)
+                case "Conversion":
+                    _mods_co.append(mod)
+                case "Fun":
+                    _mods_fu.append(mod)
+                case "System":
+                    _mods_sy.append(mod)
+        for _mods in [_mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy]:
+            sorted_mods.extend(sorted(_mods, key=lambda x: x["acronym"]))
+
+        del mods
+
+        for mod in sorted_mods:
+            acronym = mod["acronym"]
             _settings = mod.get("settings", {})
             mods_dict[acronym] = _settings
             osu_tool_mods.append(acronym)
@@ -323,7 +361,7 @@ class SimpleDifficultyAttribute(object):
                 if expected_type == "boolean":
                     setting_value = "true" if setting_value else "false"
                 osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
-        return mods_dict, osu_tool_mods, osu_tool_mod_options
+        return sorted_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
 
     def __init__(self, cs: float, accuracy: float, ar: float, bpm: float, hit_length: int, ruleset_id: Literal[0, 1, 2, 3] = 0):
         self.cs = cs
@@ -341,12 +379,13 @@ class SimpleDifficultyAttribute(object):
         self.is_very_low_ar = False
         self.is_speed_up = False
         self.is_speed_down = False
+        self.sorted_mods = []
         self.osu_tool_mods: list[str] = []  # [acronym]
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
         self.ruleset_id = ruleset_id
 
     def set_mods(self, mods: list):
-        mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
+        _sorted_mods, mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
         if "NF" in mods_dict:
             self.is_nf = True
         if "HD" in mods_dict:
@@ -824,7 +863,6 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
             else:  # mod with settings
                 # 如果要设置 mod 参数，原则上要求 mod 本身已经加入
                 # 但是为了方便起见，如果 mod 不存在，但又要求设置参数，则自动添加该 mod
-                value: str | float | bool
                 acronym_n_setting, value = line_split
                 acronym, mod_setting = acronym_n_setting.split("_", 1)
                 if acronym not in mods_dict:
