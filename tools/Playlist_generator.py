@@ -31,8 +31,6 @@ if TYPE_CHECKING:
     st.session_state.redis_tasks: list[RedisTaskId]
 
 init_page(_("Playlist Generator") + " - osuawa")
-if "playlist_msg" not in st.session_state:
-    st.session_state.playlist_msg = ""
 with st.sidebar:
     if st.button(_("Mod Generator"), use_container_width=True, icon=":material/sync_alt:", disabled=not st.session_state.basic_interaction_enabled):
         st.dialog(_("Mod Generator"))(mods_generator)()
@@ -56,13 +54,9 @@ def default(obj):
     raise TypeError
 
 
-def push_beatmap_task(_b: list[BeatmapToUpdate], action: str) -> None:
+def push_beatmap_task(_b: list[BeatmapToUpdate]) -> None:
     # todo: 由于 streamlit 的刷新机制，basic_interaction_enabled 在这里设置是无效的
-    cmd = "beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()
-    msg = push_task_with_session_state(cmd)
-    msg = "%s: %s %d beatmap(s)" % (msg, action, len(_b))
-    logger.get_logger(st.session_state.username).info(msg)
-    st.session_state.playlist_msg = msg
+    st.toast(push_task_with_session_state("beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
 
 
 def refresh(clear_cache: bool = True) -> Never:
@@ -114,9 +108,6 @@ if st.session_state.perm >= 1:
     if "online_playlist_info" not in st.session_state or not st.session_state.online_playlist_info:
         st.info(_("Auto refresh on this page is disabled due to technical reasons. You might want to press the `%s` button manually to refresh the playlist.") % _("Refresh"))
         st.session_state.online_playlist_info = True
-    if st.session_state.playlist_msg != "":
-        with st.empty():
-            st.info(st.session_state.playlist_msg)
 
     st.markdown(_("## Online Playlist Creator"))
     available_pools = conn.query(
@@ -202,7 +193,7 @@ if st.session_state.perm >= 1:
                 elif not specs_input_valid:
                     pass
                 else:
-                    push_beatmap_task([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input], _("add"))
+                    push_beatmap_task([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input])
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -413,10 +404,10 @@ if st.session_state.perm >= 1:
             olds_to_drop: list[tuple[str, bool]] = []  # (old MODS, RAW_MODS changed)
 
             # 先索引原始 df，加快查找效率
+            # noinspection PyUnresolvedReferences
             orig_indexed = {(int(row.BID), str(row.MODS)): {c: getattr(row, c) for c in EDITABLE + ["MODS", "SUGGESTOR", "ADD_TS"]} for row in df.itertuples()}
             specs_recalculate_valid = True
             for edited_row in edited_df[["BID", "MODS"] + EDITABLE].itertuples():
-                edited_row: tuple
                 edited_bid = int(edited_row.BID)
                 edited_mods = str(edited_row.MODS)
                 # 由于 MODS 在这里尚未更改，因此还是可以根据 BID + MODS 的组合定位原始表格中的对应行
@@ -472,7 +463,7 @@ if st.session_state.perm >= 1:
                         beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
                     else:
                         beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
-                push_beatmap_task(beatmaps_to_update, _("update"))
+                push_beatmap_task(beatmaps_to_update)
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
             refresh()
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
@@ -486,9 +477,8 @@ if st.session_state.perm >= 1:
                 required_rows = selected_rows[["BID", "MODS"]]
                 beatmaps_to_delete: list[BeatmapToUpdate] = []
                 for row in required_rows.itertuples(index=False):
-                    row: tuple
                     beatmaps_to_delete.append(BeatmapToUpdate(old_bid=int(row.BID), old_mods=str(row.MODS)))
-                push_beatmap_task(beatmaps_to_delete, _("delete"))
+                push_beatmap_task(beatmaps_to_delete)
 
 st.divider()
 
