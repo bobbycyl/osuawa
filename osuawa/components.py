@@ -19,14 +19,17 @@ import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
     Command,
-    CommandError,
     IntegerField as Int,
     JSONStringField as JsonStr,
     StringField as Str,
 )
 from ossapi import Beatmap, GameMode
+from osu.Game.Rulesets.Catch import CatchRuleset
+from osu.Game.Rulesets.Mania import ManiaRuleset
+from osu.Game.Rulesets.Osu import OsuRuleset
+from osu.Game.Rulesets.Taiko import TaikoRuleset
 from osupp.difficulty import ModEntry
-from osupp.performance import calculate_osu_performance
+from osupp.performance import calculate_performance
 from plotly.graph_objs import Figure
 from sqlalchemy import text
 from streamlit import logger
@@ -192,7 +195,7 @@ def commands():
             generate_all_playlists,
         ),
         Command("cat", _("Display user's recent scores (only saved scores are available)"), [Int("user")], 0, cat),
-        Command("prev", _("Draw strain graph of an osu!standard beatmap"), [Int("beatmap"), Str("mod_settings", True)], 0, draw_strain_graph),
+        Command("strain", _("Draw strain graph of an osu! beatmap (converted beatmap supported)"), [Int("beatmap"), Str("mod_settings", True), Int("ruleset_id", True)], 0, draw_strain_graph),
         Command("sessions", _("Display all active sessions"), [], 0, query_all_sessions),
         Command("invalidate", _("Invalidate all sessions"), [], 0, invalidate_user_cache),
     ]
@@ -446,11 +449,30 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
     return st.session_state.awa.create_scores_dataframe(completed_recent_scores_compact)
 
 
-def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
-    # todo: 需要更新到新版本 osupp 的函数返回对象，目前该功能不可用
+def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: Optional[int] = None) -> Figure:
     beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api.beatmap(bid))
-    if beatmap.mode != GameMode.OSU:
-        raise CommandError(_("only osu!standard beatmap supported"))
+    match beatmap.mode:
+        case GameMode.OSU:
+            ruleset = OsuRuleset()
+        case GameMode.TAIKO:
+            ruleset = TaikoRuleset()
+        case GameMode.CATCH:
+            ruleset = CatchRuleset()
+        case GameMode.MANIA:
+            ruleset = ManiaRuleset()
+    match ruleset_id:
+        case 0:
+            ruleset = OsuRuleset()
+        case 1:
+            ruleset = TaikoRuleset()
+        case 2:
+            ruleset = CatchRuleset()
+        case 3:
+            ruleset = ManiaRuleset()
+        case None:  # 不使用转谱
+            pass
+        case _:
+            raise ValueError(_("invalid ruleset_id"))
     download_osu(beatmap)
 
     if mod_settings is not None:
@@ -462,26 +484,33 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
     # 生成 osu_tools 所能接受的样式
     my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(mods)
-    calculator = calculate_osu_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
+    calculator = calculate_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), ruleset, my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
     osupp_attr = next(calculator)
-    aim_strain_timeline: list[tuple[float, float]] = osupp_attr["__ek_aim_strain_timeline"]
-    speed_strain_timeline: list[tuple[float, float]] = osupp_attr["__ek_speed_strain_timeline"]
-    # strain_timeline: [(time, strain)]
-    # 二者的 time 理论上都是一样的，选择一个即可
-    df_strain = pd.DataFrame(
-        {
-            "time": [x[0] for x in aim_strain_timeline],
-            "aim": [x[1] for x in aim_strain_timeline],
-            "speed": [x[1] for x in speed_strain_timeline],
-        },
-    )
+    timelines: dict[str, list[tuple[float, float]]] = osupp_attr["__ek_timelines"]
+    _data = {}
+    _y = []
+    for skill, timeline in timelines.items():
+        if "time" not in _data:
+            _data["time"] = [x[0] * 2 for x in timeline]
+        _data[skill] = [x[1] for x in timeline]
+        _y.append(skill)
 
-    # 横坐标为 time，纵坐标为 strain，在一张折线图中同时绘制 aim strain 和 speed strain
-    fig = px.line(df_strain, x="time", y=["aim", "speed"], title="Difficulty Graph of %d" % beatmap.id)
+    df_strain = pd.DataFrame(_data)
+    df_strain["time"] = pd.to_datetime(df_strain["time"], unit="ms")
+    df_strain = df_strain.melt(id_vars="time", value_vars=_y, var_name="skill", value_name="strain")
+
+    fig = px.line(df_strain, x="time", y="strain", color="skill", title="Difficulty Graph of %d" % beatmap.id, color_discrete_sequence=px.colors.qualitative.D3)
     fig.update_layout(
         xaxis_title="Start Time",
         yaxis_title="Strain",
     )
+    for trace in fig.data:
+        trace.fill = "tozeroy"
+        # noinspection PyUnresolvedReferences
+        trace.fillcolor = trace.line.color
+
+    fig.update_traces(opacity=1)
+    fig.update_xaxes(tickformat="%M:%S.%L")
     return fig
 
 
