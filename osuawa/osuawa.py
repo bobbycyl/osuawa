@@ -25,7 +25,7 @@ from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Never, Optional, cast, LiteralString, Literal
+from typing import Any, Never, Optional, cast, Literal
 
 import numpy as np
 import orjson
@@ -452,10 +452,10 @@ class OsuPlaylist(object):
         last_root_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
         is_fm = root_mod == "FM" or root_mod == "F+"
         mods = raw_mods[1:].copy()  # 只能使用官方 Mods 的用这个变量
-        for j in range(len(raw_mods)):
+        for _mod in mods:
             # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 root_mod 存在）
-            if _cur_mod := raw_mods[j]["acronym"] in self.custom_mods_acronym:
-                raise ValueError("unknown mod %s" % _cur_mod)
+            if _mod["acronym"] in self.custom_mods_acronym:
+                raise ValueError("unknown mod %s" % _mod["acronym"])
         mods_ready: list[str] = to_readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
 
         # 下载谱面与计算难度

@@ -447,6 +447,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
 
 
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None) -> Figure:
+    # todo: 需要更新到新版本 osupp 的函数返回对象，目前该功能不可用
     beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api.beatmap(bid))
     if beatmap.mode != GameMode.OSU:
         raise CommandError(_("only osu!standard beatmap supported"))
