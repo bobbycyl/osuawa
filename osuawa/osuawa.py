@@ -475,9 +475,7 @@ class OsuPlaylist(object):
         ar_pct = calc_positive_percent(my_attr.ar, 0, 10)
         od_pct = calc_positive_percent(my_attr.accuracy, 0, 10)
         bpm = "%s" % round(my_attr.bpm, 2)
-        song_len_in_sec = my_attr.hit_length
-        song_len_m, song_len_s = divmod(song_len_in_sec, 60)
-        hit_length = "%d:%02d" % (song_len_m, song_len_s)
+        hit_length = "%d:%02d" % divmod(my_attr.hit_length, 60)
         max_combo = "%dx" % osupp_attr["max_combo"]
 
         # 绘制cover
