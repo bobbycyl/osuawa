@@ -10,7 +10,7 @@ current tools: Score Visualizer, Playlist Generator and Recorder
 
 ## Requirements
 
-Python 3.12, .NET 8.0, SQL(Sqlite, PostgreSQL or MySQL), Redis
+Python 3.12, .NET 8.0, SQL(Sqlite, PostgreSQL or MySQL is tested), Redis
 
 ## Getting Started
 
@@ -65,7 +65,9 @@ dotnet build -c Release
 ### Run the app
 
 ```shell
-python run.py
-# If automatic bootstrapping is not needed, use the following command instead
-streamlit run --server.enableCORS=false --server.enableXsrfProtection=false app.py
+python run.py  # run the streamlit app
+```
+
+```shell
+python run_daemon.py  # run the daemon
 ```

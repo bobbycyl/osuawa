@@ -8,11 +8,11 @@
 
 ## 软件要求
 
-Python 3.12、.NET 8.0、SQL(Sqlite, PostgreSQL 或 MySQL)、Redis
+Python 3.12、.NET 8.0、SQL(Sqlite、 PostgreSQL 或 MySQL 都可以)、Redis
 
 ## 快速开始
 
-### 克隆所需仓库
+### 克隆本仓库
 
 ```shell
 git clone https://github.com/bobbycyl/osuawa.git
@@ -62,8 +62,9 @@ dotnet build -c Release
 ### 开始使用吧
 
 ```shell
-# 第一次使用建议调用 run.py 以自动补全所需资源
-python run.py
-# 如果是经验丰富的老手，可以用 streamlit run app.py 以应用更多启动设置
-streamlit run --server.enableCORS=false --server.enableXsrfProtection=false app.py
+python run.py  # 运行 Streamlit 应用
+```
+
+```shell
+python run_daemon.py  # 运行守护进程
 ```
