@@ -486,18 +486,11 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
     my_attr.set_mods(mods)
     calculator = calculate_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), ruleset, my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
     osupp_attr = next(calculator)
-    timelines: dict[str, list[tuple[float, float]]] = osupp_attr["__ek_timelines"]
-    _data = {}
-    _y = []
-    for skill, timeline in timelines.items():
-        if "time" not in _data:
-            _data["time"] = [x[0] * 2 for x in timeline]
-        _data[skill] = [x[1] for x in timeline]
-        _y.append(skill)
-
-    df_strain = pd.DataFrame(_data)
+    strains: dict[str, list[tuple[float, float]]] = osupp_attr["__ek_strains"]
+    timelines = osupp_attr["__ek_time_until_first_strain_adj"] + osupp_attr["__ek_ms_per_strain"] * np.arange(osupp_attr["__ek_strain_count"])
+    df_strain = pd.DataFrame({**strains, "time": timelines})
     df_strain["time"] = pd.to_datetime(df_strain["time"], unit="ms")
-    df_strain = df_strain.melt(id_vars="time", value_vars=_y, var_name="skill", value_name="strain")
+    df_strain = df_strain.melt(id_vars="time", value_vars=strains.keys(), var_name="skill", value_name="strain")
 
     fig = px.line(df_strain, x="time", y="strain", color="skill", title="Difficulty Graph of %d" % beatmap.id, color_discrete_sequence=px.colors.qualitative.D3)
     fig.update_layout(
