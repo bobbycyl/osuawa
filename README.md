@@ -45,15 +45,8 @@ Secondly, download and build `osu-tools`.
 
 ```shell
 # ensure you are in the directory of osuawa
-git clone https://github.com/ppy/osu.git
 git clone https://github.com/ppy/osu-tools.git
-git clone https://github.com/bobbycyl/osu-patch.git
-cd osu
-git checkout 2025.1007.0
-git apply ../osu-patch/strain_timeline.patch
-cd ../osu-tools
-./UseLocalOsu.sh  # replace with .\UseLocalOsu.ps1 on Windows
-cd PerformanceCalculator
+cd osu-tools/PerformanceCalculator
 dotnet build -c Release
 ```
 
@@ -66,6 +59,8 @@ dotnet build -c Release
    You can find [an example here](./.streamlit/secrets.example.toml).
 
 3. If you do not need HTTPS, delete SSL related settings in `./.streamlit/config.toml`.
+
+4. `api_key` is needed for zai api calling.
 
 ### Run the app
 
