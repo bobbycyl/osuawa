@@ -30,9 +30,9 @@ from osuawa.utils import (
     BeatmapToUpdate,
     C,
     CompletedPlaylistBeatmap,
-    CompletedSimpleScoreInfo,
+    CompletedSimpleOsuScoreInfo,
     DatabasePlaylistBeatmap,
-    SimpleScoreInfo,
+    SimpleOsuScoreInfo,
     _build_update_ignore,
     _build_upsert,
     _create_tmp_playlist_p,
@@ -169,10 +169,10 @@ def commands():
     ]
 
 
-async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
+async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str, dict[str, CompletedSimpleOsuScoreInfo]]:
     """返回 (username, completed_recent_scores_compact)"""
     user_scores: list[Score] = await daemon_awa.async_get_recent_scores(user, include_fails)
-    recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
+    recent_scores_compact: dict[str, SimpleOsuScoreInfo] = {str(user_score.id): SimpleOsuScoreInfo.from_score(user_score) for user_score in user_scores}
     return await asyncio.gather(
         async_get_username(daemon_awa.api, user),
         daemon_awa.complete_scores_compact(recent_scores_compact),

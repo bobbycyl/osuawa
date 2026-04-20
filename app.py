@@ -22,6 +22,8 @@ from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import delete_user_cache, get_session_id, load_value, register_commands, task_board, update_user_cache
 from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code
 
+from threading import Lock
+
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
 if TYPE_CHECKING:
@@ -85,6 +87,9 @@ def toggle_immersive():
     st.session_state.immersive_toggled = True
 
 
+if "lck" not in st.session_state:
+    # 由于使用 ajs_anonymous_id 作为半持久化文件名，所以一般来说线程锁足以，不需要文件锁
+    st.session_state.lck = Lock()
 if "translate" not in st.session_state:
     load_value("uni_lang", convert_locale(st.context.locale))
 

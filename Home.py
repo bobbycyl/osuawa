@@ -339,7 +339,7 @@ def home_form():
             case Int():
                 st.number_input(_param_name, value=0, step=1, key=_key, disabled=disabled, label_visibility="collapsed")
             case Bool():
-                st.toggle(_param_name, key=_key, disabled=disabled, label_visibility="collapsed")
+                st.checkbox(_param_name, key=_key, disabled=disabled, label_visibility="collapsed")
             case JsonStr():
                 st_ace(
                     language="json",

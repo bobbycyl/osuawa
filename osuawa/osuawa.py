@@ -25,7 +25,7 @@ from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Never, Optional, cast, Literal
+from typing import Any, Literal, Never, Optional, cast
 
 import numpy as np
 import orjson
@@ -34,15 +34,15 @@ import pandas as pd
 from .utils import (
     C,
     CompletedPlaylistBeatmap,
-    CompletedSimpleScoreInfo,
-    ExtendedSimpleScoreInfo,
+    CompletedSimpleOsuScoreInfo,
+    ExtendedSimpleOsuScoreInfo,
     ParsedPlaylistBeatmap,
     SimpleDifficultyAttribute,
-    SimpleScoreInfo,
+    SimpleOsuScoreInfo,
     assets_dir,
     async_get_beatmaps_dict,
     async_get_user_info,
-    calc_beatmap_attributes,
+    calc_osu_beatmap_attributes,
     calc_high_star_rating_text_color,
     calc_positive_percent,
     calc_star_rating_color,
@@ -135,17 +135,17 @@ class Osuawa(object):
         own_data: User = self.run_coro(self.api.get_me())
         return own_data.id, own_data.username
 
-    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
+    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleOsuScoreInfo]) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
             scores_compact,
             orient="index",
-            columns=pd.Index(f.name for f in fields(CompletedSimpleScoreInfo)),
+            columns=pd.Index(f.name for f in fields(CompletedSimpleOsuScoreInfo)),
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
         df["ts"] = cast(pd.Series, pd.to_datetime(df["ts"], utc=True)).dt.tz_convert(self.tz)
         df["st"] = cast(pd.Series, pd.to_datetime(df["st"], utc=True)).dt.tz_convert(self.tz)
-        ec = ExtendedSimpleScoreInfo.__slots__
+        ec = ExtendedSimpleOsuScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
         df[ec[1]] = df["pp"] / df["b_pp_100if"]
         df[ec[2]] = df["pp_aim"] / df["b_pp_100if_aim"]
@@ -169,9 +169,9 @@ class Osuawa(object):
     def get_user_info(self, username: str) -> dict[str, Any]:
         return self.run_coro(async_get_user_info(self.api, username))
 
-    async def complete_scores_compact(self, scores_compact: dict[str, SimpleScoreInfo]) -> dict[str, CompletedSimpleScoreInfo]:
+    async def complete_scores_compact(self, scores_compact: dict[str, SimpleOsuScoreInfo]) -> dict[str, CompletedSimpleOsuScoreInfo]:
         beatmaps_dict = await async_get_beatmaps_dict(self.api, [x.bid for x in scores_compact.values()])
-        return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
+        return {score_id: calc_osu_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
 
     async def async_get_friends(self) -> list[dict[str, Any]]:
         friends = await self.api.friends()
@@ -184,17 +184,17 @@ class Osuawa(object):
     def get_friends(self) -> list[dict[str, Any]]:
         return self.run_coro(self.async_get_friends())
 
-    async def async_get_score(self, score_id: int) -> dict[str, CompletedSimpleScoreInfo]:
+    async def async_get_score(self, score_id: int) -> dict[str, CompletedSimpleOsuScoreInfo]:
         score = await self.api.score(score_id)
-        score_compact = {str(score.id): SimpleScoreInfo.from_score(score)}
+        score_compact = {str(score.id): SimpleOsuScoreInfo.from_score(score)}
         return await self.complete_scores_compact(score_compact)
 
     def get_score(self, score_id: int) -> pd.DataFrame:
         return self.create_scores_dataframe(self.run_coro(self.async_get_score(score_id)))
 
-    async def async_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleScoreInfo]:
+    async def async_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleOsuScoreInfo]:
         user_scores = await self.api.beatmap_user_scores(beatmap, user)
-        scores_compact = {str(x.id): SimpleScoreInfo.from_score(x) for x in user_scores}
+        scores_compact = {str(x.id): SimpleOsuScoreInfo.from_score(x) for x in user_scores}
         return await self.complete_scores_compact(scores_compact)
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:

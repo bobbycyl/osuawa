@@ -11,6 +11,7 @@ from typing import Any, Literal, Optional, TYPE_CHECKING, cast, overload
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import orjson
 import pandas as pd
 import plotly.express as px
@@ -28,8 +29,6 @@ from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import ModEntry
-from osupp.performance import calculate_performance
 from plotly.graph_objs import Figure
 from sqlalchemy import text
 from streamlit import logger
@@ -37,20 +36,26 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
 from osuawa.utils import (
-    CompletedSimpleScoreInfo,
+    CompletedSimpleOsuScoreInfo,
     RedisTaskId,
     SimpleDifficultyAttribute,
     _build_upsert,
     _make_query_uppercase,
     catch_mod_entries,
+    catch_mod_indexes,
     download_osu,
     format_size,
     generate_mods_from_lines,
+    get_mod_type_mapping,
     get_size_and_count,
     mania_mod_entries,
+    mania_mod_indexes,
     osu_mod_entries,
+    osu_mod_indexes,
     push_task,
     taiko_mod_entries,
+    taiko_mod_indexes,
+    calculate_performance
 )
 
 if TYPE_CHECKING:
@@ -66,11 +71,23 @@ _conn.query = _make_query_uppercase(_conn.query)
 
 def save_value(key: str) -> None:
     # <key> <-> st.session_state._<key>_value
-    st.session_state["_%s_value" % key] = st.session_state[key]
-    # semi-persistent storage
-    # ./.streamlit/.components/<ajs_anonymous_id>
-    with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"])) as db:
-        db[key] = st.session_state["_%s_value" % key]
+    with st.session_state.lck:
+        st.session_state["_%s_value" % key] = st.session_state[key]
+        # semi-persistent storage
+        # ./.streamlit/.components/<ajs_anonymous_id>
+        with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"])) as db:
+            db[key] = st.session_state["_%s_value" % key]
+
+
+def del_value(key: str) -> None:
+    with st.session_state.lck:
+        if "_%s_value" % key in st.session_state:
+            del st.session_state["_%s_value" % key]
+        if key in st.session_state:
+            del st.session_state[key]
+        with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"])) as db:
+            if key in db:
+                del db[key]
 
 
 def load_value(key: str, default_value: Any) -> None:
@@ -95,14 +112,29 @@ def load_value(key: str, default_value: Any) -> None:
     st.session_state[key] = st.session_state["_%s_value" % key]
 
 
-def memorized_multiselect(label: str, key: str, options: list, default_value: Any) -> None:
+def memorized_multiselect(label: str, key: str, options: list, default_value: Any, **kwargs) -> None:
     load_value(key, default_value)
-    st.multiselect(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled)
+    st.multiselect(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
 
 
-def memorized_selectbox(label: str, key: str, options: list, default_value: Any) -> None:
+def memorized_selectbox(label: str, key: str, options: list, default_value: Any, **kwargs) -> None:
     load_value(key, default_value)
-    st.selectbox(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled)
+    st.selectbox(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+
+
+def memorized_checkbox(label: str, key: str, default_value: bool, **kwargs) -> None:
+    load_value(key, default_value)
+    st.checkbox(label, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+
+
+def memorized_number_input(label: str, key: str, default_value: int | float, **kwargs) -> None:
+    load_value(key, default_value)
+    st.number_input(label, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+
+
+def memorized_text_input(label: str, key: str, default_value: str, **kwargs) -> None:
+    load_value(key, default_value)
+    st.text_input(label, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
 
 
 def get_session_id() -> str:
@@ -393,8 +425,8 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             )
         rows = res.fetchall()
     # 处理 bool 和 datetime
-    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {
-        str(row[0]): CompletedSimpleScoreInfo(
+    completed_recent_scores_compact: dict[str, CompletedSimpleOsuScoreInfo] = {
+        str(row[0]): CompletedSimpleOsuScoreInfo(
             # 基础字段
             row[1],
             row[2],
@@ -573,20 +605,38 @@ def push_task_with_session_state(task_command: str) -> str:
     return "queued task: `%s`" % _task_id
 
 
-def _mod_customization(key_suffix: int, all_mods: list[ModEntry]) -> list[str]:
+def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch", "mania"]) -> list[str]:
+    match ruleset:
+        case "osu":
+            all_mods = osu_mod_entries
+            all_mod_indexes = osu_mod_indexes
+        case "taiko":
+            all_mods = taiko_mod_entries
+            all_mod_indexes = taiko_mod_indexes
+        case "catch":
+            all_mods = catch_mod_entries
+            all_mod_indexes = catch_mod_indexes
+        case "mania":
+            all_mods = mania_mod_entries
+            all_mod_indexes = mania_mod_indexes
+
     _mod_key = "modgen_mod_%d" % key_suffix
     ret = []
     with st.container(horizontal=True):
-        st.selectbox(_("Mod"), [mod_entry["Acronym"] for mod_entry in all_mods], key=_mod_key, index=None, placeholder=_("Select a mod"), label_visibility="collapsed")
+        memorized_selectbox(
+            _("Mod"),
+            _mod_key,
+            [mod_entry["Acronym"] for mod_entry in all_mods],
+            None,
+            placeholder=_("Select a mod"),
+            label_visibility="collapsed",
+            format_func=lambda acronym: "%s %-4s - %s" % (get_mod_type_mapping(all_mod_indexes[acronym]["Type"], True), acronym, all_mod_indexes[acronym]["Name"]),
+        )
         with st.container(gap="xxsmall"):
             if st.session_state[_mod_key] is not None:
                 ret.append(st.session_state[_mod_key])
-                for _mod_index in range(len(all_mods)):
-                    if all_mods[_mod_index]["Acronym"] == st.session_state[_mod_key]:
-                        break
-                else:
-                    st.error(_("mod not found"))
-                _settings = all_mods[_mod_index]["Settings"]
+                _mod_entry = all_mod_indexes[st.session_state[_mod_key]]
+                _settings = _mod_entry["Settings"]
                 for _setting in _settings:
                     _name = _setting["Name"]
                     _type = _setting["Type"]
@@ -609,14 +659,14 @@ def _mod_customization(key_suffix: int, all_mods: list[ModEntry]) -> list[str]:
                     _default = cast(Any, _default)  # 阻止类型推断
                     match _type:
                         case "boolean":
-                            st.toggle(_name, value=_default, key=_mod_setting_key, help=_desc)
+                            memorized_checkbox(_name, _mod_setting_key, _default, help=_desc)
                         case "number":
-                            st.number_input(_name, value=_default, key=_mod_setting_key, help=_desc)
+                            memorized_number_input(_name, _mod_setting_key, _default, help=_desc)
                         case "string":
-                            st.text_input(_name, value=_default, key=_mod_setting_key, help=_desc)
+                            memorized_text_input(_name, _mod_setting_key, _default, help=_desc)
                         case "enum":
                             assert _enum_values is not None
-                            st.selectbox(_name, options=_enum_values, index=_enum_values.index(_default), key=_mod_setting_key, help=_desc)
+                            memorized_selectbox(_name, _mod_setting_key, _enum_values, _default, help=_desc)
                     # 如果选中值非不是默认值，才添加模组设置
                     if st.session_state[_mod_setting_key] != _default:
                         ret.append("%s_%s=%s" % (st.session_state[_mod_key], _name, st.session_state[_mod_setting_key]))
@@ -632,6 +682,14 @@ def _del_mod(suffix: int):
     st.session_state.modgen_selected.remove(suffix)
 
 
+def _reset_mod():
+    # 由于半持久化存储的存在，不能一直自增
+    # 清空所有 modgen_ 开头的键
+    for ss in st.session_state:
+        if ss.startswith("modgen_"):
+            del_value(ss)
+
+
 @overload
 def mods_generator(ret_type: Literal[0]) -> list[str]: ...
 
@@ -645,19 +703,7 @@ def mods_generator() -> None: ...
 
 
 def mods_generator(ret_type: Optional[Literal[0, 1]] = None):
-    # todo: load from existing
     ruleset = st.segmented_control(_("Ruleset"), options=["osu", "taiko", "catch", "mania"], key="modgen_ruleset", default="osu", width="stretch")
-    match ruleset:
-        case "osu":
-            all_mods = osu_mod_entries
-        case "taiko":
-            all_mods = taiko_mod_entries
-        case "catch":
-            all_mods = catch_mod_entries
-        case "mania":
-            all_mods = mania_mod_entries
-        case _:
-            all_mods = osu_mod_entries
     lines: list[str] = []
     if "modgen_increment" not in st.session_state:
         st.session_state.modgen_increment = 0
@@ -666,13 +712,13 @@ def mods_generator(ret_type: Optional[Literal[0, 1]] = None):
         st.session_state.modgen_selected = []
     if "modgen_ret" not in st.session_state:
         st.session_state.modgen_ret = deque(maxlen=1)
-    # st.write(st.session_state.modgen_increment)
-    # st.write(st.session_state.modgen_selected)
+    st.write(st.session_state.modgen_increment)
+    st.write(st.session_state.modgen_selected)
 
     for modgen_suffix in st.session_state.modgen_selected:
         col_content, col_del = st.columns([0.85, 0.15])
         with col_content:
-            lines.extend(_mod_customization(modgen_suffix, all_mods))
+            lines.extend(_mod_customization(modgen_suffix, cast(Literal["osu", "taiko", "catch", "mania"], ruleset)))
         with col_del:
             st.button(
                 _("Delete"),
@@ -683,11 +729,13 @@ def mods_generator(ret_type: Optional[Literal[0, 1]] = None):
                 args=(modgen_suffix,),
             )
 
-    col_blank, col_add = st.columns([0.85, 0.15])
-    with col_blank:
-        st.space()
+    col_add, col_reset, col_apply = st.columns(3)
     with col_add:
-        st.button(_("Add"), on_click=_add_mod)
+        st.button(_("Add"), on_click=_add_mod, width="stretch")
+    with col_reset:
+        st.button(_("Reset"), on_click=_reset_mod, width="stretch")
+    with col_apply:
+        apply = st.button(_("Apply to the form"), width="stretch")
 
     with st.expander(_("Preview")):
         st.code("\n".join(lines), language="properties")
@@ -701,7 +749,7 @@ def mods_generator(ret_type: Optional[Literal[0, 1]] = None):
         case 1:
             return mods
         case _:
-            if st.session_state.perm >= 1 and st.button(_("Apply to the form"), width="stretch", type="primary"):
+            if st.session_state.perm >= 1 and apply:
                 st.session_state.modgen_ret.appendleft((lines, mods))
                 st.rerun()
             return None
