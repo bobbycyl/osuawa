@@ -30,8 +30,12 @@ from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
 from osupp.difficulty import get_all_mods, calculate_difficulty as calculate_difficulty
 from osupp.performance import OsuPerformance, calculate_osu_performance
+from osupp.difficulty import get_all_mods, calculate_difficulty
+from osupp.performance import OsuPerformance, calculate_performance, calculate_osu_performance
 from osupp.util import validate_mod_setting_value
 from redis import Redis
+
+assert calculate_difficulty, calculate_performance
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",
