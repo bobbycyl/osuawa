@@ -12,7 +12,7 @@ from websockets.sync.client import connect
 
 from osuawa import C, Osuawa
 from osuawa.components import init_page
-from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
+from osuawa.utils import CompletedSimpleOsuScoreInfo, regex_search_column
 
 if TYPE_CHECKING:
 
@@ -25,11 +25,11 @@ init_page(_("Recorder") + " - osuawa")
 
 
 async def async_get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
-    tasks: list[Task[dict[str, CompletedSimpleScoreInfo]]] = []
+    tasks: list[Task[dict[str, CompletedSimpleOsuScoreInfo]]] = []
     async with asyncio.TaskGroup() as tg:
         for user_id in ids:
             tasks.append(tg.create_task(st.session_state.awa.async_get_user_beatmap_scores(beatmap, user_id)))
-    scores_compact: dict[str, CompletedSimpleScoreInfo] = {}
+    scores_compact: dict[str, CompletedSimpleOsuScoreInfo] = {}
     for task in tasks:
         scores_compact.update(task.result())
     return st.session_state.awa.create_scores_dataframe(scores_compact)
@@ -97,8 +97,8 @@ st.markdown(_("## tosu Panel"))
 st.text_input("tosu URL", value="ws://127.0.0.1:24050/", key="rec_tosu_url")
 with st.expander(_("Table options")):
     st.text_input(_("Mods filter (regex)"), key="rec_tosu_mods")
-    st.toggle(_("Best only"), key="rec_tosu_best")
-    st.toggle(_("Prettify"), value=True, key="rec_tosu_prettify")
+    st.checkbox(_("Best only"), key="rec_tosu_best")
+    st.checkbox(_("Prettify"), value=True, key="rec_tosu_prettify")
 with st.form("quickly add friend ids"):
     quickly_selected_friend_usernames: list[str] = st.multiselect(_("friends"), list(friends().values()))
     st.form_submit_button(_("Submit"))

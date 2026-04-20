@@ -28,8 +28,6 @@ from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import get_all_mods, calculate_difficulty as calculate_difficulty
-from osupp.performance import OsuPerformance, calculate_osu_performance
 from osupp.difficulty import get_all_mods, calculate_difficulty
 from osupp.performance import OsuPerformance, calculate_performance, calculate_osu_performance
 from osupp.util import validate_mod_setting_value
@@ -43,17 +41,17 @@ headers = {
 }
 LANGUAGES = ["en_US", "zh_CN"]
 osu_mod_entries = get_all_mods(OsuRuleset())
-osu_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
-osu_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in osu_mod_entries}
+osu_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in osu_mod_entries}
+_osu_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
 taiko_mod_entries = get_all_mods(TaikoRuleset())
-taiko_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
-taiko_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in taiko_mod_entries}
+taiko_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in taiko_mod_entries}
+_taiko_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
 catch_mod_entries = get_all_mods(CatchRuleset())
-catch_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
-catch_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in catch_mod_entries}
+catch_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in catch_mod_entries}
+_catch_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
 mania_mod_entries = get_all_mods(ManiaRuleset())
-mania_mod_settings = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
-mania_mod_types = {mod_entry["Acronym"]: mod_entry["Type"] for mod_entry in mania_mod_entries}
+mania_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in mania_mod_entries}
+_mania_mod_settings_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
 
 sem = BoundedSemaphore()
 
@@ -102,6 +100,22 @@ class ColorTextBar(Enum):
     YP_R = [246, 255, 255, 198, 101]
     YP_G = [240, 128, 78, 69, 99]
     YP_B = [92, 104, 111, 185, 222]
+
+
+def get_mod_type_mapping(mod_type: Literal["DifficultyReduction", "DifficultyIncrease", "Automation", "Conversion", "Fun", "System"], alt: bool = False):
+    match mod_type:
+        case "DifficultyReduction":
+            return "🟢" if alt else "#b1fe66"
+        case "DifficultyIncrease":
+            return "🔴" if alt else "#ff6666"
+        case "Automation":
+            return "⚙️" if alt else "#66cbfe"
+        case "Conversion":
+            return "🔄" if alt else "#8b66fe"
+        case "Fun":
+            return "🎈" if alt else "fe66aa"
+        case "System":
+            return "🧩" if alt else "fed866"
 
 
 def read_injected_code(filename: str) -> str:
@@ -288,17 +302,17 @@ class SimpleDifficultyAttribute(object):
         """
         match ruleset_id:
             case 0:
-                all_mods = osu_mod_settings
-                all_mod_types = osu_mod_types
+                all_mod_setting_types = _osu_mod_setting_types
+                all_mod_indexes = osu_mod_indexes
             case 1:
-                all_mods = taiko_mod_settings
-                all_mod_types = taiko_mod_types
+                all_mod_setting_types = _taiko_mod_setting_types
+                all_mod_indexes = taiko_mod_indexes
             case 2:
-                all_mods = catch_mod_settings
-                all_mod_types = catch_mod_types
+                all_mod_setting_types = _catch_mod_setting_types
+                all_mod_indexes = catch_mod_indexes
             case 3:
-                all_mods = mania_mod_settings
-                all_mod_types = mania_mod_types
+                all_mod_setting_types = _mania_mod_settings_types
+                all_mod_indexes = mania_mod_indexes
             case _:
                 if beatmap_path is None:
                     raise ValueError("cannot determine the ruleset")
@@ -323,9 +337,9 @@ class SimpleDifficultyAttribute(object):
         # 需要两次遍历 mods，一次用来排序，一次用来验证和转换
         for mod in mods:
             acronym = mod["acronym"]
-            if acronym not in all_mods:
+            if acronym not in all_mod_setting_types:
                 raise ValueError("unknown mod '%s'" % acronym)
-            _type = all_mod_types[acronym]
+            _type = all_mod_indexes[acronym]["Type"]
             match _type:
                 case "DifficultyReduction":
                     _mods_dr.append(mod)
@@ -350,9 +364,9 @@ class SimpleDifficultyAttribute(object):
             mods_dict[acronym] = _settings
             osu_tool_mods.append(acronym)
             for setting_name, setting_value in _settings.items():
-                if setting_name not in all_mods[acronym]:
+                if setting_name not in all_mod_setting_types[acronym]:
                     raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
-                expected_type: Literal["boolean", "number", "string", "enum"] = all_mods[acronym][setting_name]
+                expected_type: Literal["boolean", "number", "string", "enum"] = all_mod_setting_types[acronym][setting_name]
                 if not validate_mod_setting_value(setting_value, expected_type):
                     raise ValueError(
                         "setting '%s' for mod '%s' should be of type '%s'"
@@ -439,7 +453,7 @@ class SimpleDifficultyAttribute(object):
 
 
 @dataclass(slots=True)
-class SimpleScoreInfo(object):
+class SimpleOsuScoreInfo(object):
     """
     从在线成绩简化而来，只保留感兴趣的字段，json 里保存这些基本字段
 
@@ -490,7 +504,7 @@ class SimpleScoreInfo(object):
 
 
 @dataclass(slots=True)
-class CompletedSimpleScoreInfo(SimpleScoreInfo):
+class CompletedSimpleOsuScoreInfo(SimpleOsuScoreInfo):
     """
     用于记录获取完在线成绩后，需要本地补充计算的谱面、模组、成绩相关字段，parquet 里存储的就是这些字段，在必要的时候才需要重算
 
@@ -537,7 +551,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
 
 
 @dataclass(slots=True)
-class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
+class ExtendedSimpleOsuScoreInfo(CompletedSimpleOsuScoreInfo):
     """用于记录在生成 DataFrame 后计算的字段，使用向量化加速批量计算是个好选择
 
     所有新增的参数都可以追加到这里
@@ -685,7 +699,7 @@ def download_osu(beatmap: Beatmap):
             sleep(0.5)
 
 
-def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
+def calc_osu_beatmap_attributes(beatmap: Beatmap, score: SimpleOsuScoreInfo) -> CompletedSimpleOsuScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
     my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(score._mods)
@@ -719,7 +733,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     pp100_speed = perf100_attr["speed"]
     pp100_accuracy = perf100_attr["accuracy"]
 
-    return CompletedSimpleScoreInfo(
+    return CompletedSimpleOsuScoreInfo(
         # 父类字段，除了 pp 全部照抄
         score.bid,
         score.user,
