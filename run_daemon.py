@@ -24,6 +24,8 @@ from clayutil.cmdparse import CollectionField as Coll, Command, CommandParser, I
 from ossapi import Domain, Scope, Score
 from sqlalchemy import create_engine, text
 
+os.environ["OSU_TOOLS_HOME"] = os.path.join(str(os.path.dirname(__file__)), "osu-tools")
+
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.utils import (
     BeatmapSpec,
