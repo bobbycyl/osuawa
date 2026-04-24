@@ -23,7 +23,7 @@ validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, 
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa

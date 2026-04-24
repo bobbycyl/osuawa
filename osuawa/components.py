@@ -24,7 +24,7 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
     StringField as Str,
 )
-from ossapi import Beatmap, GameMode
+from ossapi.ossapiv2_async import Beatmap, GameMode
 from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
@@ -35,12 +35,14 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
+from osuawa.osuawa import CachedMixIn
 from osuawa.utils import (
     CompletedSimpleOsuScoreInfo,
     RedisTaskId,
     SimpleDifficultyAttribute,
     _build_upsert,
     _make_query_uppercase,
+    calculate_performance,
     catch_mod_entries,
     catch_mod_indexes,
     download_osu,
@@ -55,12 +57,11 @@ from osuawa.utils import (
     push_task,
     taiko_mod_entries,
     taiko_mod_indexes,
-    calculate_performance
 )
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa
@@ -176,56 +177,15 @@ _r = get_redis_connection()
 
 def commands():
     return [
-        Command(
-            "reg",
-            _("Register command parser"),
-            [JsonStr("obj", True)],
-            0,
-            register_commands,
-        ),
-        Command(
-            "fman",
-            "Show or clean files",
-            [Str("action"), Str("filename", True)],
-            4,
-            files_action,
-        ),
-        Command(
-            "logfilter",
-            "Tail logs",
-            [Int("n", True), Str("keyword", True)],
-            3,
-            tail_log,
-        ),
-        Command(
-            "where",
-            _("Get user info"),
-            [Str("username")],
-            0,
-            st.session_state.awa.get_user_info,
-        ),
-        Command(
-            "save",
-            _("Save user's recent scores"),
-            [Int("user")],
-            1,
-            lambda user: push_task_with_session_state("save %d" % user),
-        ),
+        Command("reg", _("Register command parser"), [JsonStr("obj", True)], 0, register_commands),
+        Command("fman", "Show or clean files", [Str("action"), Str("filename", True)], 4, files_action),
+        Command("logfilter", "Tail logs", [Int("n", True), Str("keyword", True)], 3, tail_log),
+        Command("apicache", "Show api cache", [], 3, CachedMixIn.get_cache),
+        Command("where", _("Get user info"), [Str("username")], 0, st.session_state.awa.get_user_info),
+        Command("save", _("Save user's recent scores"), [Int("user")], 1, lambda user: push_task_with_session_state("save %d" % user)),
         Command("score", _("Get and display score"), [Int("score_id")], 0, st.session_state.awa.get_score),
-        Command(
-            "scores",
-            _("Get and display user scores of a beatmap"),
-            [Int("beatmap"), Int("user", True)],
-            0,
-            st.session_state.awa.get_user_beatmap_scores,
-        ),
-        Command(
-            "gen",
-            _("Generate local playlists"),
-            [Bool("fast_mode", True), Bool("output_zip", True)],
-            4,
-            generate_all_playlists,
-        ),
+        Command("scores", _("Get and display user scores of a beatmap"), [Int("beatmap"), Int("user", True)], 0, st.session_state.awa.get_user_beatmap_scores),
+        Command("gen", _("Generate local playlists"), [Bool("fast_mode", True), Bool("output_zip", True)], 4, generate_all_playlists),
         Command("cat", _("Display user's recent scores (only saved scores are available)"), [Int("user")], 0, cat),
         Command("strain", _("Draw strain graph of an osu! beatmap (converted beatmap supported)"), [Int("beatmap"), Str("mod_settings", True), Int("ruleset_id", True)], 0, draw_strain_graph),
         Command("sessions", _("Display all active sessions"), [], 0, query_all_sessions),
@@ -482,7 +442,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
 
 
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: Optional[int] = None) -> Figure:
-    beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api.beatmap(bid))
+    beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api_beatmap(bid))
     match beatmap.mode:
         case GameMode.OSU:
             ruleset = OsuRuleset()

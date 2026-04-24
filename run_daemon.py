@@ -21,7 +21,7 @@ import requests
 import schedule
 import toml
 from clayutil.cmdparse import CollectionField as Coll, Command, CommandParser, IntegerField as Int, JSONStringField as JsonStr
-from ossapi import Domain, Scope, Score
+from ossapi.ossapiv2_async import Domain, Scope, Score
 from sqlalchemy import create_engine, text
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
@@ -36,7 +36,6 @@ from osuawa.utils import (
     _build_update_ignore,
     _build_upsert,
     _create_tmp_playlist_p,
-    async_get_username,
     push_task,
 )
 
@@ -174,7 +173,7 @@ async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str,
     user_scores: list[Score] = await daemon_awa.async_get_recent_scores(user, include_fails)
     recent_scores_compact: dict[str, SimpleOsuScoreInfo] = {str(user_score.id): SimpleOsuScoreInfo.from_score(user_score) for user_score in user_scores}
     return await asyncio.gather(
-        async_get_username(daemon_awa.api, user),
+        daemon_awa.async_get_username(user),
         daemon_awa.complete_scores_compact(recent_scores_compact),
     )
 

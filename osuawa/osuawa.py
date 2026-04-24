@@ -14,7 +14,9 @@ __all__ = (
 import asyncio
 import ctypes
 import datetime
+import functools
 import html
+import json
 import os
 import os.path
 import platform
@@ -25,11 +27,14 @@ from dataclasses import fields
 from functools import cached_property
 from shutil import rmtree
 from threading import Lock
-from typing import Any, Literal, Never, Optional, cast
+from types import MappingProxyType
+from typing import Any, Literal, Never, Optional, cast, override
 
 import numpy as np
 import orjson
 import pandas as pd
+from cachetools import TTLCache
+from clayutil.sutil import sha256sum
 
 from .utils import (
     C,
@@ -40,10 +45,8 @@ from .utils import (
     SimpleDifficultyAttribute,
     SimpleOsuScoreInfo,
     assets_dir,
-    async_get_beatmaps_dict,
-    async_get_user_info,
-    calc_osu_beatmap_attributes,
     calc_high_star_rating_text_color,
+    calc_osu_beatmap_attributes,
     calc_positive_percent,
     calc_star_rating_color,
     calculate_difficulty,
@@ -60,9 +63,77 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, Unidenti
 from clayutil.futil import Downloader, Properties
 from clayutil.validator import Integer
 from fontfallback import writing
-from ossapi.ossapiv2_async import Beatmap, Domain, GameMode, Grant, OssapiAsync, Scope, Score, User
+from ossapi.ossapiv2_async import Beatmap, Domain, GameMode, Grant, OssapiAsync, Scope, Score, User, GameModeT
 
 assert datetime
+
+
+def _make_cached_method_key(
+    class_name: str,
+    method_name: str,
+    identifier: int | None,
+    args: tuple,
+    kwargs: dict,
+) -> str:
+    raw = {
+        "class": class_name,
+        "method": method_name,
+        "identifier": identifier,
+        "args": args,
+        "kwargs": dict(sorted(kwargs.items())),  # 新版本 dict 按照插入顺序排序
+    }
+    return sha256sum(
+        # 使用标准库 json 而非第三方库确保最高兼容性
+        json.dumps(raw, sort_keys=True, default=str).encode(),
+    )
+
+
+def async_cached_method(isolated: bool = False):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(self: "CachedMixIn", *args: Any, **kwargs: Any):
+            cache = self._isolated_cache if isolated else self._global_cache
+
+            key = (
+                _make_cached_method_key(
+                    type(self).__qualname__,
+                    func.__name__,
+                    self.identifier,
+                    args,
+                    kwargs,
+                )
+                if isolated
+                else _make_cached_method_key(
+                    type(self).__qualname__,
+                    func.__name__,
+                    None,
+                    args,
+                    kwargs,
+                )
+            )
+
+            if key in cache:
+                return cache[key]
+
+            result = await func(self, *args, **kwargs)
+            cache[key] = result
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+class CachedMixIn:
+    _global_cache = TTLCache(maxsize=1024, ttl=300)
+    _isolated_cache = TTLCache(maxsize=256, ttl=120)
+
+    def __init__(self):
+        self.identifier: Optional[int] = None
+
+    @classmethod
+    def get_cache(cls):
+        return MappingProxyType({"global": dict(CachedMixIn._global_cache), "isolated": dict(CachedMixIn._isolated_cache)})
 
 
 class Awapi(OssapiAsync):
@@ -80,17 +151,19 @@ class Awapi(OssapiAsync):
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
         domain: Domain | str = Domain.OSU,
+        # todo: 待检验：更新 api 版本。当前版本是为了之前避免新版 api 返回奇奇怪怪的数据格式而暂时保留的
         api_version: int | str = 20240529,
     ):
         if scopes is None:
             scopes: list[Scope | str] = [Scope.PUBLIC]
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
+    @override
     def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> Never:
         raise NotImplementedError("new authorization grant not allowed")
 
 
-class Osuawa(object):
+class Osuawa(CachedMixIn):
     tz = "Asia/Shanghai"
     common_mods = {
         "NM",
@@ -112,8 +185,62 @@ class Osuawa(object):
     }
 
     def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
+        super().__init__()
         self.loop: AbstractEventLoop = loop
-        self.api: OssapiAsync = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
+        # 不再暴露 api，而是使用 async_cached_method 包裹用得到的方法，避免直接调用原始方法
+        # 后续可能针对 post 请求单独建立函数映射
+        # 对于 get_me 等和用户相关的方法，必须将 isolated 设置为 True
+        self.__api: Awapi = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
+        no_identify = True
+        for scope in scopes:
+            if scope == Scope.IDENTIFY or scope == Scope.IDENTIFY.value:
+                no_identify = False
+                break
+        self.identifier = -1 if no_identify else self.user[0]
+
+    # 以下为对原始 api 方法的包裹
+    # 虽然后续许多数据都要转换为自定义类，但是为了代码清晰，`api_` 前缀表示原始 api 方法，并为了兼容性收窄了参数类型
+
+    @async_cached_method(True)
+    async def api_me(self):
+        return await self.__api.get_me()
+
+    @async_cached_method(True)
+    async def api_friends(self):
+        return await self.__api.friends()
+
+    @async_cached_method()
+    async def api_user(self, user: int | str, *, mode: Optional[GameModeT] = None, key: Optional[Literal["id", "username"]] = None):
+        return await self.__api.user(user, mode=mode, key=key)
+
+    @async_cached_method()
+    async def api_beatmap(self, beatmap_id: int):
+        return await self.__api.beatmap(beatmap_id)
+
+    @async_cached_method()
+    async def api_beatmaps(self, beatmap_ids: list[int]):
+        return await self.__api.beatmaps(beatmap_ids)
+
+    @async_cached_method()
+    async def api_score(self, score_id: int):
+        return await self.__api.score(score_id)
+
+    @async_cached_method()
+    async def api_beatmap_user_scores(self, beatmap_id: int, user_id: int, *, mode: Optional[GameModeT] = None):
+        return await self.__api.beatmap_user_scores(beatmap_id, user_id, mode=mode)
+
+    @async_cached_method()
+    async def api_user_scores(
+        self,
+        user_id: int,
+        type_: Literal["best", "firsts", "recent"],
+        *,
+        include_fails: Optional[bool] = None,
+        mode: Optional[GameModeT] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ):
+        return await self.__api.user_scores(user_id, type_, include_fails=include_fails, mode=mode, limit=limit, offset=offset)
 
     def run_coro[_T](self, coro: Coroutine[Any, Any, _T]) -> _T:
         """统一的协程执行方法"""
@@ -132,8 +259,26 @@ class Osuawa(object):
 
         :return: (user_id, username)
         """
-        own_data: User = self.run_coro(self.api.get_me())
+        own_data: User = self.run_coro(self.api_me())
         return own_data.id, own_data.username
+
+    async def async_get_user_info(self, user: int | str) -> dict[str, Any]:
+        return await simple_user_dict(await self.api_user(user, key="username" if isinstance(user, str) else "id"))
+
+    async def async_get_username(self, user: int) -> str:
+        return (await self.api_user(user, key="id")).username
+
+    async def async_get_beatmaps_dict(self, bids: list[int]) -> dict[int, Beatmap]:
+        bids = list(set(bids))
+        cut_bids: list[list[int]] = []
+        for i in range(0, len(bids), 50):
+            cut_bids.append(list(bids[i : i + 50]))
+        tasks = []
+        async with asyncio.TaskGroup() as tg:
+            for bids in cut_bids:
+                tasks.append(tg.create_task(self.api_beatmaps(bids)))
+        results = [task.result() for task in tasks]
+        return {b.id: b for bs in results for b in bs}
 
     def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleOsuScoreInfo]) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
@@ -161,20 +306,18 @@ class Osuawa(object):
         df[ec[12]] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
         df[ec[13]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
         df[ec[14]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
-        df[ec[15]] = df["_mods"].map(
-            lambda mods: ({m["acronym"] for m in mods} <= self.common_mods),
-        )
+        df[ec[15]] = df["_mods"].map(lambda mods: ({m["acronym"] for m in mods} <= self.common_mods))
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
-        return self.run_coro(async_get_user_info(self.api, username))
+        return self.run_coro(self.async_get_user_info(username))
 
     async def complete_scores_compact(self, scores_compact: dict[str, SimpleOsuScoreInfo]) -> dict[str, CompletedSimpleOsuScoreInfo]:
-        beatmaps_dict = await async_get_beatmaps_dict(self.api, [x.bid for x in scores_compact.values()])
+        beatmaps_dict = await self.async_get_beatmaps_dict([x.bid for x in scores_compact.values()])
         return {score_id: calc_osu_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
 
     async def async_get_friends(self) -> list[dict[str, Any]]:
-        friends = await self.api.friends()
+        friends = await self.api_friends()
         tasks: list[Task[dict[str, Any]]] = []
         async with asyncio.TaskGroup() as tg:
             for friend in friends:
@@ -185,7 +328,7 @@ class Osuawa(object):
         return self.run_coro(self.async_get_friends())
 
     async def async_get_score(self, score_id: int) -> dict[str, CompletedSimpleOsuScoreInfo]:
-        score = await self.api.score(score_id)
+        score = await self.api_score(score_id)
         score_compact = {str(score.id): SimpleOsuScoreInfo.from_score(score)}
         return await self.complete_scores_compact(score_compact)
 
@@ -193,7 +336,7 @@ class Osuawa(object):
         return self.create_scores_dataframe(self.run_coro(self.async_get_score(score_id)))
 
     async def async_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleOsuScoreInfo]:
-        user_scores = await self.api.beatmap_user_scores(beatmap, user)
+        user_scores = await self.api_beatmap_user_scores(beatmap, user)
         scores_compact = {str(x.id): SimpleOsuScoreInfo.from_score(x) for x in user_scores}
         return await self.complete_scores_compact(scores_compact)
 
@@ -206,9 +349,9 @@ class Osuawa(object):
         user_scores = []
         offset = 0
         while True:
-            user_scores_recent = await self.api.user_scores(
+            user_scores_recent = await self.api_user_scores(
                 user_id=user,
-                type="recent",
+                type_="recent",
                 mode=GameMode.OSU,
                 include_fails=include_fails,
                 limit=50,
@@ -405,7 +548,7 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = self.__awa_instance.run_coro(async_get_beatmaps_dict(self.__awa_instance.api, [int(x["bid"]) for x in parsed_beatmap_list]))
+        beatmaps_dict = self.__awa_instance.run_coro(self.__awa_instance.async_get_beatmaps_dict([int(x["bid"]) for x in parsed_beatmap_list]))
 
         # post process for parsed beatmaps
         for element in parsed_beatmap_list:

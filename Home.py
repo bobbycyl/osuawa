@@ -18,7 +18,7 @@ from osuawa.components import cat, get_session_id, init_page, memorized_selectbo
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
 
 init_page(_("Homepage") + " - osuawa")
@@ -56,6 +56,7 @@ with st.sidebar:
 with st.spinner(_("Preparing for the next operation...")):
     sleep(1.5)
 if "counter" not in st.session_state:
+    # todo: 随时间变化的招呼语 + 用户名
     st.success(_("Welcome!"))
     st.session_state["counter"] = 0
 
@@ -399,7 +400,7 @@ if st.session_state.perm >= 1:
     # 用户输入
     if prompt := st.chat_input(_("How can I help you?")):
         # 添加用户消息
-        st.session_state.llm_messages.append({"role": "user", "content": prompt})
+        st.session_state.llm_messages.append({"role": "user", "content": prompt})  # type: ignore
 
         with st.chat_message("user"):
             st.markdown(prompt)
