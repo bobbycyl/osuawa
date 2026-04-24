@@ -16,7 +16,7 @@ from osuawa.utils import CompletedSimpleOsuScoreInfo, regex_search_column
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa
@@ -116,9 +116,9 @@ st.text_input(_("Ruleset"), value="osu", key="rec_mode")
 st.number_input(_("Limit"), min_value=1, max_value=50, value=5, key="rec_limit")
 w = st.text("")
 user_scores_current = st.session_state.awa.run_coro(
-    st.session_state.awa.api.user_scores(
+    st.session_state.awa.api_user_scores(
         user_id=st.session_state.user,
-        type="recent",
+        type_="recent",
         mode=st.session_state.rec_mode,
         include_fails=True,
         limit=st.session_state.rec_limit,

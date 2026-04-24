@@ -2,7 +2,6 @@
 osuawa.py and utils.py should not contain i18n related text and streamlit related statement
 """
 
-import asyncio
 import contextlib
 import os
 import re
@@ -23,13 +22,13 @@ import typing_extensions
 from PerformanceCalculator import ProcessorWorkingBeatmap
 from clayutil.futil import Downloader, Properties
 from clayutil.sutil import md5sum
-from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact
+from ossapi.ossapiv2_async import Beatmap, Score, User, UserCompact
 from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import get_all_mods, calculate_difficulty
-from osupp.performance import OsuPerformance, calculate_performance, calculate_osu_performance
+from osupp.difficulty import calculate_difficulty, get_all_mods
+from osupp.performance import OsuPerformance, calculate_osu_performance, calculate_performance
 from osupp.util import validate_mod_setting_value
 from redis import Redis
 
@@ -248,27 +247,6 @@ async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
                 "total_hits": user_statistics.total_hits,
                 "total_score": user_statistics.total_score,
             }
-
-
-async def async_get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
-    return await simple_user_dict(await api.user(user, key="username" if isinstance(user, str) else "id"))
-
-
-async def async_get_username(api: OssapiAsync, user: int) -> str:
-    return (await api.user(user, key="id")).username
-
-
-async def async_get_beatmaps_dict(api: OssapiAsync, bids: list[int]) -> dict[int, Beatmap]:
-    bids = list(set(bids))
-    cut_bids: list[list[int]] = []
-    for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i : i + 50]))
-    tasks = []
-    async with asyncio.TaskGroup() as tg:
-        for bids in cut_bids:
-            tasks.append(tg.create_task(api.beatmaps(bids)))
-    results = [task.result() for task in tasks]
-    return {b.id: b for bs in results for b in bs}
 
 
 def calc_hit_window(original_accuracy: float, magnitude: float = 1.0) -> float:
@@ -814,7 +792,7 @@ def calc_star_rating_color(stars: float) -> str:
         return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))
 
 
-def calc_high_star_rating_text_color(stars: float, new_style: bool = True) -> str:
+def calc_high_star_rating_text_color(stars: float) -> str:
     if stars < 6.5:
         raise ValueError("stars must be at least 6.5")
     elif stars < 9.0:

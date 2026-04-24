@@ -5,6 +5,7 @@ import logging
 import os
 import pickle
 from html import escape as html_escape
+from threading import Lock
 from time import time
 from typing import Optional, TYPE_CHECKING, cast
 
@@ -14,7 +15,7 @@ from babel import Locale, UnknownLocaleError
 from clayutil.cmdparse import (
     CommandParser,
 )
-from ossapi import Domain, Scope
+from ossapi.ossapiv2_async import Domain, Scope
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
@@ -22,13 +23,11 @@ from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import delete_user_cache, get_session_id, load_value, register_commands, task_board, update_user_cache
 from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code
 
-from threading import Lock
-
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
 
 def convert_locale(accept_language: Optional[str]):
