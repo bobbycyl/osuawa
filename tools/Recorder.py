@@ -12,7 +12,7 @@ from websockets.sync.client import connect
 
 from osuawa import C, Osuawa
 from osuawa.components import init_page
-from osuawa.utils import CompletedSimpleOsuScoreInfo, regex_search_column
+from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
 if TYPE_CHECKING:
 
@@ -25,11 +25,11 @@ init_page(_("Recorder") + " - osuawa")
 
 
 async def async_get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
-    tasks: list[Task[dict[str, CompletedSimpleOsuScoreInfo]]] = []
+    tasks: list[Task[dict[str, CompletedSimpleScoreInfo]]] = []
     async with asyncio.TaskGroup() as tg:
         for user_id in ids:
             tasks.append(tg.create_task(st.session_state.awa.async_get_user_beatmap_scores(beatmap, user_id)))
-    scores_compact: dict[str, CompletedSimpleOsuScoreInfo] = {}
+    scores_compact: dict[str, CompletedSimpleScoreInfo] = {}
     for task in tasks:
         scores_compact.update(task.result())
     return st.session_state.awa.create_scores_dataframe(scores_compact)

@@ -78,7 +78,7 @@ def register_awa(ci, cs, ru, sc, dm, oauth_token: Optional[str] = None, oauth_re
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         st.session_state.async_loop = loop
-    return Osuawa(st.session_state.async_loop, ci, cs, ru, sc, dm, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token)
+    return Osuawa(st.session_state.async_loop, ci, cs, ru, sc, dm, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token, debugging_mode=st.session_state._debugging_mode)
 
 
 def toggle_immersive():
@@ -100,6 +100,7 @@ pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score Visualizer"))
 pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist Generator"))
 pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
+pg_room_spectator = st.Page("tools/Room_spectator.py", title=_("Room Spectator"))
 
 load_value("redis_tasks", [])
 # noinspection PyTypeHints
@@ -224,7 +225,10 @@ if "fh_init" not in st.session_state:
     st.session_state.fh_init = True
     init_logger_fh()
 register_commands({"simple": True})
-pg = st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder]) if st.session_state.perm < 2 else st.navigation([pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, st.Page("tools/Easter_egg.py")])
+pg_list = [pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, pg_room_spectator]
+if st.session_state.perm >= 2:
+    pg_list.append(st.Page("tools/Easter_egg.py", title=_("Easter Egg")))
+pg = st.navigation(pg_list)
 
 if "immersive_active" not in st.session_state:
     st.session_state.immersive_active = False

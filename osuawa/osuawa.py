@@ -25,6 +25,7 @@ from asyncio import AbstractEventLoop, Task
 from collections.abc import Coroutine
 from dataclasses import fields
 from functools import cached_property
+from itertools import chain
 from shutil import rmtree
 from threading import Lock
 from types import MappingProxyType
@@ -34,19 +35,24 @@ import numpy as np
 import orjson
 import pandas as pd
 from cachetools import TTLCache
+from clayutil.futil import Downloader, Properties
 from clayutil.sutil import sha256sum
+from clayutil.validator import Integer
+from fontfallback import writing
+from ossapi.models import MultiplayerScore, RoomPlaylistItem
+from ossapi.ossapiv2_async import Beatmap, Domain, GameMode, GameModeT, Grant, MultiplayerScores, OssapiAsync, Room, Scope, Score, User
 
 from .utils import (
     C,
     CompletedPlaylistBeatmap,
-    CompletedSimpleOsuScoreInfo,
-    ExtendedSimpleOsuScoreInfo,
+    CompletedSimpleScoreInfo,
+    ExtendedSimpleScoreInfo,
     ParsedPlaylistBeatmap,
     SimpleDifficultyAttribute,
-    SimpleOsuScoreInfo,
+    SimpleScoreInfo,
     assets_dir,
+    calc_beatmap_attributes,
     calc_high_star_rating_text_color,
-    calc_osu_beatmap_attributes,
     calc_positive_percent,
     calc_star_rating_color,
     calculate_difficulty,
@@ -60,10 +66,6 @@ from .utils import (
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
-from clayutil.futil import Downloader, Properties
-from clayutil.validator import Integer
-from fontfallback import writing
-from ossapi.ossapiv2_async import Beatmap, Domain, GameMode, Grant, OssapiAsync, Scope, Score, User, GameModeT
 
 assert datetime
 
@@ -184,19 +186,24 @@ class Osuawa(CachedMixIn):
         "V2",
     }
 
-    def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str]):
+    def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str], *, debugging_mode: bool = False):
         super().__init__()
         self.loop: AbstractEventLoop = loop
         # 不再暴露 api，而是使用 async_cached_method 包裹用得到的方法，避免直接调用原始方法
         # 后续可能针对 post 请求单独建立函数映射
         # 对于 get_me 等和用户相关的方法，必须将 isolated 设置为 True
         self.__api: Awapi = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
+        if debugging_mode:
+            self.__debugging_expose_api()
         no_identify = True
         for scope in scopes:
             if scope == Scope.IDENTIFY or scope == Scope.IDENTIFY.value:
                 no_identify = False
                 break
         self.identifier = -1 if no_identify else self.user[0]
+
+    def __debugging_expose_api(self):
+        self._api = self.__api
 
     # 以下为对原始 api 方法的包裹
     # 虽然后续许多数据都要转换为自定义类，但是为了代码清晰，`api_` 前缀表示原始 api 方法，并为了兼容性收窄了参数类型
@@ -210,23 +217,23 @@ class Osuawa(CachedMixIn):
         return await self.__api.friends()
 
     @async_cached_method()
-    async def api_user(self, user: int | str, *, mode: Optional[GameModeT] = None, key: Optional[Literal["id", "username"]] = None):
+    async def api_user(self, user: int | str, *, mode: Optional[GameModeT] = None, key: Optional[Literal["id", "username"]] = None) -> User:
         return await self.__api.user(user, mode=mode, key=key)
 
     @async_cached_method()
-    async def api_beatmap(self, beatmap_id: int):
+    async def api_beatmap(self, beatmap_id: int) -> Beatmap:
         return await self.__api.beatmap(beatmap_id)
 
     @async_cached_method()
-    async def api_beatmaps(self, beatmap_ids: list[int]):
+    async def api_beatmaps(self, beatmap_ids: list[int]) -> list[Beatmap]:
         return await self.__api.beatmaps(beatmap_ids)
 
     @async_cached_method()
-    async def api_score(self, score_id: int):
+    async def api_score(self, score_id: int) -> Score:
         return await self.__api.score(score_id)
 
     @async_cached_method()
-    async def api_beatmap_user_scores(self, beatmap_id: int, user_id: int, *, mode: Optional[GameModeT] = None):
+    async def api_beatmap_user_scores(self, beatmap_id: int, user_id: int, *, mode: Optional[GameModeT] = None) -> list[Score]:
         return await self.__api.beatmap_user_scores(beatmap_id, user_id, mode=mode)
 
     @async_cached_method()
@@ -239,8 +246,23 @@ class Osuawa(CachedMixIn):
         mode: Optional[GameModeT] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-    ):
+    ) -> list[Score]:
         return await self.__api.user_scores(user_id, type_, include_fails=include_fails, mode=mode, limit=limit, offset=offset)
+
+    @async_cached_method()
+    async def api_room(self, room_id: int) -> Room:
+        return await self.__api.room(room_id)
+
+    @async_cached_method()
+    async def api_multiplayer_scores(
+        self,
+        room_id: int,
+        playlist_id: int,
+        *,
+        limit: Optional[int] = None,
+        cursor_string: Optional[str] = None,
+    ) -> MultiplayerScores:
+        return await self.__api.multiplayer_scores(room_id, playlist_id, limit=limit, cursor_string=cursor_string)
 
     def run_coro[_T](self, coro: Coroutine[Any, Any, _T]) -> _T:
         """统一的协程执行方法"""
@@ -273,25 +295,26 @@ class Osuawa(CachedMixIn):
         cut_bids: list[list[int]] = []
         for i in range(0, len(bids), 50):
             cut_bids.append(list(bids[i : i + 50]))
-        tasks = []
+        tasks: list[Task[list[Beatmap]]] = []
         async with asyncio.TaskGroup() as tg:
             for bids in cut_bids:
                 tasks.append(tg.create_task(self.api_beatmaps(bids)))
         results = [task.result() for task in tasks]
         return {b.id: b for bs in results for b in bs}
 
-    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleOsuScoreInfo]) -> pd.DataFrame:
+    def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
             scores_compact,
             orient="index",
-            columns=pd.Index(f.name for f in fields(CompletedSimpleOsuScoreInfo)),
+            columns=pd.Index(f.name for f in fields(CompletedSimpleScoreInfo)),
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
         df["ts"] = cast(pd.Series, pd.to_datetime(df["ts"], utc=True)).dt.tz_convert(self.tz)
         df["st"] = cast(pd.Series, pd.to_datetime(df["st"], utc=True)).dt.tz_convert(self.tz)
-        ec = ExtendedSimpleOsuScoreInfo.__slots__
+        ec = ExtendedSimpleScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
+        # todo: 这里要不要考虑除零问题？
         df[ec[1]] = df["pp"] / df["b_pp_100if"]
         df[ec[2]] = df["pp_aim"] / df["b_pp_100if_aim"]
         df[ec[3]] = df["pp_speed"] / df["b_pp_100if_speed"]
@@ -312,9 +335,9 @@ class Osuawa(CachedMixIn):
     def get_user_info(self, username: str) -> dict[str, Any]:
         return self.run_coro(self.async_get_user_info(username))
 
-    async def complete_scores_compact(self, scores_compact: dict[str, SimpleOsuScoreInfo]) -> dict[str, CompletedSimpleOsuScoreInfo]:
+    async def complete_scores_compact(self, scores_compact: dict[str, SimpleScoreInfo]) -> dict[str, CompletedSimpleScoreInfo]:
         beatmaps_dict = await self.async_get_beatmaps_dict([x.bid for x in scores_compact.values()])
-        return {score_id: calc_osu_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
+        return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
 
     async def async_get_friends(self) -> list[dict[str, Any]]:
         friends = await self.api_friends()
@@ -327,17 +350,17 @@ class Osuawa(CachedMixIn):
     def get_friends(self) -> list[dict[str, Any]]:
         return self.run_coro(self.async_get_friends())
 
-    async def async_get_score(self, score_id: int) -> dict[str, CompletedSimpleOsuScoreInfo]:
+    async def async_get_score(self, score_id: int) -> dict[str, CompletedSimpleScoreInfo]:
         score = await self.api_score(score_id)
-        score_compact = {str(score.id): SimpleOsuScoreInfo.from_score(score)}
+        score_compact = {str(score.id): SimpleScoreInfo.from_score(score)}
         return await self.complete_scores_compact(score_compact)
 
     def get_score(self, score_id: int) -> pd.DataFrame:
         return self.create_scores_dataframe(self.run_coro(self.async_get_score(score_id)))
 
-    async def async_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleOsuScoreInfo]:
+    async def async_get_user_beatmap_scores(self, beatmap: int, user: int) -> dict[str, CompletedSimpleScoreInfo]:
         user_scores = await self.api_beatmap_user_scores(beatmap, user)
-        scores_compact = {str(x.id): SimpleOsuScoreInfo.from_score(x) for x in user_scores}
+        scores_compact = {str(score.id): SimpleScoreInfo.from_score(score) for score in user_scores}
         return await self.complete_scores_compact(scores_compact)
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
@@ -345,14 +368,14 @@ class Osuawa(CachedMixIn):
             user: int = self.user[0]
         return self.create_scores_dataframe(self.run_coro(self.async_get_user_beatmap_scores(beatmap, user)))
 
-    async def async_get_recent_scores(self, user: int, include_fails: bool = True) -> list[Score]:
+    async def async_get_recent_scores(self, user: int, include_fails: bool = True, mode: GameMode = GameMode.OSU) -> list[Score]:
         user_scores = []
         offset = 0
         while True:
             user_scores_recent = await self.api_user_scores(
                 user_id=user,
                 type_="recent",
-                mode=GameMode.OSU,
+                mode=mode,
                 include_fails=include_fails,
                 limit=50,
                 offset=offset,
@@ -363,6 +386,42 @@ class Osuawa(CachedMixIn):
             offset += 50
 
         return user_scores
+
+    async def async_get_rooms(self, room_ids: list[int]) -> list[Room]:
+        tasks: list[Task[Room]] = []
+        async with asyncio.TaskGroup() as tg:
+            for room_id in room_ids:
+                tasks.append(tg.create_task(self.api_room(room_id)))
+        results = [task.result() for task in tasks]
+        return results
+
+    async def async_get_room_playlists(self, room_ids: list[int]) -> list[RoomPlaylistItem]:
+        rooms = await self.async_get_rooms(room_ids)
+        return list(chain.from_iterable([room.playlist for room in rooms]))
+
+    async def async_get_playlist_scores(self, room_id: int, playlist_id: int) -> list[MultiplayerScore]:
+        playlist_scores: list[MultiplayerScore] = []
+        cursor_string = None
+        while True:
+            playlist_cur_scores = await self.api_multiplayer_scores(
+                room_id,
+                playlist_id,
+                cursor_string=cursor_string,
+            )
+            playlist_scores.extend(playlist_cur_scores.scores)
+            cursor_string = playlist_cur_scores.cursor_string
+            if cursor_string == "" or cursor_string is None:
+                break
+        return playlist_scores
+
+    async def async_get_rooms_scores(self, room_ids: list[int]) -> list[MultiplayerScore]:
+        room_playlists = await self.async_get_room_playlists(room_ids)
+        tasks: list[Task[list[MultiplayerScore]]] = []
+        async with asyncio.TaskGroup() as tg:
+            for room_playlist in room_playlists:
+                tasks.append(tg.create_task(self.async_get_playlist_scores(room_playlist.room_id, room_playlist.id)))
+        playlists_scores = [task.result() for task in tasks]
+        return list(chain.from_iterable(playlists_scores))
 
 
 def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str:
@@ -793,7 +852,7 @@ class OsuPlaylist(object):
         return completed_beatmap
 
     async def playlist_task(self) -> list[CompletedPlaylistBeatmap]:
-        tasks = []
+        tasks: list[Task[CompletedPlaylistBeatmap]] = []
         async with asyncio.TaskGroup() as tg:
             for i in range(len(self.beatmap_list)):
                 tasks.append(tg.create_task(self.beatmap_task(i)))

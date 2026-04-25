@@ -22,13 +22,14 @@ import typing_extensions
 from PerformanceCalculator import ProcessorWorkingBeatmap
 from clayutil.futil import Downloader, Properties
 from clayutil.sutil import md5sum
+from ossapi.models import MultiplayerScore
 from ossapi.ossapiv2_async import Beatmap, Score, User, UserCompact
 from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
 from osupp.difficulty import calculate_difficulty, get_all_mods
-from osupp.performance import OsuPerformance, calculate_osu_performance, calculate_performance
+from osupp.performance import CatchPerformance, ManiaPerformance, OsuPerformance, TaikoPerformance, calculate_performance
 from osupp.util import validate_mod_setting_value
 from redis import Redis
 
@@ -430,12 +431,32 @@ class SimpleDifficultyAttribute(object):
         self.hit_length = round(self.hit_length / self.magnitude)
 
 
+class ScoreStatistics(TypedDict):
+    miss: int
+    meh: int
+    ok: int
+    good: int
+    great: int
+
+    perfect: Optional[int]
+    small_tick_hit: Optional[int]
+    large_tick_hit: Optional[int]
+    small_bonus: Optional[int]
+    large_bonus: Optional[int]
+    ignore_miss: Optional[int]
+    ignore_hit: Optional[int]
+    combo_break: Optional[int]
+    slider_tail_hit: Optional[int]
+
+
 @dataclass(slots=True)
-class SimpleOsuScoreInfo(object):
+class SimpleScoreInfo(object):
     """
     从在线成绩简化而来，只保留感兴趣的字段，json 里保存这些基本字段
 
     这里的 pp 在本地计算后应被覆盖
+
+    注：其所有子类都是以 osu! standard 模式设计的，其他模式中目前只保证基本字段的兼容性
     """
 
     bid: int
@@ -447,8 +468,9 @@ class SimpleOsuScoreInfo(object):
     pp: Optional[float]
     _mods: list[dict[str, str] | dict[str, dict[str, str]]]
     ts: datetime
-    statistics: dict[str, Optional[int]]
+    statistics: ScoreStatistics
     st: Optional[datetime]
+    ruleset_id: int
 
     def __post_init__(self):
         # ts 和 st 转换为 UTC
@@ -457,7 +479,7 @@ class SimpleOsuScoreInfo(object):
             self.st = self.st.astimezone(timezone.utc)
 
     @classmethod
-    def from_score(cls, score: Score):
+    def from_score(cls, score: Score | MultiplayerScore):
         return cls(
             score.beatmap_id,
             score.user_id,
@@ -466,29 +488,43 @@ class SimpleOsuScoreInfo(object):
             score.max_combo,
             score.passed,
             score.pp,
-            [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],
+            # todo: 一个额外的思考：是否应该替换部分操作为 ossapi 内置的 `serialize_model`？目前看来没有必要
+            score.mods if isinstance(score.mods, list) else [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],  # type: ignore
             score.ended_at,
             {
-                "large_tick_hit": score.statistics.large_tick_hit,
-                "slider_tail_hit": score.statistics.slider_tail_hit,
                 # 为了数据美观，300/100/50/0 的值如果为 None，则设置为 0
+                # todo: 待检验：在不同游戏模式下，设置为 0 是否会引发问题？
                 "great": score.statistics.great or 0,
                 "ok": score.statistics.ok or 0,
                 "meh": score.statistics.meh or 0,
                 "miss": score.statistics.miss or 0,
+                # 为了其他游戏模式的基本兼容性（暂时没有更进一步的计算支持计划）
+                "good": score.statistics.good or 0,
+                "perfect": score.statistics.perfect,
+                "small_tick_hit": score.statistics.small_tick_hit,
+                "large_tick_hit": score.statistics.large_tick_hit,
+                "slider_tail_hit": score.statistics.slider_tail_hit,
+                "small_bonus": score.statistics.small_bonus,
+                "large_bonus": score.statistics.large_bonus,
+                "ignore_miss": score.statistics.ignore_miss,
+                "ignore_hit": score.statistics.ignore_hit,
+                "combo_break": score.statistics.combo_break,
             },
             score.started_at,
+            score.ruleset_id,
         )
 
 
 @dataclass(slots=True)
-class CompletedSimpleOsuScoreInfo(SimpleOsuScoreInfo):
+class CompletedSimpleScoreInfo(SimpleScoreInfo):
     """
     用于记录获取完在线成绩后，需要本地补充计算的谱面、模组、成绩相关字段，parquet 里存储的就是这些字段，在必要的时候才需要重算
 
     ⚠ 父类中的 pp 在重算时也需要考虑 ⚠
 
     ``calc_beatmap_attributes`` 应该能够妥善处理这些情况
+
+    注：该类是为 osu! standard 模式设计的，其他模式中目前只保证基本字段的兼容性
     """
 
     cs: float
@@ -529,12 +565,12 @@ class CompletedSimpleOsuScoreInfo(SimpleOsuScoreInfo):
 
 
 @dataclass(slots=True)
-class ExtendedSimpleOsuScoreInfo(CompletedSimpleOsuScoreInfo):
+class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     """用于记录在生成 DataFrame 后计算的字段，使用向量化加速批量计算是个好选择
 
     所有新增的参数都可以追加到这里
 
-    修改 ``Osuawa.calculate_extended_scores_dataframe_with_timezone`` 以匹配这些内容，或对父类字段进行二次处理（如时区显示等）
+    注：该类是为 osu! standard 模式设计的，其他模式中目前只保证基本字段的兼容性
     """
 
     time: int
@@ -677,31 +713,71 @@ def download_osu(beatmap: Beatmap):
             sleep(0.5)
 
 
-def calc_osu_beatmap_attributes(beatmap: Beatmap, score: SimpleOsuScoreInfo) -> CompletedSimpleOsuScoreInfo:
+def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
+    ruleset_id = score.ruleset_id
     my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(score._mods)
     download_osu(beatmap)
-    calculator = calculate_osu_performance(
+    match ruleset_id:
+        case 0:
+            ruleset = OsuRuleset()
+            performance = OsuPerformance(
+                combo=score.max_combo,
+                misses=score.statistics["miss"],
+                mehs=score.statistics["meh"],
+                oks=score.statistics["ok"],
+                large_tick_hits=score.statistics["large_tick_hit"],
+                slider_tail_hits=score.statistics["slider_tail_hit"],
+            )
+            performance_type = OsuPerformance
+        case 1:
+            ruleset = TaikoRuleset()
+            performance = TaikoPerformance(
+                combo=score.max_combo,
+                misses=score.statistics["miss"],
+                oks=score.statistics["ok"],
+            )
+            performance_type = TaikoPerformance
+        case 2:
+            ruleset = CatchRuleset()
+            performance = CatchPerformance(
+                combo=score.max_combo,
+                misses=score.statistics["miss"],
+                small_tick_hits=score.statistics["small_tick_hit"],
+                large_tick_hits=score.statistics["large_tick_hit"],
+            )
+            performance_type = CatchPerformance
+        case 3:
+            ruleset = ManiaRuleset()
+            performance = ManiaPerformance(
+                misses=score.statistics["miss"],
+                mehs=score.statistics["meh"],
+                oks=score.statistics["ok"],
+                goods=score.statistics["good"],
+                greats=score.statistics["great"],
+            )
+            performance_type = ManiaPerformance
+        case _:
+            raise ValueError("ruleset_id %d not supported" % ruleset_id)
+    calculator = calculate_performance(
         beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
+        ruleset=ruleset,
         mods=my_attr.osu_tool_mods,
         mod_options=my_attr.osu_tool_mod_options,
+        # todo: 这里是否要不限制超时？
+        allow_cancel=False,
     )
     osupp_attr = next(calculator)
-    perf_got_attr = calculator.send(
-        OsuPerformance(
-            combo=score.max_combo,
-            misses=score.statistics.get("miss") or 0,
-            mehs=score.statistics.get("meh"),
-            oks=score.statistics.get("ok"),
-            large_tick_hits=score.statistics.get("large_tick_hit"),
-            slider_tail_hits=score.statistics.get("slider_tail_hit"),
-        ),
-    )
-    perf100_attr = calculator.send(OsuPerformance())
-    pp92 = calculator.send(OsuPerformance(accuracy_percent=92.0))["pp"]
-    pp81 = calculator.send(OsuPerformance(accuracy_percent=81.0))["pp"]
-    pp67 = calculator.send(OsuPerformance(accuracy_percent=67.0))["pp"]
+    perf_got_attr = calculator.send(performance)
+    # noinspection PyArgumentList
+    perf100_attr = calculator.send(performance_type())
+    # noinspection PyArgumentList
+    pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]
+    # noinspection PyArgumentList
+    pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]
+    # noinspection PyArgumentList
+    pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]
     pp_got = perf_got_attr["pp"]
     pp_got_aim = perf_got_attr["aim"]
     pp_got_speed = perf_got_attr["speed"]
@@ -711,7 +787,7 @@ def calc_osu_beatmap_attributes(beatmap: Beatmap, score: SimpleOsuScoreInfo) -> 
     pp100_speed = perf100_attr["speed"]
     pp100_accuracy = perf100_attr["accuracy"]
 
-    return CompletedSimpleOsuScoreInfo(
+    return CompletedSimpleScoreInfo(
         # 父类字段，除了 pp 全部照抄
         score.bid,
         score.user,
@@ -724,6 +800,7 @@ def calc_osu_beatmap_attributes(beatmap: Beatmap, score: SimpleOsuScoreInfo) -> 
         score.ts,
         score.statistics,
         score.st,
+        score.ruleset_id,
         # 追加字段
         my_attr.cs,
         my_attr.hit_window,
