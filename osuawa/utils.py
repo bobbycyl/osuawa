@@ -42,16 +42,16 @@ headers = {
 LANGUAGES = ["en_US", "zh_CN"]
 osu_mod_entries = get_all_mods(OsuRuleset())
 osu_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in osu_mod_entries}
-_osu_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
+_osu_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
 taiko_mod_entries = get_all_mods(TaikoRuleset())
 taiko_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in taiko_mod_entries}
-_taiko_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
+_taiko_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
 catch_mod_entries = get_all_mods(CatchRuleset())
 catch_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in catch_mod_entries}
-_catch_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
+_catch_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
 mania_mod_entries = get_all_mods(ManiaRuleset())
 mania_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in mania_mod_entries}
-_mania_mod_settings_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
+_mania_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
 
 sem = BoundedSemaphore()
 
@@ -277,20 +277,20 @@ class SimpleDifficultyAttribute(object):
         :param mods: 模组列表
         :param ruleset_id: 游戏模式 ID，若为 None 则默认使用当前谱面的模式 ID
         :param beatmap_path: 谱面文件路径
-        :return: (sorted_mods, {acronym, settings}, osu_tool_mods, osu_tool_mod_options)
+        :return: (sorted_mods, raw {acronym, settings} dict, standardized_osu_tool_mods, standardized_osu_tool_mod_options)
         """
         match ruleset_id:
             case 0:
-                all_mod_setting_types = _osu_mod_setting_types
+                all_mod_settings_mapping = _osu_mod_settings_mapping
                 all_mod_indexes = osu_mod_indexes
             case 1:
-                all_mod_setting_types = _taiko_mod_setting_types
+                all_mod_settings_mapping = _taiko_mod_settings_mapping
                 all_mod_indexes = taiko_mod_indexes
             case 2:
-                all_mod_setting_types = _catch_mod_setting_types
+                all_mod_settings_mapping = _catch_mod_settings_mapping
                 all_mod_indexes = catch_mod_indexes
             case 3:
-                all_mod_setting_types = _mania_mod_settings_types
+                all_mod_settings_mapping = _mania_mod_settings_mapping
                 all_mod_indexes = mania_mod_indexes
             case _:
                 if beatmap_path is None:
@@ -316,7 +316,7 @@ class SimpleDifficultyAttribute(object):
         # 需要两次遍历 mods，一次用来排序，一次用来验证和转换
         for mod in mods:
             acronym = mod["acronym"]
-            if acronym not in all_mod_setting_types:
+            if acronym not in all_mod_settings_mapping:
                 raise ValueError("unknown mod '%s'" % acronym)
             _type = all_mod_indexes[acronym]["Type"]
             match _type:
@@ -343,9 +343,9 @@ class SimpleDifficultyAttribute(object):
             mods_dict[acronym] = _settings
             osu_tool_mods.append(acronym)
             for setting_name, setting_value in _settings.items():
-                if setting_name not in all_mod_setting_types[acronym]:
+                if setting_name not in all_mod_settings_mapping[acronym]:
                     raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
-                expected_type: Literal["boolean", "number", "string", "enum"] = all_mod_setting_types[acronym][setting_name]
+                expected_type: Literal["boolean", "number", "string", "enum"] = all_mod_settings_mapping[acronym][setting_name]["Type"]
                 if not validate_mod_setting_value(setting_value, expected_type):
                     raise ValueError(
                         "setting '%s' for mod '%s' should be of type '%s'"
@@ -356,7 +356,34 @@ class SimpleDifficultyAttribute(object):
                         ),
                     )
                 if expected_type == "boolean":
-                    setting_value = "true" if setting_value else "false"
+                    setting_value = "true" if setting_value else "false"  # if bool(a) is True, then a is "true"
+                elif expected_type == "enum":
+                    # 强制要求枚举型用标准字符串表示
+                    enum_values = all_mod_settings_mapping[acronym][setting_name]["EnumValues"]
+                    if enum_values is None:
+                        raise ValueError("undefined enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
+                    elif len(enum_values) == 0:  # 这种情况应该不会出现，但是还是进行安全检查
+                        raise ValueError("empty enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
+                    # 这里可能有 4 种情况：
+                    # 1. setting_value 是整型 => 检查是否越界，转换为枚举型标准字符串
+                    # 2. setting_value 是浮点型/布尔型 => 直接拒绝
+                    # 3. setting_value 是整型字符串 => 转换为整型并与 1 相同
+                    # 4. setting_value 是枚举型定义的对应字符串 => 直接使用
+                    def check_index_range(v: int, max_index: int, setting_name: str, acronym: str):
+                        if v < 0 or v >= max_index:
+                            raise ValueError("setting '%s' of mod '%s' out of range" % (setting_name, acronym))
+                    if isinstance(setting_value, int):
+                        check_index_range(setting_value, len(enum_values), setting_name, acronym)  # 检查是否越界
+                        setting_value = enum_values[setting_value]
+                    elif isinstance(setting_value, (float, bool)):
+                        raise ValueError("unexpected enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                    elif setting_value not in enum_values:
+                        setting_value = str(setting_value)
+                        if setting_value.isdigit():
+                            check_index_range(int(setting_value), len(enum_values), setting_name, acronym)
+                            setting_value = enum_values[int(setting_value)]
+                        else:
+                            raise ValueError("unknown enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
                 osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
         return sorted_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
 
