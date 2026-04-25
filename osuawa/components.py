@@ -37,8 +37,9 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 from osuawa import C, OsuPlaylist, Osuawa
 from osuawa.osuawa import CachedMixIn
 from osuawa.utils import (
-    CompletedSimpleOsuScoreInfo,
+    CompletedSimpleScoreInfo,
     RedisTaskId,
+    ScoreStatistics,
     SimpleDifficultyAttribute,
     _build_upsert,
     _make_query_uppercase,
@@ -385,8 +386,8 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             )
         rows = res.fetchall()
     # 处理 bool 和 datetime
-    completed_recent_scores_compact: dict[str, CompletedSimpleOsuScoreInfo] = {
-        str(row[0]): CompletedSimpleOsuScoreInfo(
+    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {
+        str(row[0]): CompletedSimpleScoreInfo(
             # 基础字段
             row[1],
             row[2],
@@ -397,22 +398,41 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             row[7],
             orjson.loads(row[8]) if row[8] is not None else [],
             datetime.fromtimestamp(row[9]),
-            orjson.loads(row[10]) if row[10] is not None else {},
+            (
+                ScoreStatistics(**orjson.loads(row[10]))
+                if row[10] is not None
+                else ScoreStatistics(
+                    miss=0,
+                    meh=0,
+                    ok=0,
+                    good=0,
+                    great=0,
+                    perfect=None,
+                    small_tick_hit=None,
+                    large_tick_hit=None,
+                    small_bonus=None,
+                    large_bonus=None,
+                    ignore_miss=None,
+                    ignore_hit=None,
+                    combo_break=None,
+                    slider_tail_hit=None,
+                )
+            ),
             datetime.fromtimestamp(row[11]) if row[11] is not None else None,
-            # 扩展字段
             row[12],
+            # 扩展字段
             row[13],
             row[14],
             row[15],
             row[16],
-            bool(row[17]),
+            row[17],
             bool(row[18]),
             bool(row[19]),
             bool(row[20]),
             bool(row[21]),
             bool(row[22]),
             bool(row[23]),
-            row[24],
+            bool(row[24]),
             row[25],
             row[26],
             row[27],
@@ -435,6 +455,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             row[44],
             row[45],
             row[46],
+            row[47],
         )
         for row in rows
     }
