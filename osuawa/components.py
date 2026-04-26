@@ -48,7 +48,7 @@ from osuawa.utils import (
     catch_mod_indexes,
     download_osu,
     format_size,
-    generate_mods_from_lines,
+    make_unstandardized_mods_from_lines,
     get_mod_type_mapping,
     get_size_and_count,
     mania_mod_entries,
@@ -489,7 +489,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
     download_osu(beatmap)
 
     if mod_settings is not None:
-        mods = generate_mods_from_lines("SP", mod_settings.replace(" ", "\n"))
+        mods = make_unstandardized_mods_from_lines("SP", mod_settings.replace(" ", "\n"))
         # 剔除 SP
         mods.remove({"acronym": "SP"})
     else:
@@ -720,7 +720,7 @@ def mods_generator(ret_type: Optional[Literal[0, 1]] = None):
 
     with st.expander(_("Preview")):
         st.code("\n".join(lines), language="properties")
-        mods = generate_mods_from_lines("SP", "\n".join(lines))
+        mods = make_unstandardized_mods_from_lines("SP", "\n".join(lines))
         mods.remove({"acronym": "SP"})
         st.json(mods)
 

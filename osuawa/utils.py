@@ -28,7 +28,7 @@ from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import calculate_difficulty, get_all_mods
+from osupp.difficulty import ModSetting, calculate_difficulty, get_all_mods
 from osupp.performance import CatchPerformance, ManiaPerformance, OsuPerformance, TaikoPerformance, calculate_performance
 from osupp.util import validate_mod_setting_value
 from redis import Redis
@@ -268,6 +268,11 @@ def calc_ar(preempt: float) -> float:
     return 5.0 - (preempt - 1200.0) / 600 * 5.0 if preempt > 1200.0 else 5.0 + (1200.0 - preempt) / 750 * 5.0
 
 
+def _check_index_range(v: int, max_index: int, setting_name: str, acronym: str):
+    if v < 0 or v >= max_index:
+        raise ValueError("setting '%s' of mod '%s' out of range" % (setting_name, acronym))
+
+
 class SimpleDifficultyAttribute(object):
 
     @classmethod
@@ -277,21 +282,21 @@ class SimpleDifficultyAttribute(object):
         :param mods: 模组列表
         :param ruleset_id: 游戏模式 ID，若为 None 则默认使用当前谱面的模式 ID
         :param beatmap_path: 谱面文件路径
-        :return: (sorted_mods, raw {acronym, settings} dict, standardized_osu_tool_mods, standardized_osu_tool_mod_options)
+        :return: (standardized_mods（已排序的）, {acronym, settings}, osu_tool_mods（与输入顺序一致）, osu_tool_mod_options（与输入顺序一致）)
         """
         match ruleset_id:
             case 0:
-                all_mod_settings_mapping = _osu_mod_settings_mapping
-                all_mod_indexes = osu_mod_indexes
+                ruleset_mod_settings_mapping = _osu_mod_settings_mapping
+                ruleset_mod_indexes = osu_mod_indexes
             case 1:
-                all_mod_settings_mapping = _taiko_mod_settings_mapping
-                all_mod_indexes = taiko_mod_indexes
+                ruleset_mod_settings_mapping = _taiko_mod_settings_mapping
+                ruleset_mod_indexes = taiko_mod_indexes
             case 2:
-                all_mod_settings_mapping = _catch_mod_settings_mapping
-                all_mod_indexes = catch_mod_indexes
+                ruleset_mod_settings_mapping = _catch_mod_settings_mapping
+                ruleset_mod_indexes = catch_mod_indexes
             case 3:
-                all_mod_settings_mapping = _mania_mod_settings_mapping
-                all_mod_indexes = mania_mod_indexes
+                ruleset_mod_settings_mapping = _mania_mod_settings_mapping
+                ruleset_mod_indexes = mania_mod_indexes
             case _:
                 if beatmap_path is None:
                     raise ValueError("cannot determine the ruleset")
@@ -302,23 +307,79 @@ class SimpleDifficultyAttribute(object):
                 )
                 return cls.validate_and_transform_mods(mods, ruleset_id)
 
-        # sorted_mods 的顺序如下：
+        # standardized_mods 的顺序如下：
         # 1. 首先把所有 mods 分为五堆："DifficultyReduction", "DifficultyIncrease", "Automation", "Conversion", "Fun", "System"
         # 2. 每一堆内，按照 acronym 字符串排序
-        # 3. 拼接所有堆，得到 sorted_mods
+        # 3. 拼接所有堆，得到 standardized_mods
         _mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy = [], [], [], [], [], []
 
-        sorted_mods = []
+        standardized_mods = []
         mods_dict = {}  # {acronym, settings}
         osu_tool_mods: list[str] = []
         osu_tool_mod_options: list[str] = []
 
-        # 需要两次遍历 mods，一次用来排序，一次用来验证和转换
+        # 需要两次遍历 mods，第一次用来验证和转换，第二次用来排序和分堆
         for mod in mods:
             acronym = mod["acronym"]
-            if acronym not in all_mod_settings_mapping:
+            if acronym not in ruleset_mod_settings_mapping:
                 raise ValueError("unknown mod '%s'" % acronym)
-            _type = all_mod_indexes[acronym]["Type"]
+            _settings = mod.get("settings", {})
+            del mod
+            cleaned_settings = {}
+
+            # 开始 mod_setting 验证和转换
+            for setting_name, setting_value in _settings.items():
+                if setting_name not in ruleset_mod_settings_mapping[acronym]:
+                    raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
+                expected_type: Literal["boolean", "number", "string", "enum"] = ruleset_mod_settings_mapping[acronym][setting_name]["Type"]
+                if not validate_mod_setting_value(setting_value, expected_type):
+                    raise ValueError(
+                        "setting '%s' for mod '%s' should be of type '%s'"
+                        % (
+                            setting_name,
+                            acronym,
+                            expected_type,
+                        ),
+                    )
+                if expected_type == "boolean":
+                    setting_value = "true" if setting_value else "false"  # if bool(a) is True, then a is "true"
+                elif expected_type == "enum":
+                    # 强制要求枚举型用字符串整型表示
+                    enum_values = ruleset_mod_settings_mapping[acronym][setting_name]["EnumValues"]
+                    if enum_values is None:
+                        raise ValueError("undefined enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
+                    elif len(enum_values) == 0:  # 这种情况应该不会出现，但是还是进行安全检查
+                        raise ValueError("empty enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
+                    # 这里可能有 4 种情况：
+                    # 1. setting_value 是整型 => 检查是否越界，转换为字符串
+                    # 2. setting_value 是浮点型/布尔型 => 直接拒绝
+                    # 3. setting_value 是整型字符串 => 转换为整型并与 1 相同
+                    # 4. setting_value 是枚举型定义的对应字符串 => 查找索引并转换为字符串
+                    if isinstance(setting_value, int):
+                        _check_index_range(setting_value, len(enum_values), setting_name, acronym)  # 检查是否越界
+                        setting_value = str(setting_value)
+                    elif isinstance(setting_value, (float, bool)):
+                        raise ValueError("unexpected enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                    else:
+                        if setting_value in enum_values:
+                            setting_value = str(enum_values.index(setting_value))
+                        else:
+                            if setting_value.isdigit():
+                                # 这里要确保前导 0 被正确剔除，如 "01" -> "1"
+                                int_setting_value = int(setting_value)
+                                _check_index_range(int_setting_value, len(enum_values), setting_name, acronym)
+                                setting_value = str(int_setting_value)
+                            else:
+                                raise ValueError("unknown enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                cleaned_settings[setting_name] = setting_value
+                osu_tool_mod_options.append("%s_%s=%s" % (acronym, setting_name, setting_value))
+
+            del _settings
+            mod = {"acronym": acronym, "settings": cleaned_settings}  # redefine mod
+            mods_dict[acronym] = cleaned_settings
+            osu_tool_mods.append(acronym)
+
+            _type = ruleset_mod_indexes[acronym]["Type"]
             match _type:
                 case "DifficultyReduction":
                     _mods_dr.append(mod)
@@ -332,60 +393,12 @@ class SimpleDifficultyAttribute(object):
                     _mods_fu.append(mod)
                 case "System":
                     _mods_sy.append(mod)
+                case _:
+                    raise ValueError("unknown mod type '%s' for mod '%s'" % (_type, acronym))
         for _mods in [_mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy]:
-            sorted_mods.extend(sorted(_mods, key=lambda x: x["acronym"]))
+            standardized_mods.extend(sorted(_mods, key=lambda x: x["acronym"]))
 
-        del mods
-
-        for mod in sorted_mods:
-            acronym = mod["acronym"]
-            _settings = mod.get("settings", {})
-            mods_dict[acronym] = _settings
-            osu_tool_mods.append(acronym)
-            for setting_name, setting_value in _settings.items():
-                if setting_name not in all_mod_settings_mapping[acronym]:
-                    raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
-                expected_type: Literal["boolean", "number", "string", "enum"] = all_mod_settings_mapping[acronym][setting_name]["Type"]
-                if not validate_mod_setting_value(setting_value, expected_type):
-                    raise ValueError(
-                        "setting '%s' for mod '%s' should be of type '%s'"
-                        % (
-                            setting_name,
-                            acronym,
-                            expected_type,
-                        ),
-                    )
-                if expected_type == "boolean":
-                    setting_value = "true" if setting_value else "false"  # if bool(a) is True, then a is "true"
-                elif expected_type == "enum":
-                    # 强制要求枚举型用标准字符串表示
-                    enum_values = all_mod_settings_mapping[acronym][setting_name]["EnumValues"]
-                    if enum_values is None:
-                        raise ValueError("undefined enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
-                    elif len(enum_values) == 0:  # 这种情况应该不会出现，但是还是进行安全检查
-                        raise ValueError("empty enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
-                    # 这里可能有 4 种情况：
-                    # 1. setting_value 是整型 => 检查是否越界，转换为枚举型标准字符串
-                    # 2. setting_value 是浮点型/布尔型 => 直接拒绝
-                    # 3. setting_value 是整型字符串 => 转换为整型并与 1 相同
-                    # 4. setting_value 是枚举型定义的对应字符串 => 直接使用
-                    def check_index_range(v: int, max_index: int, setting_name: str, acronym: str):
-                        if v < 0 or v >= max_index:
-                            raise ValueError("setting '%s' of mod '%s' out of range" % (setting_name, acronym))
-                    if isinstance(setting_value, int):
-                        check_index_range(setting_value, len(enum_values), setting_name, acronym)  # 检查是否越界
-                        setting_value = enum_values[setting_value]
-                    elif isinstance(setting_value, (float, bool)):
-                        raise ValueError("unexpected enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
-                    elif setting_value not in enum_values:
-                        setting_value = str(setting_value)
-                        if setting_value.isdigit():
-                            check_index_range(int(setting_value), len(enum_values), setting_name, acronym)
-                            setting_value = enum_values[int(setting_value)]
-                        else:
-                            raise ValueError("unknown enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
-                osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
-        return sorted_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
+        return standardized_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
 
     def __init__(self, cs: float, accuracy: float, ar: float, bpm: float, hit_length: int, ruleset_id: Literal[0, 1, 2, 3] = 0):
         self.cs = cs
@@ -403,13 +416,13 @@ class SimpleDifficultyAttribute(object):
         self.is_very_low_ar = False
         self.is_speed_up = False
         self.is_speed_down = False
-        self.sorted_mods = []
+        self.standardized_mods = []
         self.osu_tool_mods: list[str] = []  # [acronym]
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
         self.ruleset_id = ruleset_id
 
     def set_mods(self, mods: list):
-        _sorted_mods, mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
+        self.standardized_mods, mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
         if "NF" in mods_dict:
             self.is_nf = True
         if "HD" in mods_dict:
@@ -507,6 +520,7 @@ class SimpleScoreInfo(object):
 
     @classmethod
     def from_score(cls, score: Score | MultiplayerScore):
+        print(score.mods)
         return cls(
             score.beatmap_id,
             score.user_id,
@@ -515,8 +529,7 @@ class SimpleScoreInfo(object):
             score.max_combo,
             score.passed,
             score.pp,
-            # todo: 一个额外的思考：是否应该替换部分操作为 ossapi 内置的 `serialize_model`？目前看来没有必要
-            score.mods if isinstance(score.mods, list) else [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],  # type: ignore
+            [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],
             score.ended_at,
             {
                 # 为了数据美观，300/100/50/0 的值如果为 None，则设置为 0
@@ -947,10 +960,15 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
     return data
 
 
-def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
+def make_unstandardized_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
+    """一个 Ruleset 不敏感、宽松的、自带 slot 的多行 mods 解析函数
+
+    :param slot: slot 名，如 NM1
+    :param lines: 多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
+    :return: 一个未经类型验证和标准化的 mods 列表
+    """
     # slot 本身自带一个 mod
     auto_recognized_mod = slot[:2]
-    # mod_settings 是一个多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
     # 最终期望得到：[{"acronym":<acronym>,"settings":{<mod_setting>:<value>}}]，如果不存在 settings，则不需要 settings 键
     # 先转换为 {acronym: [{mod_setting: value}]}，最后检测如果 settings 为空则不要添加该键
     mods_dict: dict[str, dict[str, Any]] = {auto_recognized_mod: {}}
@@ -967,19 +985,7 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                 acronym, mod_setting = acronym_n_setting.split("_", 1)
                 if acronym not in mods_dict:
                     mods_dict[acronym] = {}
-                # 这里的 value 默认只是字符串
-                # 这里不对输入的 mod_setting 类型进行检查，只进行类型推断转换
-                # 实际上，mod_setting 一共有三种可能的类型，分别是字符串型、浮点型、逻辑型
-                # 这里与 osu-tools 不同的是：
-                # 1. 强制要求逻辑型用全小写的 true 或 false 表示
-                # 2. 强制要求枚举型用字符串表示（不支持浮点数强制转换为整型）
-                if value == "true":
-                    value = True
-                elif value == "false":
-                    value = False
-                else:
-                    with contextlib.suppress(ValueError):
-                        value = float(value)
+                value = orjson.loads(value)
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]
