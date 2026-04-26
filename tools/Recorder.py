@@ -12,11 +12,11 @@ from websockets.sync.client import connect
 
 from osuawa import C, Osuawa
 from osuawa.components import init_page
-from osuawa.utils import CompletedSimpleOsuScoreInfo, regex_search_column
+from osuawa.utils import CompletedSimpleScoreInfo, regex_search_column
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa
@@ -25,11 +25,11 @@ init_page(_("Recorder") + " - osuawa")
 
 
 async def async_get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
-    tasks: list[Task[dict[str, CompletedSimpleOsuScoreInfo]]] = []
+    tasks: list[Task[dict[str, CompletedSimpleScoreInfo]]] = []
     async with asyncio.TaskGroup() as tg:
         for user_id in ids:
             tasks.append(tg.create_task(st.session_state.awa.async_get_user_beatmap_scores(beatmap, user_id)))
-    scores_compact: dict[str, CompletedSimpleOsuScoreInfo] = {}
+    scores_compact: dict[str, CompletedSimpleScoreInfo] = {}
     for task in tasks:
         scores_compact.update(task.result())
     return st.session_state.awa.create_scores_dataframe(scores_compact)
@@ -116,9 +116,9 @@ st.text_input(_("Ruleset"), value="osu", key="rec_mode")
 st.number_input(_("Limit"), min_value=1, max_value=50, value=5, key="rec_limit")
 w = st.text("")
 user_scores_current = st.session_state.awa.run_coro(
-    st.session_state.awa.api.user_scores(
+    st.session_state.awa.api_user_scores(
         user_id=st.session_state.user,
-        type="recent",
+        type_="recent",
         mode=st.session_state.rec_mode,
         include_fails=True,
         limit=st.session_state.rec_limit,

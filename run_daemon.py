@@ -21,7 +21,7 @@ import requests
 import schedule
 import toml
 from clayutil.cmdparse import CollectionField as Coll, Command, CommandParser, IntegerField as Int, JSONStringField as JsonStr
-from ossapi import Domain, Scope, Score
+from ossapi.ossapiv2_async import Domain, Scope, Score
 from sqlalchemy import create_engine, text
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
@@ -30,13 +30,12 @@ from osuawa.utils import (
     BeatmapToUpdate,
     C,
     CompletedPlaylistBeatmap,
-    CompletedSimpleOsuScoreInfo,
+    CompletedSimpleScoreInfo,
     DatabasePlaylistBeatmap,
-    SimpleOsuScoreInfo,
+    SimpleScoreInfo,
     _build_update_ignore,
     _build_upsert,
     _create_tmp_playlist_p,
-    async_get_username,
     push_task,
 )
 
@@ -125,7 +124,7 @@ with engine.begin() as _conn:
     )
     _conn.execute(
         text(
-            "CREATE TABLE IF NOT EXISTS SCORE(SCORE_ID BIGINT, BID BIGINT, USER_ID BIGINT, SCORE INT, ACCURACY REAL, MAX_COMBO INT, PASSED INT, PP REAL, MODS TEXT, TS REAL, STATISTICS TEXT, ST REAL, \
+            "CREATE TABLE IF NOT EXISTS SCORE(SCORE_ID BIGINT, BID BIGINT, USER_ID BIGINT, SCORE INT, ACCURACY REAL, MAX_COMBO INT, PASSED INT, PP REAL, MODS TEXT, TS REAL, STATISTICS TEXT, ST REAL, RULESET_ID INT, \
              CS REAL, HIT_WINDOW REAL, PREEMPT REAL, BPM REAL, HIT_LENGTH INT, IS_NF INT, IS_HD INT, IS_HIGH_AR INT, IS_LOW_AR INT, IS_VERY_LOW_AR INT, IS_SPEED_UP INT, IS_SPEED_DOWN INT, INFO TEXT, ORIGINAL_DIFFICULTY REAL, B_STAR_RATING REAL, B_MAX_COMBO INT, B_AIM_DIFFICULTY REAL, B_AIM_DIFFICULT_SLIDER_COUNT REAL, B_SPEED_DIFFICULTY REAL, B_SPEED_NOTE_COUNT REAL, B_SLIDER_FACTOR REAL, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_AIM_DIFFICULT_STRAIN_COUNT REAL, B_SPEED_DIFFICULT_STRAIN_COUNT REAL, PP_AIM REAL, PP_SPEED REAL, PP_ACCURACY REAL, B_PP_100IF_AIM REAL, B_PP_100IF_SPEED REAL, B_PP_100IF_ACCURACY REAL, B_PP_100IF REAL, B_PP_92IF REAL, B_PP_81IF REAL, B_PP_67IF REAL, PRIMARY KEY (SCORE_ID));",
         ),
     )
@@ -169,12 +168,12 @@ def commands():
     ]
 
 
-async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str, dict[str, CompletedSimpleOsuScoreInfo]]:
+async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
     """返回 (username, completed_recent_scores_compact)"""
     user_scores: list[Score] = await daemon_awa.async_get_recent_scores(user, include_fails)
-    recent_scores_compact: dict[str, SimpleOsuScoreInfo] = {str(user_score.id): SimpleOsuScoreInfo.from_score(user_score) for user_score in user_scores}
+    recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
     return await asyncio.gather(
-        async_get_username(daemon_awa.api, user),
+        daemon_awa.async_get_username(user),
         daemon_awa.complete_scores_compact(recent_scores_compact),
     )
 
@@ -207,15 +206,14 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
                 text(
                     _build_update_ignore(
                         _dialect,
-                        """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP,
-                                              IS_SPEED_DOWN,
-                                              INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
+                        """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, RULESET_ID, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP,
+                                              IS_SPEED_DOWN, INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
                                               B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
                                               B_PP_81IF, B_PP_67IF)
-                           VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar, :is_speed_up,
-                                   :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor, :b_aim_top_weighted_slider_factor,
-                                   :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed, :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if,
-                                   :b_pp_81if, :b_pp_67if)""",
+                           VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :ruleset_id, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar,
+                                   :is_speed_up, :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor,
+                                   :b_aim_top_weighted_slider_factor, :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed,
+                                   :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if, :b_pp_81if, :b_pp_67if)""",
                         ["SCORE_ID"],
                     ),
                 ),

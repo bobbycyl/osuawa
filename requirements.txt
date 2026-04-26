@@ -2,6 +2,7 @@ clayutil @ git+https://github.com/bobbycyl/ClayUtilities.git
 osupp @ git+https://github.com/bobbycyl/osupp.git
 SQLAlchemy
 babel
+cachetools
 fonttools
 matplotlib
 numpy

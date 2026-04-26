@@ -17,13 +17,13 @@ from streamlit import logger
 from osuawa import C, OsuPlaylist
 from osuawa.components import get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, save_value
 from osuawa.osuawa import Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, generate_mods_from_lines, read_injected_code, safe_norm, to_readable_mods
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, make_unstandardized_mods_from_lines, read_injected_code, safe_norm, to_readable_mods
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa
@@ -152,7 +152,7 @@ if st.session_state.perm >= 1:
                 # SLOTS 自动大写
                 slot_input = slot_input[:2].upper() + slot_input[2:]
                 urls_input_split = urls_input.split()
-                raw_mods_input = generate_mods_from_lines(slot_input, mod_settings_input or "")
+                raw_mods_input = make_unstandardized_mods_from_lines(slot_input, mod_settings_input or "")
 
                 # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
                 specs_input_valid = True
