@@ -650,20 +650,20 @@ class OsuPlaylist(object):
         notes: str = element["notes"]
 
         # 处理NM, FM, TB
-        root_mod: str = raw_mods[0]["acronym"]
-        last_root_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
-        is_fm = root_mod == "FM" or root_mod == "F+"
+        slot_mod: str = raw_mods[0]["acronym"]
+        last_slot_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
+        is_fm = slot_mod == "FM" or slot_mod == "F+"
         mods = raw_mods[1:].copy()  # 只能使用官方 Mods 的用这个变量
         for _mod in mods:
-            # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 root_mod 存在）
+            # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 slot_mod 存在）
             if _mod["acronym"] in self.custom_mods_acronym:
-                raise ValueError("unknown mod %s" % _mod["acronym"])
-        mods_ready: list[str] = to_readable_mods(raw_mods)  # 准备给用户看的 Mods 表现形式
+                raise ValueError("custom mod cannot be used other than slot_mod %s" % _mod["acronym"])
 
         # 下载谱面与计算难度
         download_osu(b)
         my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
         my_attr.set_mods(mods)
+        mods_ready: list[str] = to_readable_mods(my_attr.standardized_mods)  # 准备给用户看的 Mods 表现形式
         osupp_attr = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
         stars1 = osupp_attr["star_rating"]
         stars2 = None
@@ -681,7 +681,7 @@ class OsuPlaylist(object):
         max_combo = "%dx" % osupp_attr["max_combo"]
 
         # 绘制cover
-        cover = BeatmapCover(b, self.mod_color.get(root_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
+        cover = BeatmapCover(b, self.mod_color.get(slot_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
         if self.css_style:
             # 将背景图片保存在统一文件夹内以减小占用
             if not os.path.exists(os.path.join(self.bg_dir, "%d.jpg" % bid)):
@@ -713,7 +713,7 @@ class OsuPlaylist(object):
     <div class="p-4"><br /></div>
     <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
 """
-                if root_mod != last_root_mod and last_root_mod != ""
+                if slot_mod != last_slot_mod and last_slot_mod != ""
                 else ""
             )
             beatmap_info += f'''      <div class="group relative">
