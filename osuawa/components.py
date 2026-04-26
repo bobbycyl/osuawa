@@ -24,7 +24,7 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
     StringField as Str,
 )
-from ossapi import Beatmap, GameMode
+from ossapi.ossapiv2_async import Beatmap, GameMode
 from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
@@ -35,17 +35,20 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
+from osuawa.osuawa import CachedMixIn
 from osuawa.utils import (
-    CompletedSimpleOsuScoreInfo,
+    CompletedSimpleScoreInfo,
     RedisTaskId,
+    ScoreStatistics,
     SimpleDifficultyAttribute,
     _build_upsert,
     _make_query_uppercase,
+    calculate_performance,
     catch_mod_entries,
     catch_mod_indexes,
     download_osu,
     format_size,
-    generate_mods_from_lines,
+    make_unstandardized_mods_from_lines,
     get_mod_type_mapping,
     get_size_and_count,
     mania_mod_entries,
@@ -55,12 +58,11 @@ from osuawa.utils import (
     push_task,
     taiko_mod_entries,
     taiko_mod_indexes,
-    calculate_performance
 )
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
     # noinspection PyTypeHints
     st.session_state.awa: Osuawa
@@ -176,56 +178,15 @@ _r = get_redis_connection()
 
 def commands():
     return [
-        Command(
-            "reg",
-            _("Register command parser"),
-            [JsonStr("obj", True)],
-            0,
-            register_commands,
-        ),
-        Command(
-            "fman",
-            "Show or clean files",
-            [Str("action"), Str("filename", True)],
-            4,
-            files_action,
-        ),
-        Command(
-            "logfilter",
-            "Tail logs",
-            [Int("n", True), Str("keyword", True)],
-            3,
-            tail_log,
-        ),
-        Command(
-            "where",
-            _("Get user info"),
-            [Str("username")],
-            0,
-            st.session_state.awa.get_user_info,
-        ),
-        Command(
-            "save",
-            _("Save user's recent scores"),
-            [Int("user")],
-            1,
-            lambda user: push_task_with_session_state("save %d" % user),
-        ),
+        Command("reg", _("Register command parser"), [JsonStr("obj", True)], 0, register_commands),
+        Command("fman", "Show or clean files", [Str("action"), Str("filename", True)], 4, files_action),
+        Command("logfilter", "Tail logs", [Int("n", True), Str("keyword", True)], 3, tail_log),
+        Command("apicache", "Show api cache", [], 3, CachedMixIn.get_cache),
+        Command("where", _("Get user info"), [Str("username")], 0, st.session_state.awa.get_user_info),
+        Command("save", _("Save user's recent scores"), [Int("user")], 1, lambda user: push_task_with_session_state("save %d" % user)),
         Command("score", _("Get and display score"), [Int("score_id")], 0, st.session_state.awa.get_score),
-        Command(
-            "scores",
-            _("Get and display user scores of a beatmap"),
-            [Int("beatmap"), Int("user", True)],
-            0,
-            st.session_state.awa.get_user_beatmap_scores,
-        ),
-        Command(
-            "gen",
-            _("Generate local playlists"),
-            [Bool("fast_mode", True), Bool("output_zip", True)],
-            4,
-            generate_all_playlists,
-        ),
+        Command("scores", _("Get and display user scores of a beatmap"), [Int("beatmap"), Int("user", True)], 0, st.session_state.awa.get_user_beatmap_scores),
+        Command("gen", _("Generate local playlists"), [Bool("fast_mode", True), Bool("output_zip", True)], 4, generate_all_playlists),
         Command("cat", _("Display user's recent scores (only saved scores are available)"), [Int("user")], 0, cat),
         Command("strain", _("Draw strain graph of an osu! beatmap (converted beatmap supported)"), [Int("beatmap"), Str("mod_settings", True), Int("ruleset_id", True)], 0, draw_strain_graph),
         Command("sessions", _("Display all active sessions"), [], 0, query_all_sessions),
@@ -425,8 +386,8 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             )
         rows = res.fetchall()
     # 处理 bool 和 datetime
-    completed_recent_scores_compact: dict[str, CompletedSimpleOsuScoreInfo] = {
-        str(row[0]): CompletedSimpleOsuScoreInfo(
+    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {
+        str(row[0]): CompletedSimpleScoreInfo(
             # 基础字段
             row[1],
             row[2],
@@ -437,22 +398,41 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             row[7],
             orjson.loads(row[8]) if row[8] is not None else [],
             datetime.fromtimestamp(row[9]),
-            orjson.loads(row[10]) if row[10] is not None else {},
+            (
+                ScoreStatistics(**orjson.loads(row[10]))
+                if row[10] is not None
+                else ScoreStatistics(
+                    miss=0,
+                    meh=0,
+                    ok=0,
+                    good=0,
+                    great=0,
+                    perfect=None,
+                    small_tick_hit=None,
+                    large_tick_hit=None,
+                    small_bonus=None,
+                    large_bonus=None,
+                    ignore_miss=None,
+                    ignore_hit=None,
+                    combo_break=None,
+                    slider_tail_hit=None,
+                )
+            ),
             datetime.fromtimestamp(row[11]) if row[11] is not None else None,
-            # 扩展字段
             row[12],
+            # 扩展字段
             row[13],
             row[14],
             row[15],
             row[16],
-            bool(row[17]),
+            row[17],
             bool(row[18]),
             bool(row[19]),
             bool(row[20]),
             bool(row[21]),
             bool(row[22]),
             bool(row[23]),
-            row[24],
+            bool(row[24]),
             row[25],
             row[26],
             row[27],
@@ -475,6 +455,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             row[44],
             row[45],
             row[46],
+            row[47],
         )
         for row in rows
     }
@@ -482,7 +463,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
 
 
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: Optional[int] = None) -> Figure:
-    beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api.beatmap(bid))
+    beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api_beatmap(bid))
     match beatmap.mode:
         case GameMode.OSU:
             ruleset = OsuRuleset()
@@ -508,7 +489,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
     download_osu(beatmap)
 
     if mod_settings is not None:
-        mods = generate_mods_from_lines("SP", mod_settings.replace(" ", "\n"))
+        mods = make_unstandardized_mods_from_lines("SP", mod_settings.replace(" ", "\n"))
         # 剔除 SP
         mods.remove({"acronym": "SP"})
     else:
@@ -739,7 +720,7 @@ def mods_generator(ret_type: Optional[Literal[0, 1]] = None):
 
     with st.expander(_("Preview")):
         st.code("\n".join(lines), language="properties")
-        mods = generate_mods_from_lines("SP", "\n".join(lines))
+        mods = make_unstandardized_mods_from_lines("SP", "\n".join(lines))
         mods.remove({"acronym": "SP"})
         st.json(mods)
 

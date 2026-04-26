@@ -2,7 +2,6 @@
 osuawa.py and utils.py should not contain i18n related text and streamlit related statement
 """
 
-import asyncio
 import contextlib
 import os
 import re
@@ -23,13 +22,14 @@ import typing_extensions
 from PerformanceCalculator import ProcessorWorkingBeatmap
 from clayutil.futil import Downloader, Properties
 from clayutil.sutil import md5sum
-from ossapi import Beatmap, OssapiAsync, Score, User, UserCompact
+from ossapi.models import MultiplayerScore
+from ossapi.ossapiv2_async import Beatmap, Score, User, UserCompact
 from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import get_all_mods, calculate_difficulty
-from osupp.performance import OsuPerformance, calculate_performance, calculate_osu_performance
+from osupp.difficulty import ModSetting, calculate_difficulty, get_all_mods
+from osupp.performance import CatchPerformance, ManiaPerformance, OsuPerformance, TaikoPerformance, calculate_performance
 from osupp.util import validate_mod_setting_value
 from redis import Redis
 
@@ -42,16 +42,16 @@ headers = {
 LANGUAGES = ["en_US", "zh_CN"]
 osu_mod_entries = get_all_mods(OsuRuleset())
 osu_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in osu_mod_entries}
-_osu_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
+_osu_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in osu_mod_entries}
 taiko_mod_entries = get_all_mods(TaikoRuleset())
 taiko_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in taiko_mod_entries}
-_taiko_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
+_taiko_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in taiko_mod_entries}
 catch_mod_entries = get_all_mods(CatchRuleset())
 catch_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in catch_mod_entries}
-_catch_mod_setting_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
+_catch_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in catch_mod_entries}
 mania_mod_entries = get_all_mods(ManiaRuleset())
 mania_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in mania_mod_entries}
-_mania_mod_settings_types = {mod_entry["Acronym"]: dict((s["Name"], s["Type"]) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
+_mania_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
 
 sem = BoundedSemaphore()
 
@@ -250,27 +250,6 @@ async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
             }
 
 
-async def async_get_user_info(api: OssapiAsync, user: int | str) -> dict[str, Any]:
-    return await simple_user_dict(await api.user(user, key="username" if isinstance(user, str) else "id"))
-
-
-async def async_get_username(api: OssapiAsync, user: int) -> str:
-    return (await api.user(user, key="id")).username
-
-
-async def async_get_beatmaps_dict(api: OssapiAsync, bids: list[int]) -> dict[int, Beatmap]:
-    bids = list(set(bids))
-    cut_bids: list[list[int]] = []
-    for i in range(0, len(bids), 50):
-        cut_bids.append(list(bids[i : i + 50]))
-    tasks = []
-    async with asyncio.TaskGroup() as tg:
-        for bids in cut_bids:
-            tasks.append(tg.create_task(api.beatmaps(bids)))
-    results = [task.result() for task in tasks]
-    return {b.id: b for bs in results for b in bs}
-
-
 def calc_hit_window(original_accuracy: float, magnitude: float = 1.0) -> float:
     hit_window = 80.0 - 6.0 * original_accuracy
     return hit_window / magnitude
@@ -289,6 +268,11 @@ def calc_ar(preempt: float) -> float:
     return 5.0 - (preempt - 1200.0) / 600 * 5.0 if preempt > 1200.0 else 5.0 + (1200.0 - preempt) / 750 * 5.0
 
 
+def _check_index_range(v: int, max_index: int, setting_name: str, acronym: str):
+    if v < 0 or v >= max_index:
+        raise ValueError("setting '%s' of mod '%s' out of range" % (setting_name, acronym))
+
+
 class SimpleDifficultyAttribute(object):
 
     @classmethod
@@ -298,21 +282,21 @@ class SimpleDifficultyAttribute(object):
         :param mods: 模组列表
         :param ruleset_id: 游戏模式 ID，若为 None 则默认使用当前谱面的模式 ID
         :param beatmap_path: 谱面文件路径
-        :return: (sorted_mods, {acronym, settings}, osu_tool_mods, osu_tool_mod_options)
+        :return: (standardized_mods（已排序的）, {acronym, settings}, osu_tool_mods（与输入顺序一致）, osu_tool_mod_options（与输入顺序一致）)
         """
         match ruleset_id:
             case 0:
-                all_mod_setting_types = _osu_mod_setting_types
-                all_mod_indexes = osu_mod_indexes
+                ruleset_mod_settings_mapping = _osu_mod_settings_mapping
+                ruleset_mod_indexes = osu_mod_indexes
             case 1:
-                all_mod_setting_types = _taiko_mod_setting_types
-                all_mod_indexes = taiko_mod_indexes
+                ruleset_mod_settings_mapping = _taiko_mod_settings_mapping
+                ruleset_mod_indexes = taiko_mod_indexes
             case 2:
-                all_mod_setting_types = _catch_mod_setting_types
-                all_mod_indexes = catch_mod_indexes
+                ruleset_mod_settings_mapping = _catch_mod_settings_mapping
+                ruleset_mod_indexes = catch_mod_indexes
             case 3:
-                all_mod_setting_types = _mania_mod_settings_types
-                all_mod_indexes = mania_mod_indexes
+                ruleset_mod_settings_mapping = _mania_mod_settings_mapping
+                ruleset_mod_indexes = mania_mod_indexes
             case _:
                 if beatmap_path is None:
                     raise ValueError("cannot determine the ruleset")
@@ -323,23 +307,79 @@ class SimpleDifficultyAttribute(object):
                 )
                 return cls.validate_and_transform_mods(mods, ruleset_id)
 
-        # sorted_mods 的顺序如下：
+        # standardized_mods 的顺序如下：
         # 1. 首先把所有 mods 分为五堆："DifficultyReduction", "DifficultyIncrease", "Automation", "Conversion", "Fun", "System"
         # 2. 每一堆内，按照 acronym 字符串排序
-        # 3. 拼接所有堆，得到 sorted_mods
+        # 3. 拼接所有堆，得到 standardized_mods
         _mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy = [], [], [], [], [], []
 
-        sorted_mods = []
+        standardized_mods = []
         mods_dict = {}  # {acronym, settings}
         osu_tool_mods: list[str] = []
         osu_tool_mod_options: list[str] = []
 
-        # 需要两次遍历 mods，一次用来排序，一次用来验证和转换
+        # 需要两次遍历 mods，第一次用来验证和转换，第二次用来排序和分堆
         for mod in mods:
             acronym = mod["acronym"]
-            if acronym not in all_mod_setting_types:
+            if acronym not in ruleset_mod_settings_mapping:
                 raise ValueError("unknown mod '%s'" % acronym)
-            _type = all_mod_indexes[acronym]["Type"]
+            _settings = mod.get("settings", {})
+            del mod
+            cleaned_settings = {}
+
+            # 开始 mod_setting 验证和转换
+            for setting_name, setting_value in _settings.items():
+                if setting_name not in ruleset_mod_settings_mapping[acronym]:
+                    raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
+                expected_type: Literal["boolean", "number", "string", "enum"] = ruleset_mod_settings_mapping[acronym][setting_name]["Type"]
+                if not validate_mod_setting_value(setting_value, expected_type):
+                    raise ValueError(
+                        "setting '%s' for mod '%s' should be of type '%s'"
+                        % (
+                            setting_name,
+                            acronym,
+                            expected_type,
+                        ),
+                    )
+                if expected_type == "boolean":
+                    setting_value = "true" if setting_value else "false"  # if bool(a) is True, then a is "true"
+                elif expected_type == "enum":
+                    # 强制要求枚举型用字符串整型表示
+                    enum_values = ruleset_mod_settings_mapping[acronym][setting_name]["EnumValues"]
+                    if enum_values is None:
+                        raise ValueError("undefined enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
+                    elif len(enum_values) == 0:  # 这种情况应该不会出现，但是还是进行安全检查
+                        raise ValueError("empty enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
+                    # 这里可能有 4 种情况：
+                    # 1. setting_value 是整型 => 检查是否越界，转换为字符串
+                    # 2. setting_value 是浮点型/布尔型 => 直接拒绝
+                    # 3. setting_value 是整型字符串 => 转换为整型并与 1 相同
+                    # 4. setting_value 是枚举型定义的对应字符串 => 查找索引并转换为字符串
+                    if isinstance(setting_value, int):
+                        _check_index_range(setting_value, len(enum_values), setting_name, acronym)  # 检查是否越界
+                        setting_value = str(setting_value)
+                    elif isinstance(setting_value, (float, bool)):
+                        raise ValueError("unexpected enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                    else:
+                        if setting_value in enum_values:
+                            setting_value = str(enum_values.index(setting_value))
+                        else:
+                            if setting_value.isdigit():
+                                # 这里要确保前导 0 被正确剔除，如 "01" -> "1"
+                                int_setting_value = int(setting_value)
+                                _check_index_range(int_setting_value, len(enum_values), setting_name, acronym)
+                                setting_value = str(int_setting_value)
+                            else:
+                                raise ValueError("unknown enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                cleaned_settings[setting_name] = setting_value
+                osu_tool_mod_options.append("%s_%s=%s" % (acronym, setting_name, setting_value))
+
+            del _settings
+            mod = {"acronym": acronym, "settings": cleaned_settings}  # redefine mod
+            mods_dict[acronym] = cleaned_settings
+            osu_tool_mods.append(acronym)
+
+            _type = ruleset_mod_indexes[acronym]["Type"]
             match _type:
                 case "DifficultyReduction":
                     _mods_dr.append(mod)
@@ -353,33 +393,12 @@ class SimpleDifficultyAttribute(object):
                     _mods_fu.append(mod)
                 case "System":
                     _mods_sy.append(mod)
+                case _:
+                    raise ValueError("unknown mod type '%s' for mod '%s'" % (_type, acronym))
         for _mods in [_mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy]:
-            sorted_mods.extend(sorted(_mods, key=lambda x: x["acronym"]))
+            standardized_mods.extend(sorted(_mods, key=lambda x: x["acronym"]))
 
-        del mods
-
-        for mod in sorted_mods:
-            acronym = mod["acronym"]
-            _settings = mod.get("settings", {})
-            mods_dict[acronym] = _settings
-            osu_tool_mods.append(acronym)
-            for setting_name, setting_value in _settings.items():
-                if setting_name not in all_mod_setting_types[acronym]:
-                    raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
-                expected_type: Literal["boolean", "number", "string", "enum"] = all_mod_setting_types[acronym][setting_name]
-                if not validate_mod_setting_value(setting_value, expected_type):
-                    raise ValueError(
-                        "setting '%s' for mod '%s' should be of type '%s'"
-                        % (
-                            setting_name,
-                            acronym,
-                            expected_type,
-                        ),
-                    )
-                if expected_type == "boolean":
-                    setting_value = "true" if setting_value else "false"
-                osu_tool_mod_options.append("%s_%s=%s" % (mod["acronym"], setting_name, setting_value))
-        return sorted_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
+        return standardized_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
 
     def __init__(self, cs: float, accuracy: float, ar: float, bpm: float, hit_length: int, ruleset_id: Literal[0, 1, 2, 3] = 0):
         self.cs = cs
@@ -397,13 +416,13 @@ class SimpleDifficultyAttribute(object):
         self.is_very_low_ar = False
         self.is_speed_up = False
         self.is_speed_down = False
-        self.sorted_mods = []
+        self.standardized_mods = []
         self.osu_tool_mods: list[str] = []  # [acronym]
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
         self.ruleset_id = ruleset_id
 
     def set_mods(self, mods: list):
-        _sorted_mods, mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
+        self.standardized_mods, mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
         if "NF" in mods_dict:
             self.is_nf = True
         if "HD" in mods_dict:
@@ -452,12 +471,32 @@ class SimpleDifficultyAttribute(object):
         self.hit_length = round(self.hit_length / self.magnitude)
 
 
+class ScoreStatistics(TypedDict):
+    miss: int
+    meh: int
+    ok: int
+    good: int
+    great: int
+
+    perfect: Optional[int]
+    small_tick_hit: Optional[int]
+    large_tick_hit: Optional[int]
+    small_bonus: Optional[int]
+    large_bonus: Optional[int]
+    ignore_miss: Optional[int]
+    ignore_hit: Optional[int]
+    combo_break: Optional[int]
+    slider_tail_hit: Optional[int]
+
+
 @dataclass(slots=True)
-class SimpleOsuScoreInfo(object):
+class SimpleScoreInfo(object):
     """
     从在线成绩简化而来，只保留感兴趣的字段，json 里保存这些基本字段
 
     这里的 pp 在本地计算后应被覆盖
+
+    注：其所有子类都是以 osu! standard 模式设计的，其他模式中目前只保证基本字段的兼容性
     """
 
     bid: int
@@ -469,8 +508,9 @@ class SimpleOsuScoreInfo(object):
     pp: Optional[float]
     _mods: list[dict[str, str] | dict[str, dict[str, str]]]
     ts: datetime
-    statistics: dict[str, Optional[int]]
+    statistics: ScoreStatistics
     st: Optional[datetime]
+    ruleset_id: int
 
     def __post_init__(self):
         # ts 和 st 转换为 UTC
@@ -479,7 +519,8 @@ class SimpleOsuScoreInfo(object):
             self.st = self.st.astimezone(timezone.utc)
 
     @classmethod
-    def from_score(cls, score: Score):
+    def from_score(cls, score: Score | MultiplayerScore):
+        print(score.mods)
         return cls(
             score.beatmap_id,
             score.user_id,
@@ -491,26 +532,39 @@ class SimpleOsuScoreInfo(object):
             [({"acronym": mod.acronym, "settings": mod.settings} if mod.settings else {"acronym": mod.acronym}) for mod in score.mods],
             score.ended_at,
             {
-                "large_tick_hit": score.statistics.large_tick_hit,
-                "slider_tail_hit": score.statistics.slider_tail_hit,
                 # 为了数据美观，300/100/50/0 的值如果为 None，则设置为 0
+                # todo: 待检验：在不同游戏模式下，设置为 0 是否会引发问题？
                 "great": score.statistics.great or 0,
                 "ok": score.statistics.ok or 0,
                 "meh": score.statistics.meh or 0,
                 "miss": score.statistics.miss or 0,
+                # 为了其他游戏模式的基本兼容性（暂时没有更进一步的计算支持计划）
+                "good": score.statistics.good or 0,
+                "perfect": score.statistics.perfect,
+                "small_tick_hit": score.statistics.small_tick_hit,
+                "large_tick_hit": score.statistics.large_tick_hit,
+                "slider_tail_hit": score.statistics.slider_tail_hit,
+                "small_bonus": score.statistics.small_bonus,
+                "large_bonus": score.statistics.large_bonus,
+                "ignore_miss": score.statistics.ignore_miss,
+                "ignore_hit": score.statistics.ignore_hit,
+                "combo_break": score.statistics.combo_break,
             },
             score.started_at,
+            score.ruleset_id,
         )
 
 
 @dataclass(slots=True)
-class CompletedSimpleOsuScoreInfo(SimpleOsuScoreInfo):
+class CompletedSimpleScoreInfo(SimpleScoreInfo):
     """
     用于记录获取完在线成绩后，需要本地补充计算的谱面、模组、成绩相关字段，parquet 里存储的就是这些字段，在必要的时候才需要重算
 
     ⚠ 父类中的 pp 在重算时也需要考虑 ⚠
 
     ``calc_beatmap_attributes`` 应该能够妥善处理这些情况
+
+    注：该类是为 osu! standard 模式设计的，其他模式中目前只保证基本字段的兼容性
     """
 
     cs: float
@@ -551,12 +605,12 @@ class CompletedSimpleOsuScoreInfo(SimpleOsuScoreInfo):
 
 
 @dataclass(slots=True)
-class ExtendedSimpleOsuScoreInfo(CompletedSimpleOsuScoreInfo):
+class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     """用于记录在生成 DataFrame 后计算的字段，使用向量化加速批量计算是个好选择
 
     所有新增的参数都可以追加到这里
 
-    修改 ``Osuawa.calculate_extended_scores_dataframe_with_timezone`` 以匹配这些内容，或对父类字段进行二次处理（如时区显示等）
+    注：该类是为 osu! standard 模式设计的，其他模式中目前只保证基本字段的兼容性
     """
 
     time: int
@@ -699,31 +753,71 @@ def download_osu(beatmap: Beatmap):
             sleep(0.5)
 
 
-def calc_osu_beatmap_attributes(beatmap: Beatmap, score: SimpleOsuScoreInfo) -> CompletedSimpleOsuScoreInfo:
+def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
     """完整计算所需属性，这会覆盖 score 原本的 pp"""
+    ruleset_id = score.ruleset_id
     my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(score._mods)
     download_osu(beatmap)
-    calculator = calculate_osu_performance(
+    match ruleset_id:
+        case 0:
+            ruleset = OsuRuleset()
+            performance = OsuPerformance(
+                combo=score.max_combo,
+                misses=score.statistics["miss"],
+                mehs=score.statistics["meh"],
+                oks=score.statistics["ok"],
+                large_tick_hits=score.statistics["large_tick_hit"],
+                slider_tail_hits=score.statistics["slider_tail_hit"],
+            )
+            performance_type = OsuPerformance
+        case 1:
+            ruleset = TaikoRuleset()
+            performance = TaikoPerformance(
+                combo=score.max_combo,
+                misses=score.statistics["miss"],
+                oks=score.statistics["ok"],
+            )
+            performance_type = TaikoPerformance
+        case 2:
+            ruleset = CatchRuleset()
+            performance = CatchPerformance(
+                combo=score.max_combo,
+                misses=score.statistics["miss"],
+                small_tick_hits=score.statistics["small_tick_hit"],
+                large_tick_hits=score.statistics["large_tick_hit"],
+            )
+            performance_type = CatchPerformance
+        case 3:
+            ruleset = ManiaRuleset()
+            performance = ManiaPerformance(
+                misses=score.statistics["miss"],
+                mehs=score.statistics["meh"],
+                oks=score.statistics["ok"],
+                goods=score.statistics["good"],
+                greats=score.statistics["great"],
+            )
+            performance_type = ManiaPerformance
+        case _:
+            raise ValueError("ruleset_id %d not supported" % ruleset_id)
+    calculator = calculate_performance(
         beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
+        ruleset=ruleset,
         mods=my_attr.osu_tool_mods,
         mod_options=my_attr.osu_tool_mod_options,
+        # todo: 这里是否要不限制超时？
+        allow_cancel=False,
     )
     osupp_attr = next(calculator)
-    perf_got_attr = calculator.send(
-        OsuPerformance(
-            combo=score.max_combo,
-            misses=score.statistics.get("miss") or 0,
-            mehs=score.statistics.get("meh"),
-            oks=score.statistics.get("ok"),
-            large_tick_hits=score.statistics.get("large_tick_hit"),
-            slider_tail_hits=score.statistics.get("slider_tail_hit"),
-        ),
-    )
-    perf100_attr = calculator.send(OsuPerformance())
-    pp92 = calculator.send(OsuPerformance(accuracy_percent=92.0))["pp"]
-    pp81 = calculator.send(OsuPerformance(accuracy_percent=81.0))["pp"]
-    pp67 = calculator.send(OsuPerformance(accuracy_percent=67.0))["pp"]
+    perf_got_attr = calculator.send(performance)
+    # noinspection PyArgumentList
+    perf100_attr = calculator.send(performance_type())
+    # noinspection PyArgumentList
+    pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]
+    # noinspection PyArgumentList
+    pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]
+    # noinspection PyArgumentList
+    pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]
     pp_got = perf_got_attr["pp"]
     pp_got_aim = perf_got_attr["aim"]
     pp_got_speed = perf_got_attr["speed"]
@@ -733,7 +827,7 @@ def calc_osu_beatmap_attributes(beatmap: Beatmap, score: SimpleOsuScoreInfo) -> 
     pp100_speed = perf100_attr["speed"]
     pp100_accuracy = perf100_attr["accuracy"]
 
-    return CompletedSimpleOsuScoreInfo(
+    return CompletedSimpleScoreInfo(
         # 父类字段，除了 pp 全部照抄
         score.bid,
         score.user,
@@ -746,6 +840,7 @@ def calc_osu_beatmap_attributes(beatmap: Beatmap, score: SimpleOsuScoreInfo) -> 
         score.ts,
         score.statistics,
         score.st,
+        score.ruleset_id,
         # 追加字段
         my_attr.cs,
         my_attr.hit_window,
@@ -814,7 +909,7 @@ def calc_star_rating_color(stars: float) -> str:
         return "#%02x%02x%02x" % (int(interp_r), int(interp_g), int(interp_b))
 
 
-def calc_high_star_rating_text_color(stars: float, new_style: bool = True) -> str:
+def calc_high_star_rating_text_color(stars: float) -> str:
     if stars < 6.5:
         raise ValueError("stars must be at least 6.5")
     elif stars < 9.0:
@@ -865,10 +960,15 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
     return data
 
 
-def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
+def make_unstandardized_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
+    """一个 Ruleset 不敏感、宽松的、自带 slot 的多行 mods 解析函数
+
+    :param slot: slot 名，如 NM1
+    :param lines: 多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
+    :return: 一个未经类型验证和标准化的 mods 列表
+    """
     # slot 本身自带一个 mod
     auto_recognized_mod = slot[:2]
-    # mod_settings 是一个多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
     # 最终期望得到：[{"acronym":<acronym>,"settings":{<mod_setting>:<value>}}]，如果不存在 settings，则不需要 settings 键
     # 先转换为 {acronym: [{mod_setting: value}]}，最后检测如果 settings 为空则不要添加该键
     mods_dict: dict[str, dict[str, Any]] = {auto_recognized_mod: {}}
@@ -885,19 +985,7 @@ def generate_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict
                 acronym, mod_setting = acronym_n_setting.split("_", 1)
                 if acronym not in mods_dict:
                     mods_dict[acronym] = {}
-                # 这里的 value 默认只是字符串
-                # 这里不对输入的 mod_setting 类型进行检查，只进行类型推断转换
-                # 实际上，mod_setting 一共有三种可能的类型，分别是字符串型、浮点型、逻辑型
-                # 这里与 osu-tools 不同的是：
-                # 1. 强制要求逻辑型用全小写的 true 或 false 表示
-                # 2. 强制要求枚举型用字符串表示（不支持浮点数强制转换为整型）
-                if value == "true":
-                    value = True
-                elif value == "false":
-                    value = False
-                else:
-                    with contextlib.suppress(ValueError):
-                        value = float(value)
+                value = orjson.loads(value)
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]

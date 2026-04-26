@@ -12,7 +12,7 @@ from osuawa.utils import calc_bin_size, regex_search_column
 
 if TYPE_CHECKING:
 
-    def _(text: str) -> str: ...
+    def _(_text: str) -> str: ...
 
 
 init_page(_("Score Visualizer") + " - osuawa")
