@@ -10,14 +10,13 @@ import pandas as pd
 import streamlit as st
 from clayutil.futil import compress_as_zip
 from clayutil.validator import validate_type
-from sqlalchemy import text
 from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, save_value
 from osuawa.osuawa import Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, make_unstandardized_mods_from_lines, read_injected_code, safe_norm, to_readable_mods
+from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, make_unstandardized_mods_from_lines, read_injected_code, safe_norm
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -33,7 +32,7 @@ if TYPE_CHECKING:
 init_page(_("Playlist Generator") + " - osuawa")
 with st.sidebar:
     if st.button(_("Mod Generator"), use_container_width=True, icon=":material/sync_alt:", disabled=not st.session_state.basic_interaction_enabled):
-        st.dialog(_("Mod Generator"))(mods_generator)()
+        st.dialog(_("Mod Generator"), width="medium")(mods_generator)()
     st.toggle(_("New Style"), key="new_style", value=True, disabled=not st.session_state.basic_interaction_enabled)
 
 conn = st.connection("osuawa", type="sql", ttl=3600)
@@ -72,23 +71,6 @@ def generate_playlist(filename: str, css_style: Optional[int] = None):
     # 由于这个有实时性要求，因此不挪到后台处理
     playlist = OsuPlaylist(st.session_state.awa, filename, css_style=css_style)
     return playlist.generate()
-
-
-@st.cache_data(ttl=12)
-def check_beatmap_exists(bid: int, mods: str) -> bool:
-    bid = int(bid)
-    mods = str(mods)
-    with conn.session as s:
-        res = s.execute(
-            text(
-                """SELECT COUNT(*)
-                   FROM BEATMAP
-                   WHERE BID = :bid
-                     AND MODS = :mods""",
-            ),
-            {"bid": bid, "mods": mods},
-        ).scalar()
-    return res > 0
 
 
 @st.dialog(_("Export selection as a playlist"))
@@ -159,22 +141,6 @@ if st.session_state.perm >= 1:
                 for url_input in urls_input_split:
                     # 处理 BID
                     bid_input = int(url_input.rsplit("/", 1)[-1])
-                    # 这里要提前转化 raw_mods 为 "; ".join(mods_ready)，一方面检验是否能序列化，另一方面查重并终止
-                    try:
-                        mods_ready_input = to_readable_mods(raw_mods_input)
-                    except (orjson.JSONDecodeError, ValueError, KeyError):
-                        st.error(_("invalid mods: %s") % raw_mods_input)
-                        specs_input_valid = False
-                        break
-                    if len(mods_ready_input) > 8:
-                        st.error(_("too many mods: %s") % raw_mods_input)
-                        specs_input_valid = False
-                        break
-                    mods_input = "; ".join(mods_ready_input)
-                    if check_beatmap_exists(bid_input, mods_input):
-                        st.toast(_("(%d %s) already exists, skipped" % (bid_input, mods_input)))
-                        continue
-                    validate_restricted_identifier(st.session_state.gen_form_pool)
                     specs_input.append(
                         BeatmapSpec(
                             bid_input,
@@ -193,7 +159,7 @@ if st.session_state.perm >= 1:
                 elif not specs_input_valid:
                     pass
                 else:
-                    push_beatmap_task([BeatmapToUpdate(name=uid, beatmap=spec_input) for spec_input in specs_input])
+                    push_beatmap_task([BeatmapToUpdate(action="add", name=uid, beatmap=spec_input, old_bid=None, old_mods=None) for spec_input in specs_input])
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -276,7 +242,7 @@ if st.session_state.perm >= 1:
     # 创建 LINK 列
     df["LINK"] = "https://osu.ppy.sh/b/" + df["BID"].astype(str)
     # 创建 ADD_DATETIME 列，它是由 ADD_TS (来自于 time.time() 的 UTC 时间浮点数) 转换为含时区信息的 ISO Format（时区 = st.session_state.awa.tz）
-    df["ADD_DATETIME"] = cast(pd.Series, pd.to_datetime(df["ADD_TS"], unit="s")).dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz).dt.strftime("%Y-%m-%d %H:%M:%S %Z%z")
+    df["ADD_DATETIME"] = pd.to_datetime(df["ADD_TS"], unit="s").dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz).dt.strftime("%Y-%m-%d %H:%M:%S %Z%z")
     desired_col_order = [
         "BID",
         "SKILL_SLOT",
@@ -411,7 +377,6 @@ if st.session_state.perm >= 1:
                 edited_bid = int(edited_row.BID)
                 edited_mods = str(edited_row.MODS)
                 # 由于 MODS 在这里尚未更改，因此还是可以根据 BID + MODS 的组合定位原始表格中的对应行
-                # original_row = df.loc[(df["BID"].astype(int) == edited_bid) & (df["MODS"].astype(str) == edited_mods)]
                 orig = orig_indexed.get((edited_bid, edited_mods))
                 if orig is None:
                     st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_mods))
@@ -460,9 +425,9 @@ if st.session_state.perm >= 1:
                 beatmaps_to_update: list[BeatmapToUpdate] = []
                 for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate, strict=True):
                     if old_to_drop[1]:
-                        beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert, old_mods=old_to_drop[0]))
+                        beatmaps_to_update.append(BeatmapToUpdate(action="update1", name=uid, beatmap=beatmap_to_upsert, old_bid=None, old_mods=old_to_drop[0]))
                     else:
-                        beatmaps_to_update.append(BeatmapToUpdate(name=uid, beatmap=beatmap_to_upsert))
+                        beatmaps_to_update.append(BeatmapToUpdate(action="update0", name=uid, beatmap=beatmap_to_upsert, old_bid=None, old_mods=None))
                 push_beatmap_task(beatmaps_to_update)
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
             refresh()
@@ -477,7 +442,7 @@ if st.session_state.perm >= 1:
                 required_rows = selected_rows[["BID", "MODS"]]
                 beatmaps_to_delete: list[BeatmapToUpdate] = []
                 for row in required_rows.itertuples(index=False):
-                    beatmaps_to_delete.append(BeatmapToUpdate(old_bid=int(row.BID), old_mods=str(row.MODS)))
+                    beatmaps_to_delete.append(BeatmapToUpdate(action="delete", name=uid, beatmap=None, old_bid=int(row.BID), old_mods=str(row.MODS)))
                 push_beatmap_task(beatmaps_to_delete)
 
 st.divider()

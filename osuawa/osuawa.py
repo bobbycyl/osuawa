@@ -157,7 +157,7 @@ class Awapi(OssapiAsync):
         api_version: int | str = 20240529,
     ):
         if scopes is None:
-            scopes: list[Scope | str] = [Scope.PUBLIC]
+            scopes = [Scope.PUBLIC]
         super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
 
     @override
@@ -310,8 +310,8 @@ class Osuawa(CachedMixIn):
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
-        df["ts"] = cast(pd.Series, pd.to_datetime(df["ts"], utc=True)).dt.tz_convert(self.tz)
-        df["st"] = cast(pd.Series, pd.to_datetime(df["st"], utc=True)).dt.tz_convert(self.tz)
+        df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
+        df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
         ec = ExtendedSimpleScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
         # todo: 这里要不要考虑除零问题？
@@ -365,7 +365,7 @@ class Osuawa(CachedMixIn):
 
     def get_user_beatmap_scores(self, beatmap: int, user: Optional[int] = None) -> pd.DataFrame:
         if user is None:
-            user: int = self.user[0]
+            user = self.user[0]
         return self.create_scores_dataframe(self.run_coro(self.async_get_user_beatmap_scores(beatmap, user)))
 
     async def async_get_recent_scores(self, user: int, include_fails: bool = True, mode: GameMode = GameMode.OSU) -> list[Score]:

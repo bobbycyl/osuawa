@@ -400,7 +400,7 @@ if st.session_state.perm >= 1:
     # 用户输入
     if prompt := st.chat_input(_("How can I help you?")):
         # 添加用户消息
-        st.session_state.llm_messages.append({"role": "user", "content": prompt})  # type: ignore
+        st.session_state.llm_messages.append({"role": "user", "content": prompt})
 
         with st.chat_message("user"):
             st.markdown(prompt)

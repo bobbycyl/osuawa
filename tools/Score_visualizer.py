@@ -60,32 +60,32 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def calc_statistics(data: pd.DataFrame, column: str) -> tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, int]:
-    data: pd.Series = data[column]
+    c = data[column]
     # table: | index | min | Q1 | median | Q3 | max | mean | winsor_mean | std | var | CV | skew | kurtosis | 95% CI L | 95% CI U | N |
-    data_se = data.sem()
-    data_df = len(data) - 1
+    data_se = c.sem()
+    data_df = len(c) - 1
     t_critical = stats.t.ppf(0.975, data_df)
     margin_of_error = t_critical * data_se
-    ci_l = data.mean() - margin_of_error
-    ci_u = data.mean() + margin_of_error
+    ci_l = c.mean() - margin_of_error
+    ci_u = c.mean() + margin_of_error
     # 1% winsorize
-    data_winsor = data.clip(lower=data.quantile(0.01), upper=data.quantile(0.99)).infer_objects(copy=False)
+    data_winsor = c.clip(lower=c.quantile(0.01), upper=c.quantile(0.99)).infer_objects(copy=False)
     return (
-        float(data.min()),
-        data.quantile(0.25),
-        float(data.median()),
-        float(data.quantile(0.75)),
-        float(data.max()),
-        float(data.mean()),
-        float(data_winsor.mean()),
-        float(data.std(ddof=1)),
-        float(data.var(ddof=1)),
-        (float(data.std(ddof=1)) / float(data.mean())),
-        float(data.skew()),
-        float(data.kurt()),
-        float(ci_l),
-        float(ci_u),
-        len(data),
+        c.min(),
+        c.quantile(0.25),
+        c.median(),
+        c.quantile(0.75),
+        c.max(),
+        c.mean(),
+        data_winsor.mean(),
+        c.std(ddof=1),
+        c.var(ddof=1),
+        c.std(ddof=1) / c.mean(),
+        c.skew(),
+        c.kurt(),
+        ci_l,
+        ci_u,
+        len(c),
     )
 
 

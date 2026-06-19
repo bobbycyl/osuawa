@@ -2,7 +2,6 @@
 osuawa.py and utils.py should not contain i18n related text and streamlit related statement
 """
 
-import contextlib
 import os
 import re
 import uuid
@@ -28,7 +27,7 @@ from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import ModSetting, calculate_difficulty, get_all_mods
+from osupp.difficulty import calculate_difficulty, get_all_mods
 from osupp.performance import CatchPerformance, ManiaPerformance, OsuPerformance, TaikoPerformance, calculate_performance
 from osupp.util import validate_mod_setting_value
 from redis import Redis
@@ -100,6 +99,12 @@ class ColorTextBar(Enum):
     YP_R = [246, 255, 255, 198, 101]
     YP_G = [240, 128, 78, 69, 99]
     YP_B = [92, 104, 111, 185, 222]
+
+
+def hex_to_rgba(hex_color, alpha=0.3):
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
 
 
 def get_mod_type_mapping(mod_type: Literal["DifficultyReduction", "DifficultyIncrease", "Automation", "Conversion", "Fun", "System"], alt: bool = False):
@@ -301,7 +306,7 @@ class SimpleDifficultyAttribute(object):
                 if beatmap_path is None:
                     raise ValueError("cannot determine the ruleset")
                 working_beatmap = ProcessorWorkingBeatmap(beatmap_path)
-                ruleset_id: Literal[0, 1, 2, 3] = cast(
+                ruleset_id = cast(
                     Literal[0, 1, 2, 3],
                     working_beatmap.BeatmapInfo.Ruleset.OnlineID,
                 )
@@ -364,20 +369,21 @@ class SimpleDifficultyAttribute(object):
                         if setting_value in enum_values:
                             setting_value = str(enum_values.index(setting_value))
                         else:
-                            if setting_value.isdigit():
+                            if setting_value.isdecimal():
                                 # 这里要确保前导 0 被正确剔除，如 "01" -> "1"
                                 int_setting_value = int(setting_value)
                                 _check_index_range(int_setting_value, len(enum_values), setting_name, acronym)
                                 setting_value = str(int_setting_value)
                             else:
                                 raise ValueError("unknown enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
-                cleaned_settings[setting_name] = setting_value
-                osu_tool_mod_options.append("%s_%s=%s" % (acronym, setting_name, setting_value))
+
+                # 当且仅当 setting_value 与默认值不同，才会添加到 cleaned_settings
+                _default = ruleset_mod_settings_mapping[acronym][setting_name]["Default"]
+                if _default is None or _default != setting_value:
+                    cleaned_settings[setting_name] = setting_value
 
             del _settings
-            mod = {"acronym": acronym, "settings": cleaned_settings}  # redefine mod
-            mods_dict[acronym] = cleaned_settings
-            osu_tool_mods.append(acronym)
+            mod = {"acronym": acronym, "settings": cleaned_settings} if len(cleaned_settings) > 0 else {"acronym": acronym}  # redefine mod
 
             _type = ruleset_mod_indexes[acronym]["Type"]
             match _type:
@@ -395,8 +401,17 @@ class SimpleDifficultyAttribute(object):
                     _mods_sy.append(mod)
                 case _:
                     raise ValueError("unknown mod type '%s' for mod '%s'" % (_type, acronym))
+
         for _mods in [_mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy]:
-            standardized_mods.extend(sorted(_mods, key=lambda x: x["acronym"]))
+            # 为了确保 osu_tool_mods 和 osu_tool_mod_options 也是排序后的，需要在这里添加
+            cur_mods = sorted(_mods, key=lambda x: x["acronym"])
+            for cur_mod in cur_mods:
+                cur_mod_settings = cur_mod.get("settings", {})
+                mods_dict[cur_mod["acronym"]] = cur_mod_settings
+                for setting_name, setting_value in cur_mod_settings.items():
+                        osu_tool_mod_options.append("%s_%s=%s" % (cur_mod["acronym"], setting_name, setting_value))
+                osu_tool_mods.append(cur_mod["acronym"])
+            standardized_mods.extend(cur_mods)
 
         return standardized_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
 
@@ -707,14 +722,17 @@ class BeatmapSpec(NamedTuple):
     add_ts: float
 
 
-class BeatmapToUpdate(TypedDict, total=False):
+class BeatmapToUpdate(TypedDict):
     """
     Attributes:
+        action: 操作类型，可选值为 "add", "update0", "update1", "delete"
+        name: 标识谁在操作该谱面
         beatmap: 欲更新的谱面
         old_bid: 欲删除 BID
         old_mods: 欲删除 MODS
     """
 
+    action: Literal["add", "update0", "update1", "delete"]
     name: str
     beatmap: Optional[BeatmapSpec]
     old_bid: Optional[int]
@@ -888,7 +906,7 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
 
 def calc_positive_percent(score: int | float | None, min_score: int | float, max_score: int | float) -> int:
     if score is None:
-        score: float = 0.0
+        score = 0.0
     score_pct = int((score - min_score) / (max_score - min_score) * 100.0)
     if score_pct > 100:
         score_pct = 100
@@ -960,6 +978,10 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
     return data
 
 
+def _is_int_str(v: str) -> bool:
+    return v.isdecimal() or v[:1] == "-" and v[1:].isdecimal()
+
+
 def make_unstandardized_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
     """一个 Ruleset 不敏感、宽松的、自带 slot 的多行 mods 解析函数
 
@@ -985,7 +1007,17 @@ def make_unstandardized_mods_from_lines(slot: str, lines: str) -> list[dict[str,
                 acronym, mod_setting = acronym_n_setting.split("_", 1)
                 if acronym not in mods_dict:
                     mods_dict[acronym] = {}
-                value = orjson.loads(value)
+                # 一个简单的类型推断与转换
+                if value == "true":
+                    value = True
+                elif value == "false":
+                    value = False
+                elif _is_int_str(value):
+                    value = int(value)
+                elif "." in value and _is_int_str(value.replace(".", "", 1)):
+                    value = float(value)
+                else:
+                    value = str(value)
                 mods_dict[acronym].update({mod_setting: value})
 
     return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]

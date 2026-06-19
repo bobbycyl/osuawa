@@ -34,7 +34,6 @@ from osuawa.utils import (
     DatabasePlaylistBeatmap,
     SimpleScoreInfo,
     _build_update_ignore,
-    _build_upsert,
     _create_tmp_playlist_p,
     push_task,
 )
@@ -300,7 +299,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     return playlist_beatmaps_db
 
 
-def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> tuple[Literal[0b00, 0b01, 0b10, 0b11], int, str, Optional[str]]:
+def _update_beatmap(action: Literal["add", "update0", "update1", "delete"], beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> tuple[int, str, int, str]:
     """更新课题谱面（包括删除）
 
     如果 beatmap 不为 None，则 old_bid 必须为 None
@@ -308,67 +307,81 @@ def _update_beatmap(beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optiona
     :param beatmap: 欲更新的谱面
     :param old_bid: 欲删除的 BID（主键之一）
     :param old_mods: 欲删除的 MODS（主键之二）
-    :return (action, action_bid, action_mods, old_mods)
+    :return (new_bid, new_mods, old_bid, old_mods)
     """
-    # 操作符号（二进制）: 0                0
-    #                     ^                ^
-    #             第一位代表插入   第二位代表删除
-    # 如果 beatmap 不为 None，则第一位为 1
-    # 如果 old_bid 和 old_mods 均不为 None，则第二位为 1
-    # 如果结果为 00，则代表没有进行任何操作，raise ValueError
-    # 如果结果为 01，则代表删除谱面
-    # 如果结果为 10，则代表新增或原地更新谱面
-    # 如果结果为 11，则代表更新原谱面模组
-    action: Literal[0b00, 0b01, 0b10, 0b11] = 0b00
-
     if beatmap is not None:
         # 如果 beatmap 不为 None，old_bid 从 beatmap 中获取
         if old_bid is not None:
             # 提供 beatmap 意味着更新/修改，此时不允许删除操作
             raise ValueError("cannot update a beatmap from another bid")
         old_bid = beatmap["BID"]
-        # 由于主键约束，如果同时提供 beatmap 和 old_mods，则应该先删除老的谱面，再插入新的谱面
+        # 由于主键约束，如果同时提供 beatmap 和 old_mods，则应该先 insert 新的谱面，再 delete 老的谱面，二者在同一事务中执行
 
     with engine.begin() as conn:
-        action_bid: int
-        action_mods: str
-        if old_bid is not None and old_mods is not None:
-            action |= 1
-            # 有可能传入的是 numpy 类型，需要强制转化为原生类型
-            old_bid: int = int(old_bid)
-            old_mods: str = str(old_mods)
-            action_bid = old_bid
-            action_mods = old_mods
-            conn.execute(
-                text(
-                    """DELETE
-                       FROM BEATMAP
-                       WHERE BID = :bid
-                         AND MODS = :mods""",
-                ),
-                {"bid": old_bid, "mods": old_mods},
-            )
-        if beatmap is not None:
-            action |= 2
-            action_bid = beatmap["BID"]
-            action_mods = beatmap["MODS"]
-            upsert_text = _build_upsert(
-                _dialect,
-                ["SKILL_SLOT", "SR", "BPM", "HIT_LENGTH", "MAX_COMBO", "CS", "AR", "OD", "MODS", "NOTES", "STATUS", "COMMENTS", "POOL", "SUGGESTOR", "RAW_MODS", "INFO"],
-                ["BID", "MODS"],
-            )  # ADD_TS 只会保留第一次创建记录时的值，后续不会被更新
-            conn.execute(
-                text(
-                    """INSERT INTO BEATMAP (BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE)
-                    VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)
-                    %s""" % upsert_text,
-                ),
-                beatmap,
-            )
-        if action == 0b00:
-            raise ValueError("no changes made")
-    mods_change = action_mods
-    return action, action_bid, mods_change, old_mods
+        if action == "update0":
+            if beatmap is not None:
+                new_bid = beatmap["BID"]
+                new_mods = beatmap["MODS"]
+                conn.execute(
+                    text(
+                        """UPDATE BEATMAP
+                           SET INFO       = :INFO,
+                               SKILL_SLOT = :SKILL_SLOT,
+                               SR         = :SR,
+                               BPM        = :BPM,
+                               HIT_LENGTH = :HIT_LENGTH,
+                               MAX_COMBO  = :MAX_COMBO,
+                               CS         = :CS,
+                               AR         = :AR,
+                               OD         = :OD,
+                               MODS       = :MODS,
+                               NOTES      = :NOTES,
+                               STATUS     = :STATUS,
+                               COMMENTS   = :COMMENTS,
+                               POOL       = :POOL,
+                               RAW_MODS   = :RAW_MODS
+                           WHERE BID = :BID
+                             AND MODS = :MODS""",
+                    ),
+                    beatmap,
+                )
+            else:
+                raise ValueError("cannot update a beatmap from null")
+        else:
+            if beatmap is not None:
+                # 可能是 add, update1
+                assert action == "add" or action == "update1"
+                new_bid = beatmap["BID"]
+                new_mods = beatmap["MODS"]
+                conn.execute(
+                    text(
+                        """INSERT INTO BEATMAP
+                           VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)""",
+                    ),
+                    beatmap,
+                )
+            if old_bid is not None and old_mods is not None:
+                # 可能是 delete, update1
+                assert action == "delete" or action == "update1"
+                # 有可能传入的是 numpy 类型，需要强制转化为原生类型
+                # 已更新：目前应该不需要强制类型转换
+                # old_bid = int(old_bid)
+                # old_mods = str(old_mods)
+                conn.execute(
+                    text(
+                        """DELETE
+                           FROM BEATMAP
+                           WHERE BID = :bid
+                             AND MODS = :mods""",
+                    ),
+                    {"bid": old_bid, "mods": old_mods},
+                )
+
+    return new_bid or 0, new_mods or "", old_bid or 0, old_mods or ""
+
+
+def _build_update_return_message(action_verb: str, action_list: list[tuple[int, str]]) -> str:
+    return "%s %s" % (action_verb, ", ".join(["(%d, %s)" % tup for tup in action_list]))
 
 
 def cleanup_ald_tasks_status():
@@ -445,50 +458,36 @@ def setup_scheduled_tasks():
 
 def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
     if obj is None:
-        obj: list[BeatmapToUpdate] = []
+        obj = []
     beatmap_specs: list[BeatmapSpec] = []
     name = ""
     has_spec_list: list[bool] = []
+    add_list: list[tuple[int, str]] = []
     update_list: list[tuple[int, str]] = []
     delete_list: list[tuple[int, str]] = []
     for beatmap_to_update in obj:
         beatmap_spec: BeatmapSpec | list | None = beatmap_to_update.get("beatmap")  # JSON 反序列化时会自动转换为 list 类型，需要强制转换为 BeatmapSpec 类型
         if beatmap_spec is not None:
             has_spec_list.append(True)
-            beatmap_specs.append(BeatmapSpec(*beatmap_spec))
+            beatmap_specs.append(BeatmapSpec(*beatmap_spec))  # type: ignore[union-attr]
             name = beatmap_to_update["name"]
         else:
             has_spec_list.append(False)
     database_beatmaps = create_tmp_playlist(name, beatmap_specs)
     for i, beatmap_to_update in enumerate(obj):
         database_beatmap = database_beatmaps[i] if has_spec_list[i] else None
-        old_bid = beatmap_to_update.get("old_bid")
-        old_mods = beatmap_to_update.get("old_mods")
-        action, action_bid, action_mods, old_mods = _update_beatmap(database_beatmap, old_bid, old_mods)
+        action = beatmap_to_update.get("action")
+        new_bid, new_mods, old_bid, old_mods = _update_beatmap(action, database_beatmap, beatmap_to_update.get("old_bid"), beatmap_to_update.get("old_mods"))
         match action:
-            case 0b01:  # delete
-                delete_list.append((action_bid, action_mods))
-            case 0b10:  # update
-                update_list.append((action_bid, action_mods))
-            case 0b11:  # update from old mods
-                update_list.append((action_bid, "%s -> %s" % (old_mods, action_mods)))
-
-    if len(update_list) > 1:
-        # > [(bid1, mods1), (bid2, mods2), ...]
-        update_str = "> %s" % str(update_list)
-    elif len(update_list) > 0:
-        # > (bid, mods)
-        update_str = "> (%s, %s)" % update_list[0]
-    else:
-        update_str = ""
-    if len(delete_list) > 1:
-        delete_str = "- %s" % str(delete_list)
-    elif len(delete_list) > 0:
-        delete_str = "- (%s, %s)" % delete_list[0]
-    else:
-        delete_str = ""
-
-    return ("%s; %s" % (update_str, delete_str)).strip("; ")
+            case "add":
+                add_list.append((new_bid, new_mods))
+            case "delete":
+                delete_list.append((old_bid, old_mods))
+            case "update0":  # update
+                update_list.append((new_bid, new_mods))
+            case "update1":  # update from old mods
+                update_list.append((new_bid, "%s -> %s" % (old_mods, new_mods)))
+    return "; ".join([_build_update_return_message(action_verb, action_list) for action_verb, action_list in [("added", add_list), ("updated", update_list), ("deleted", delete_list)]])
 
 
 cmdparser = CommandParser()
