@@ -24,15 +24,18 @@ if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
 
-    # noinspection PyTypeHints
-    st.session_state.awa: Osuawa
-    # noinspection PyTypeHints
-    st.session_state.redis_tasks: list[RedisTaskId]
+    st.session_state.awa = cast(Osuawa, st.session_state.awa)
+    st.session_state.redis_tasks = cast(list[RedisTaskId], st.session_state.redis_tasks)
 
 init_page(_("Playlist Generator") + " - osuawa")
 with st.sidebar:
     if st.button(_("Mod Generator"), use_container_width=True, icon=":material/sync_alt:", disabled=not st.session_state.basic_interaction_enabled):
-        st.dialog(_("Mod Generator"), width="medium")(mods_generator)()
+
+        @st.dialog(_("Mod Generator"), width="medium")
+        def _mods_generator(ret_type=None):
+            return mods_generator(ret_type)
+
+        _mods_generator()
     st.toggle(_("New Style"), key="new_style", value=True, disabled=not st.session_state.basic_interaction_enabled)
 
 conn = st.connection("osuawa", type="sql", ttl=3600)
@@ -371,7 +374,7 @@ if st.session_state.perm >= 1:
 
             # 先索引原始 df，加快查找效率
             # noinspection PyUnresolvedReferences
-            orig_indexed = {(int(row.BID), str(row.MODS)): {c: getattr(row, c) for c in EDITABLE + ["MODS", "SUGGESTOR", "ADD_TS"]} for row in df.itertuples()}
+            orig_indexed = {(int(row.BID), str(row.MODS)): {c: getattr(row, c) for c in EDITABLE + ["MODS", "SUGGESTOR", "ADD_TS"]} for row in df.itertuples()}  # ty:ignore[unresolved-attribute]
             specs_recalculate_valid = True
             for edited_row in edited_df[["BID", "MODS"] + EDITABLE].itertuples():
                 edited_bid = int(edited_row.BID)
@@ -412,7 +415,7 @@ if st.session_state.perm >= 1:
                         specs_recalculate_valid = False
                         break
                     except (ValueError, TypeError):
-                        st.toast(_("invalid value: %s"))
+                        st.toast(_("invalid value: %s") % edited_row.RAW_MODS)
                         specs_recalculate_valid = False
                         break
                     olds_to_drop.append((str(orig["MODS"]), new_primary))

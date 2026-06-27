@@ -1,8 +1,6 @@
 import multiprocessing
 import os
 import shutil
-import site
-import sys
 import tarfile
 import zipfile
 from typing import Optional
@@ -63,18 +61,6 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
         shutil.rmtree(os.path.join(output_dir, "Library"))
     else:
         print("DLLs already exists: fribidi-0.dll")
-
-    if not os.path.exists(os.path.join(site.getsitepackages()[-1], "fontfallback")):
-        print("Downloading packages: PillowFontFallback...")
-        pkg_fontfallback = d.start("https://github.com/TrueMyst/PillowFontFallback/archive/refs/heads/main.zip")
-        with zipfile.ZipFile(pkg_fontfallback, "r") as zf:
-            zf.extractall(output_dir)
-        os.remove(pkg_fontfallback)
-        shutil.move(os.path.join(output_dir, "PillowFontFallback-main", "fontfallback"), site.getsitepackages()[-1])
-        shutil.rmtree(os.path.join(output_dir, "PillowFontFallback-main"))
-        sys.path.insert(0, os.path.join(site.getsitepackages()[-1], "fontfallback"))
-    else:
-        print("Packages already exists: PillowFontFallback")
 
     if not os.path.exists(os.path.join(output_dir, "bg1.jpg")):
         print("Downloading assets: bg1.jpg...")

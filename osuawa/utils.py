@@ -102,8 +102,8 @@ class ColorTextBar(Enum):
 
 
 def hex_to_rgba(hex_color, alpha=0.3):
-    hex_color = hex_color.lstrip('#')
-    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    hex_color = hex_color.lstrip("#")
+    r, g, b = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
     return f"rgba({r},{g},{b},{alpha})"
 
 
@@ -409,7 +409,7 @@ class SimpleDifficultyAttribute(object):
                 cur_mod_settings = cur_mod.get("settings", {})
                 mods_dict[cur_mod["acronym"]] = cur_mod_settings
                 for setting_name, setting_value in cur_mod_settings.items():
-                        osu_tool_mod_options.append("%s_%s=%s" % (cur_mod["acronym"], setting_name, setting_value))
+                    osu_tool_mod_options.append("%s_%s=%s" % (cur_mod["acronym"], setting_name, setting_value))
                 osu_tool_mods.append(cur_mod["acronym"])
             standardized_mods.extend(cur_mods)
 
@@ -535,7 +535,7 @@ class SimpleScoreInfo(object):
 
     @classmethod
     def from_score(cls, score: Score | MultiplayerScore):
-        print(score.mods)
+        # print(score.mods)
         return cls(
             score.beatmap_id,
             score.user_id,

@@ -166,6 +166,9 @@ with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("Compared to"), all_users)
     df_c = get_scores_dataframe(comp_user, (begin_date, end_date))
+    if len(df_c) == 0:
+        st.error(_("no scores found for user %d") % comp_user)
+        st.stop()
     stats_indexes = [
         "accuracy",
         "hit_window",

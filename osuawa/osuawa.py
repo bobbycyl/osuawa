@@ -127,8 +127,8 @@ def async_cached_method(isolated: bool = False):
 
 
 class CachedMixIn:
-    _global_cache = TTLCache(maxsize=1024, ttl=300)
-    _isolated_cache = TTLCache(maxsize=256, ttl=120)
+    _global_cache: TTLCache[str, Any, int | float] = TTLCache(maxsize=1024, ttl=300)
+    _isolated_cache: TTLCache[str, Any, int | float] = TTLCache(maxsize=256, ttl=120)
 
     def __init__(self):
         self.identifier: Optional[int] = None
@@ -517,33 +517,21 @@ class BeatmapCover(object):
         ver_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
         if ver_cut != "":
             version = ver_cut
-        # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
+        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (42, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 192 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
-        # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
-        # noinspection PyTypeChecker
-        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")  # ty:ignore[invalid-argument-type]
+        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
+        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
+        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
         draw.text((42 + 1188, 326), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
         draw.text((41 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
         draw.text((40 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
@@ -890,10 +878,9 @@ class OsuPlaylist(object):
             self.suffix,
             html_footer,
         )
-        with threading.Lock():
-            with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fo:
-                if self.css_style:
-                    html_head = """  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fo:
+            if self.css_style:
+                html_head = """  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
   <link href="https://ai-public.mastergo.com/gen_page/tailwind-custom.css" rel="stylesheet" />
   <script
@@ -901,7 +888,7 @@ class OsuPlaylist(object):
   <script src="https://ai-public.mastergo.com/gen_page/tailwind-config.min.js" data-color="#A0C8C8"
     data-border-radius="medium"></script>
 """
-                    html_body_prefix = """
+                html_body_prefix = """
   <header class="mb-2">
     %s
     <h1 class="relative text-2xl font-bold text-center pt-8">
@@ -911,17 +898,17 @@ class OsuPlaylist(object):
   <div class="min-h-screen p-4 sm:px-8 lg:px-12 xl:px-20 2xl:px-32">
     <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
 """ % (
-                        self.banner,
-                        self.playlist_name,
-                    )
-                    html_body_suffix = """    </div>
+                    self.banner,
+                    self.playlist_name,
+                )
+                html_body_suffix = """    </div>
   </div>
 """
-                    fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
-                else:
-                    fo.write(html_string.format(html_head="", html_body=df.to_html(index=False, escape=False, classes="pd"), html_body_prefix="", html_body_suffix=""))
+                fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
+            else:
+                fo.write(html_string.format(html_head="", html_body=df.to_html(index=False, escape=False, classes="pd"), html_body_prefix="", html_body_suffix=""))
 
-            # 清理临时文件夹
-            rmtree(self.tmp_dir)
+        # 清理临时文件夹
+        rmtree(self.tmp_dir)
 
         return df_standalone

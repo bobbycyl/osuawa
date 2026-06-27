@@ -103,8 +103,7 @@ pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
 pg_room_spectator = st.Page("tools/Room_spectator.py", title=_("Room Spectator"))
 
 load_value("redis_tasks", [])
-# noinspection PyTypeHints
-st.session_state.redis_tasks: list[RedisTaskId]
+st.session_state.redis_tasks = cast(list[RedisTaskId], st.session_state.redis_tasks)
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 

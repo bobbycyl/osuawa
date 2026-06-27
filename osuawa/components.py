@@ -51,6 +51,7 @@ from osuawa.utils import (
     format_size,
     get_mod_type_mapping,
     get_size_and_count,
+    hex_to_rgba,
     make_unstandardized_mods_from_lines,
     mania_mod_entries,
     mania_mod_indexes,
@@ -59,15 +60,13 @@ from osuawa.utils import (
     push_task,
     taiko_mod_entries,
     taiko_mod_indexes,
-hex_to_rgba,
 )
 
 if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
 
-    # noinspection PyTypeHints
-    st.session_state.awa: Osuawa
+    st.session_state.awa = cast(Osuawa, st.session_state.awa)
 
 _conn = st.connection("osuawa", type="sql", ttl=60)
 _conn.query = _make_query_uppercase(_conn.query)
@@ -696,8 +695,8 @@ def mods_generator(ret_type: None) -> None: ...
 def mods_generator() -> None: ...
 
 
-def mods_generator(ret_type = None):
-    st.write("modgen_increment" in st.session_state)
+def mods_generator(ret_type=None):
+    # st.write("modgen_increment" in st.session_state)
     if "modgen_increment" not in st.session_state or "modgen_selected" not in st.session_state or "modgen_ret" not in st.session_state:
         _reset_mod()
         st.session_state.modgen_increment = 0
@@ -705,8 +704,8 @@ def mods_generator(ret_type = None):
         st.session_state.modgen_ret = deque(maxlen=1)
     ruleset = st.segmented_control(_("Ruleset"), options=["osu", "taiko", "catch", "mania"], key="modgen_ruleset", default="osu", width="stretch")
     lines: list[str] = []
-    st.write(st.session_state.modgen_increment)
-    st.write(st.session_state.modgen_selected)
+    # st.write(st.session_state.modgen_increment)
+    # st.write(st.session_state.modgen_selected)
 
     for modgen_suffix in st.session_state.modgen_selected:
         col_content, col_del = st.columns([0.85, 0.15])
@@ -767,7 +766,8 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
             sub: list[str] = _result.get("sub", [])
             _time = status_mapping["time"]
             dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
-            status_color.get(status, "#808080")
+            # todo: 遗留的颜色映射，当前逻辑中未支持颜色标记
+            _color = status_color.get(status, "#808080")
 
             st.text(_("#%d: %s") % (idx, task_id))
 

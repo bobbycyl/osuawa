@@ -384,7 +384,7 @@ def _build_update_return_message(action_verb: str, action_list: list[tuple[int, 
     return "%s %s" % (action_verb, ", ".join(["(%d, %s)" % tup for tup in action_list]))
 
 
-def cleanup_ald_tasks_status():
+def cleanup_old_tasks_status():
     """清理超过 72 小时未更新的任务状态"""
     pattern = C.TASK_STATUS.value.format(task_id="*")
     now = time()
@@ -449,7 +449,7 @@ def setup_scheduled_tasks():
         "update .*",
     )
     schedule.every(1).hour.do(
-        cleanup_ald_tasks_status,
+        cleanup_old_tasks_status,
     )
     schedule.every(16).hours.do(
         refresh_oauth_token,
@@ -499,13 +499,14 @@ push_task(
     "update .*",
 )
 setup_scheduled_tasks()
-cleanup_ald_tasks_status()
+cleanup_old_tasks_status()
 refresh_oauth_token()
 
 while True:
     try:
         result: Optional[tuple[str, str]] = cast(Optional[tuple[str, str]], cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)))
         if result is None:
+            schedule.run_pending()
             continue
         task_info = result[1]
         if task_info:

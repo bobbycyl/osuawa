@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import streamlit as st
 
@@ -10,8 +10,7 @@ if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
 
-    # noinspection PyTypeHints
-    st.session_state.awa: Osuawa
+    st.session_state.awa = cast(Osuawa, st.session_state.awa)
 
 init_page(_("Room Spectator") + " - osuawa")
 
@@ -27,6 +26,7 @@ room_ids_input = st.text_input(_("Room IDs, separated by spaces"), key="mp_room_
 room_ids: list[int] = []
 if room_ids_input is None or room_ids_input == "":
     st.error(_("Please input room IDs"))
+    st.stop()
 else:
     room_ids = [int(room_id) for room_id in room_ids_input.split()]
 

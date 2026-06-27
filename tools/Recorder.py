@@ -2,7 +2,7 @@ import asyncio
 import os.path
 import threading
 from asyncio import Task
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 
 import orjson
 import pandas as pd
@@ -18,10 +18,10 @@ if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
 
-    # noinspection PyTypeHints
-    st.session_state.awa: Osuawa
+    st.session_state.awa = cast(Osuawa, st.session_state.awa)
 
 init_page(_("Recorder") + " - osuawa")
+lck = threading.Lock()
 
 
 async def async_get_users_beatmap_scores(ids: list[int], beatmap: int) -> pd.DataFrame:
@@ -125,7 +125,7 @@ user_scores_current = st.session_state.awa.run_coro(
     ),
 )
 st.write(user_scores_current)
-with threading.Lock(), open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w", encoding="utf-8") as fo:
+with lck, open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w", encoding="utf-8") as fo:
     fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
 
 if st.button(_("Clear all caches"), icon=":material/cleaning_services:"):

@@ -161,7 +161,7 @@ def get_ai_client():
 client = get_ai_client()
 
 if "openai_model" not in st.session_state:
-    st.session_state["openai_model"] = "glm-4-flash"
+    st.session_state["openai_model"] = "glm-4.7-flash"
 
 if "messages" not in st.session_state:
     st.session_state.llm_messages = [
@@ -320,8 +320,7 @@ def process_streaming_with_tools():
 
 @st.fragment
 def home_form():
-    # noinspection PyTypeHints
-    st.session_state.cmdparser: CommandParser
+    st.session_state.cmdparser = cast(CommandParser, st.session_state.cmdparser)
     # 命令面板
     available_commands = st.session_state.cmdparser.data
     # 一个 select_box 选择命令，根据选择的命令，生成参数数量、参数类型、参数描述的输入框
@@ -395,10 +394,13 @@ if st.session_state.perm >= 1:
         if message["role"] == "system":
             continue
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            st.markdown(message.get("content", ""))
 
     # 用户输入
     if prompt := st.chat_input(_("How can I help you?")):
+        # 当前仅支持文本输入
+        if not isinstance(prompt, str):
+            raise ValueError(_("unsupported input type"))
         # 添加用户消息
         st.session_state.llm_messages.append({"role": "user", "content": prompt})
 

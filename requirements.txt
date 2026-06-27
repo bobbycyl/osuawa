@@ -1,4 +1,5 @@
 clayutil @ git+https://github.com/bobbycyl/ClayUtilities.git
+fontfallback @ git+https://github.com/bobbycyl/PillowFontFallback.git
 osupp @ git+https://github.com/bobbycyl/osupp.git
 SQLAlchemy
 babel
