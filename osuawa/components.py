@@ -5,13 +5,13 @@ import shelve
 import shutil
 from collections import deque
 from datetime import date, datetime, time
+from itertools import chain
 from secrets import token_hex
 from shutil import copyfile
 from typing import Any, Literal, Optional, TYPE_CHECKING, cast, overload
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-import numpy as np
 import orjson
 import pandas as pd
 import plotly.express as px
@@ -475,6 +475,10 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
             row[45],
             row[46],
             row[47],
+            row[48],
+            row[49],
+            row[50],
+            row[51],
         )
         for row in rows
     }
@@ -520,11 +524,13 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
     my_attr.set_mods(mods)
     calculator = calculate_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), ruleset, my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
     osupp_attr = next(calculator)
-    strains: dict[str, list[tuple[float, float]]] = osupp_attr["__ek_strains"]  # type: ignore[union-attr]
-    timelines = osupp_attr["__ek_time_until_first_strain_adj"] + osupp_attr["__ek_ms_per_strain"] * np.arange(osupp_attr["__ek_strain_count"])  # type: ignore[union-attr]
-    df_strain = pd.DataFrame({**strains, "time": timelines})
+    # todo: 这里要更新
+    strains: dict[str, list[float]] = osupp_attr["__ek_strains_of_skills"]  # type: ignore[union-attr]
+    timelines: dict[str, list[float]] = osupp_attr["__ek_time_timelines"]  # type: ignore[union-attr]
+    timeline = sorted(set(chain.from_iterable(timelines.values())))
+    df_strain = pd.DataFrame({**strains, "time": timeline})
     df_strain["time"] = pd.to_datetime(df_strain["time"], unit="ms")
-    df_strain = df_strain.melt(id_vars="time", value_vars=strains.keys(), var_name="skill", value_name="strain")
+    df_strain = df_strain.melt(id_vars="time", value_vars=list(strains.keys()), var_name="skill", value_name="strain")
 
     fig = px.line(df_strain, x="time", y="strain", color="skill", title="Difficulty Graph of %d" % beatmap.id, color_discrete_sequence=px.colors.qualitative.D3)
     fig.update_layout(

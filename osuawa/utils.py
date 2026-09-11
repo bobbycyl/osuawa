@@ -27,12 +27,12 @@ from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import calculate_difficulty, get_all_mods
-from osupp.performance import CatchPerformance, ManiaPerformance, OsuPerformance, TaikoPerformance, calculate_performance
+from osupp.difficulty import calculate_difficulty as calculate_difficulty, get_all_mods
+from osupp.performance import CatchPerformance, ManiaPerformance, OsuPerformance, TaikoPerformance, calculate_performance as calculate_performance
 from osupp.util import validate_mod_setting_value
 from redis import Redis
 
-assert calculate_difficulty, calculate_performance
+_c = calculate_difficulty, calculate_performance
 
 headers = {
     "Referer": "https://bobbycyl.github.io/playlists/",
@@ -602,17 +602,21 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     b_aim_difficult_slider_count: Optional[float]
     b_speed_difficulty: Optional[float]
     b_speed_note_count: Optional[float]
+    b_reading_difficulty: Optional[float]
     b_slider_factor: Optional[float]
     b_aim_top_weighted_slider_factor: Optional[float]
     b_speed_top_weighted_slider_factor: Optional[float]
     b_aim_difficult_strain_count: Optional[float]
     b_speed_difficult_strain_count: Optional[float]
+    b_reading_difficult_note_count: Optional[float]
     pp_aim: Optional[float]
     pp_speed: Optional[float]
     pp_accuracy: Optional[float]
+    pp_reading: Optional[float]
     b_pp_100if_aim: Optional[float]
     b_pp_100if_speed: Optional[float]
     b_pp_100if_accuracy: Optional[float]
+    b_pp_100if_reading: Optional[float]
     b_pp_100if: float
     b_pp_92if: float
     b_pp_81if: float
@@ -633,6 +637,7 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     pp_aim_pct: Optional[float]
     pp_speed_pct: Optional[float]
     pp_accuracy_pct: Optional[float]
+    pp_reading_pct: Optional[float]
     pp_92pct: Optional[float]
     pp_81pct: Optional[float]
     pp_67pct: Optional[float]
@@ -840,10 +845,12 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     pp_got_aim = perf_got_attr["aim"]
     pp_got_speed = perf_got_attr["speed"]
     pp_got_accuracy = perf_got_attr["accuracy"]
+    pp_got_reading = perf_got_attr["reading"]
     pp100 = perf100_attr["pp"]
     pp100_aim = perf100_attr["aim"]
     pp100_speed = perf100_attr["speed"]
     pp100_accuracy = perf100_attr["accuracy"]
+    pp100_reading = perf100_attr["reading"]
 
     return CompletedSimpleScoreInfo(
         # 父类字段，除了 pp 全部照抄
@@ -886,17 +893,21 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
         osupp_attr["aim_difficult_slider_count"],
         osupp_attr["speed_difficulty"],
         osupp_attr["speed_note_count"],
+        osupp_attr["reading_difficulty"],
         osupp_attr["slider_factor"],
         osupp_attr["aim_top_weighted_slider_factor"],
         osupp_attr["speed_top_weighted_slider_factor"],
         osupp_attr["aim_difficult_strain_count"],
         osupp_attr["speed_difficult_strain_count"],
+        osupp_attr["reading_difficult_note_count"],
         pp_got_aim,
         pp_got_speed,
         pp_got_accuracy,
+        pp_got_reading,
         pp100_aim,
         pp100_speed,
         pp100_accuracy,
+        pp100_reading,
         pp100,
         pp92,
         pp81,

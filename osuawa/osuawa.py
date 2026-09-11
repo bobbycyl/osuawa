@@ -13,14 +13,13 @@ __all__ = (
 
 import asyncio
 import ctypes
-import datetime
+import datetime as _datetime
 import functools
 import html
 import json
 import os
 import os.path
 import platform
-import threading
 from asyncio import AbstractEventLoop, Task
 from collections.abc import Coroutine
 from dataclasses import fields
@@ -66,8 +65,6 @@ from .utils import (
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
-
-assert datetime
 
 
 def _make_cached_method_key(
@@ -319,17 +316,18 @@ class Osuawa(CachedMixIn):
         df[ec[2]] = df["pp_aim"] / df["b_pp_100if_aim"]
         df[ec[3]] = df["pp_speed"] / df["b_pp_100if_speed"]
         df[ec[4]] = df["pp_accuracy"] / df["b_pp_100if_accuracy"]
-        df[ec[5]] = df["pp"] / df["b_pp_92if"]
-        df[ec[6]] = df["pp"] / df["b_pp_81if"]
-        df[ec[7]] = df["pp"] / df["b_pp_67if"]
-        df[ec[8]] = df["max_combo"] / df["b_max_combo"]
-        df[ec[9]] = df["b_max_combo"] / df["hit_length"]
-        df[ec[10]] = df["b_aim_difficulty"] / np.log1p(df["density"])
-        df[ec[11]] = df["b_speed_difficulty"] / np.log1p(df["density"])
-        df[ec[12]] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
-        df[ec[13]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
-        df[ec[14]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
-        df[ec[15]] = df["_mods"].map(lambda mods: ({m["acronym"] for m in mods} <= self.common_mods))
+        df[ec[5]] = df["pp_reading"] / df["b_pp_100if_reading"]
+        df[ec[6]] = df["pp"] / df["b_pp_92if"]
+        df[ec[7]] = df["pp"] / df["b_pp_81if"]
+        df[ec[8]] = df["pp"] / df["b_pp_67if"]
+        df[ec[9]] = df["max_combo"] / df["b_max_combo"]
+        df[ec[10]] = df["b_max_combo"] / df["hit_length"]
+        df[ec[11]] = df["b_aim_difficulty"] / np.log1p(df["density"])
+        df[ec[12]] = df["b_speed_difficulty"] / np.log1p(df["density"])
+        df[ec[13]] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
+        df[ec[14]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
+        df[ec[15]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
+        df[ec[16]] = df["_mods"].map(lambda mods: ({m["acronym"] for m in mods} <= self.common_mods))
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
