@@ -346,7 +346,11 @@ def _update_beatmap(
             # 提供 beatmap 意味着更新/修改，此时不允许删除操作
             raise ValueError("cannot update a beatmap from another bid")
         old_bid = beatmap["BID"]
-        # 由于主键约束，如果同时提供 beatmap 和 old_mods，则应该先 insert 新的谱面，再 delete 老的谱面，二者在同一事务中执行
+        # 由于主键约束，如果同时提供 beatmap 和 old_mods，则应该先 delete 再 insert，二者在同一事务中执行
+        # todo：设计问题是否要大改？
+        # 1. 为什么不用 upsert？之前用过，但是还是会出问题，而且把问题过度复杂化
+        # 2. 先 delete 再 insert 如果中途被别人抢先了怎么办？redis 队列是单线程读取，有先后顺序。而且这个程序最早是用于 sqlite，以单线程为主，不涉及高并发常见
+        # 3. 如何根治？不要用 BID + MODS 的主键约束，用自增的 ID 作为主键，这样就可以用 upsert 了
 
     new_bid = None
     new_mods = None
@@ -381,18 +385,6 @@ def _update_beatmap(
             else:
                 raise ValueError("cannot update a beatmap from null")
         else:
-            if beatmap is not None:
-                # 可能是 add, update1
-                assert action == "add" or action == "update1"
-                new_bid = beatmap["BID"]
-                new_mods = beatmap["MODS"]
-                conn.execute(
-                    text(
-                        """INSERT INTO BEATMAP
-                           VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)""",
-                    ),
-                    beatmap,
-                )
             if old_bid is not None and old_mods is not None:
                 # 可能是 delete, update1
                 assert action == "delete" or action == "update1"
@@ -408,6 +400,18 @@ def _update_beatmap(
                              AND MODS = :mods""",
                     ),
                     {"bid": old_bid, "mods": old_mods},
+                )
+            if beatmap is not None:
+                # 可能是 add, update1
+                assert action == "add" or action == "update1"
+                new_bid = beatmap["BID"]
+                new_mods = beatmap["MODS"]
+                conn.execute(
+                    text(
+                        """INSERT INTO BEATMAP
+                           VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)""",
+                    ),
+                    beatmap,
                 )
 
     return new_bid or 0, new_mods or "", old_bid or 0, old_mods or ""
