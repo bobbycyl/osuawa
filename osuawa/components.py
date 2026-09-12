@@ -135,6 +135,12 @@ def check_shelve_exists() -> bool:
                 "%s.dir" % st.context.cookies["ajs_anonymous_id"],
             )
         )
+        or os.path.exists(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                "%s.db" % st.context.cookies["ajs_anonymous_id"],
+            )
+        )
     )
 
 
