@@ -161,7 +161,7 @@ if st.session_state.perm >= 1:
             pool_input = st.selectbox(_("Pool"), available_pools, index=_pool_index, accept_new_options=True)
             if "modgen_ret" in st.session_state and len(st.session_state.modgen_ret) > 0:
                 st.session_state.gen_form_mod_settings = "\n".join(st.session_state.modgen_ret.pop()[0])
-            mod_settings_input = st.text_area(
+            st.text_area(
                 _("Mod Settings"),
                 height="stretch",
                 key="gen_form_mod_settings",
@@ -181,7 +181,7 @@ if st.session_state.perm >= 1:
                 # SLOTS 自动大写
                 slot_input = slot_input[:2].upper() + slot_input[2:]
                 urls_input_split = urls_input.split()
-                raw_mods_input = make_unstandardized_mods_from_lines(slot_input, mod_settings_input or "")
+                raw_mods_input = make_unstandardized_mods_from_lines(slot_input, st.session_state.gen_form_mod_settings or "")
 
                 # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
                 specs_input_valid = True
