@@ -65,6 +65,7 @@ from .utils import (
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
+_d = _datetime
 
 
 def _make_cached_method_key(
