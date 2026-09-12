@@ -116,7 +116,8 @@ engine = (
 )
 logger.info("sql connected: %s" % _url)
 
-r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+# socket_timeout 需明显大于下方 brpop 的阻塞时长：redis-py 8.x 起该值默认为 5s，与 brpop timeout 相同时 recv 会先于服务端返回 nil 而超时
+r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True, socket_timeout=15)
 logger.info("redis connected")
 
 # Daemon 使用 Client Credentials Grant
@@ -568,7 +569,7 @@ while True:
     try:
         result: Optional[tuple[str, str]] = cast(
             Optional[tuple[str, str]],
-            cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)),
+            cast(object, r.brpop([C.TASK_QUEUE.value], timeout=2)),
         )
         schedule.run_pending()
         if result is None:
