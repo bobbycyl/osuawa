@@ -17,6 +17,7 @@
 /.streamlit/user_cache.json
 /.agents
 /.codewhale
+/*ModsEntries.json
 __pycache__/
 qodana.yaml
 osuawa.db
