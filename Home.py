@@ -186,7 +186,9 @@ if "messages" not in st.session_state:
 1. 当用户提到某个玩家名并询问 PP、排名、数据等信息时，立即使用 get_user_info 工具查询；
 2. 不需要等待用户明确说 "用户名为xxx" 或 "玩家xxx"，只要看到疑似游戏玩家名字就主动查询；
 3. osu! 用户名中间可以包含空格，首尾可能有 "-"、"["、"]" 等特殊字符，这些也是用户名的一部分，不要擅自 strip 或 trim；
-4. 部分有关玩家信息的函数可以省略 user 参数，缺省值为当前登录用户 (user_id=%d, username=%s)。
+
+当前登录用户信息：
+user_id=%d, username=%s
 
 示例：
 1. 当用户询问非自己的某位玩家在指定谱面上的成绩时，先调用 get_user_info 工具获取 user_id，再调用 get_user_beatmap_scores 工具查询成绩。"""
