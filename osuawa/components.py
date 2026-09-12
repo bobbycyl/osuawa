@@ -223,7 +223,10 @@ def memorized_checkbox(label: str, key: str, default_value: bool, **kwargs) -> N
 
 def memorized_number_input(label: str, key: str, default_value: int | float, **kwargs) -> None:
     load_value(key, default_value)
-    step = kwargs.get("step") or (1 if isinstance(default_value, int) else 0.01)
+    if "step" in kwargs:
+        step = kwargs.pop("step")
+    else:
+        step = (1 if isinstance(default_value, int) else 0.01)
     st.number_input(
         label,
         key=key,
