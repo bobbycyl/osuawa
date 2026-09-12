@@ -96,7 +96,6 @@ def refresh(clear_cache: bool = True) -> Never:
     st.rerun()
 
 
-@st.cache_data(show_spinner=False)
 def generate_playlist(filename: str, css_style: Optional[int] = None):
     # 由于这个有实时性要求，因此不挪到后台处理
     playlist = OsuPlaylist(st.session_state.awa, filename, css_style=css_style)
@@ -119,7 +118,11 @@ def export_filtered_playlist():
                 strict=True,
             )
         ]  # 直接用解析好的列表
-        tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
+        try:
+            tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
+        except ValueError as e:
+            st.error(e)
+            return
         st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
         with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
             st.code(fi.read(), language="properties")

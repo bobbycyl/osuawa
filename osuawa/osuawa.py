@@ -86,6 +86,7 @@ from PIL import (
 )
 
 _d = _datetime
+lck = Lock()
 
 
 def _make_cached_method_key(
@@ -497,6 +498,8 @@ class Osuawa(CachedMixIn):
 
 
 def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, use_dots: bool) -> str:
+    if length_limit < 3:  # 比省略号还短，直接返回空字符串
+        return ""
     text_len_dry_run = draw.textlength(text, font=font)
     if text_len_dry_run > length_limit:
         cut_length = -1
@@ -571,7 +574,7 @@ class BeatmapCover(object):
             im = im.convert("RGB")
         be = ImageEnhance.Brightness(im)
         im = be.enhance(0.33)
-        with Lock():
+        with lck:
             im.save(cover_filename)
 
         return cover_filename
@@ -714,7 +717,7 @@ class BeatmapCover(object):
         draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=(40, 40, 40))
         draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=self.block_color)
 
-        with Lock():
+        with lck:
             im.save(cover_filename)
         return cover_filename
 
@@ -908,7 +911,7 @@ class OsuPlaylist(object):
                     im = im.convert("RGB")
                 be = ImageEnhance.Brightness(im)
                 im = be.enhance(0.67)
-                with Lock():
+                with lck:
                     im.save(bg_filename)
             bg_filename = os.path.join(self.bg_dir, "%d.jpg" % bid)
             extra_notes = ""

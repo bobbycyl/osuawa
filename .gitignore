@@ -15,6 +15,9 @@
 /.streamlit/.components/
 /.streamlit/secrets.toml
 /.streamlit/user_cache.json
+/.agents
+/.codewhale
+__pycache__/
 qodana.yaml
 osuawa.db
 *LCK

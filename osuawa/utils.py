@@ -250,6 +250,10 @@ def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
 
 
 def calc_bin_size(data) -> float:
+    if len(data) == 0:
+        return 0
+    if len(data) == 1:
+        return 1
     return (max(data) - min(data)) / min((sqrt(len(data)), 10 * log10(len(data))))
 
 
@@ -1035,6 +1039,7 @@ def format_size(size_bytes):
 def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
     """对某一列进行正则搜索，有匹配则输出匹配内容，无匹配输出 None"""
 
+    data = data.copy()
     def search_func(text):
         if pd.isna(text):
             return None

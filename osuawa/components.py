@@ -851,6 +851,8 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
                             step = _setting["DefaultPrecision"]
                             if step is None:
                                 step = 1 if _setting["IsInteger"] else 0.01
+                            elif _setting["IsInteger"]:
+                                step = 1
                             memorized_number_input(
                                 _name,
                                 _mod_setting_key,

@@ -70,9 +70,13 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
         # 0 - 10 视为无限制
         df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     else:
-        df2 = df1[(df1["b_star_rating"] > srl) & (df1["b_star_rating"] < srh) & ((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
+        df2 = df1[(df1["b_star_rating"] >= srl) & (df1["b_star_rating"] <= srh) & ((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     if st.session_state.cat_advanced_filter != "":
-        df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter) or pd.DataFrame()
+        try:
+            df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
+        except Exception as e:
+            st.error(_("invalid filter: ") + str(e))
+            df3 = pd.DataFrame()
     else:
         df3 = df2
     return df3
@@ -150,7 +154,7 @@ def generate_stats_dataframe(data: pd.DataFrame, indexes: list[str]) -> pd.DataF
                 "N",
             )
         ),
-    ).round(2)
+    ).round(4)
     df_stats["95% CI"] = df_stats.apply(lambda row: f"[{row['_CIL']:.2f}, {row['_CIU']:.2f}]", axis=1)
     df_stats = df_stats[
         [
@@ -240,11 +244,11 @@ df_o = apply_filter(df)
 def create_distplot(
     hist_data,
     group_labels,
-    colors: list[str],
     bin_size: list[float],
     curve_type="kde",
     show_hist=True,
     show_curve=True,
+    colors: Optional[list[str]] = None,
     histnorm="probability density",
 ):
     """替代 plotly.figure_factory.create_distplot"""
@@ -253,7 +257,7 @@ def create_distplot(
     for i, (data, label) in enumerate(zip(hist_data, group_labels)):
         data = np.asarray(data)
         data = data[~np.isnan(data)]  # 去 NaN
-        color = colors[i % len(colors)]
+        color = colors[i % len(colors)] if colors is not None else []
 
         # 直方图
         if show_hist:
@@ -414,7 +418,6 @@ with st.container(border=True):
             fig_data,
             [user, comp_user],
             bin_size=[calc_bin_size(data) for data in fig_data],
-            show_rug=False,
             colors=[CO, CC],
         )
         st.plotly_chart(fig)
@@ -454,7 +457,6 @@ with st.container(border=True):
             fig = create_distplot(
                 fig_data,
                 st.session_state.cat_y2,
-                colors=[CO],
                 bin_size=[calc_bin_size(data) for data in fig_data],
             )
             st.plotly_chart(fig)
