@@ -880,14 +880,17 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
                                 _default or _enum_values[0],
                                 help=_desc,
                             )
+                    _setting_value = st.session_state[_mod_setting_key]
                     # 如果选中值非不是默认值，才添加模组设置
-                    if st.session_state[_mod_setting_key] != _default:
+                    if _setting_value != _default:
+                        if isinstance(_setting_value, bool):
+                            _setting_value = "true" if _setting_value else "false"
                         ret.append(
                             "%s_%s=%s"
                             % (
                                 st.session_state[_mod_key],
                                 _name,
-                                st.session_state[_mod_setting_key],
+                                _setting_value,
                             )
                         )
     return ret
