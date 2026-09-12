@@ -62,6 +62,7 @@ from .utils import (
     SimpleDifficultyAttribute,
     SimpleScoreInfo,
     assets_dir,
+    available_mods,
     calc_beatmap_attributes,
     calc_high_star_rating_text_color,
     calc_positive_percent,
@@ -844,7 +845,11 @@ class OsuPlaylist(object):
         slot_mod: str = raw_mods[0]["acronym"]
         last_slot_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
         is_fm = slot_mod == "FM" or slot_mod == "F+"
-        mods = raw_mods[1:].copy()  # 只能使用官方 Mods 的用这个变量
+
+        if slot_mod in available_mods:  # 偷懒行为允许：如果 slot_mod 是官方 Mod，自动加入
+            mods = raw_mods.copy()
+        else:
+            mods = raw_mods[1:].copy()  # 将自定义模组排除，只能使用官方 Mods 的用这个变量
         for _mod in mods:
             # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 slot_mod 存在）
             if _mod["acronym"] in self.custom_mods_acronym:

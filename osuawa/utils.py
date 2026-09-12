@@ -68,6 +68,7 @@ _catch_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s i
 mania_mod_entries = get_all_mods(ManiaRuleset())
 mania_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in mania_mod_entries}
 _mania_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
+available_mods = set(osu_mod_indexes.keys()) | set(taiko_mod_indexes.keys()) | set(catch_mod_indexes.keys()) | set(mania_mod_indexes.keys())
 
 sem = BoundedSemaphore()
 
