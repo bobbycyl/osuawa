@@ -348,6 +348,8 @@ def _update_beatmap(
         old_bid = beatmap["BID"]
         # 由于主键约束，如果同时提供 beatmap 和 old_mods，则应该先 insert 新的谱面，再 delete 老的谱面，二者在同一事务中执行
 
+    new_bid = None
+    new_mods = None
     with engine.begin() as conn:
         if action == "update0":
             if beatmap is not None:
