@@ -15,7 +15,9 @@ if TYPE_CHECKING:
 init_page(_("Room Spectator") + " - osuawa")
 
 
-async def create_multiplayer_scores_dataframe(room_ids: list[int]) -> dict[str, CompletedSimpleScoreInfo]:
+async def create_multiplayer_scores_dataframe(
+    room_ids: list[int],
+) -> dict[str, CompletedSimpleScoreInfo]:
     scores = await st.session_state.awa.async_get_rooms_scores(room_ids)
     scores_compact = {str(score.id): SimpleScoreInfo.from_score(score) for score in scores}
     return await st.session_state.awa.complete_scores_compact(scores_compact)

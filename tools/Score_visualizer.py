@@ -1,13 +1,20 @@
 from datetime import date, timedelta
 from typing import Optional, TYPE_CHECKING
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
-from plotly import figure_factory as ff
 from scipy import stats
 
-from osuawa.components import get_all_score_users, get_scores_dataframe, init_page, memorized_multiselect, memorized_selectbox
+from osuawa.components import (
+    get_all_score_users,
+    get_scores_dataframe,
+    init_page,
+    memorized_multiselect,
+    memorized_selectbox,
+)
 from osuawa.utils import calc_bin_size, regex_search_column
 
 if TYPE_CHECKING:
@@ -18,7 +25,11 @@ if TYPE_CHECKING:
 init_page(_("Score Visualizer") + " - osuawa")
 all_users = get_all_score_users()
 user = st.selectbox(_("User"), all_users)
-st.date_input(_("Date range"), [date.today() - timedelta(days=30), date.today() + timedelta(days=1)], key="cat_date_range")
+st.date_input(
+    _("Date range"),
+    [date.today() - timedelta(days=30), date.today() + timedelta(days=1)],
+    key="cat_date_range",
+)
 
 CO = "#FF6A6A"
 CC = "#4C95D9"
@@ -26,7 +37,10 @@ CC = "#4C95D9"
 
 def calc_pp_overall_main(data: pd.DataFrame, tag: Optional[str] = None) -> str:
     df_tag = data if tag is None else data[data[tag]]
-    return "%.2f (%.2f%%)" % (df_tag["pp"].sum(), df_tag["pp"].sum() / data["pp"].sum() * 100)
+    return "%.2f (%.2f%%)" % (
+        df_tag["pp"].sum(),
+        df_tag["pp"].sum() / data["pp"].sum() * 100,
+    )
 
 
 def calc_pp_overall_if(data: pd.DataFrame, tag: Optional[str] = None) -> str:
@@ -36,7 +50,12 @@ def calc_pp_overall_if(data: pd.DataFrame, tag: Optional[str] = None) -> str:
     pp_92if = df_tag["b_pp_92if"].sum()
     pp_81if = df_tag["b_pp_81if"].sum()
     pp_67if = df_tag["b_pp_67if"].sum()
-    return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (got_pp / pp_100if * 100, got_pp / pp_92if * 100, got_pp / pp_81if * 100, got_pp / pp_67if * 100)
+    return "%.2f%%/%.2f%%/%.2f%%/%.2f%%" % (
+        got_pp / pp_100if * 100,
+        got_pp / pp_92if * 100,
+        got_pp / pp_81if * 100,
+        got_pp / pp_67if * 100,
+    )
 
 
 def calc_pp_overall_count(data: pd.DataFrame, tag: Optional[str] = None) -> str:
@@ -59,7 +78,23 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
     return df3
 
 
-def calc_statistics(data: pd.DataFrame, column: str) -> tuple[float, float, float, float, float, float, float, float, float, float, float, float, float, float, int]:
+def calc_statistics(data: pd.DataFrame, column: str) -> tuple[
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    int,
+]:
     c = data[column]
     # table: | index | min | Q1 | median | Q3 | max | mean | winsor_mean | std | var | CV | skew | kurtosis | 95% CI L | 95% CI U | N |
     data_se = c.sem()
@@ -93,9 +128,48 @@ def generate_stats_dataframe(data: pd.DataFrame, indexes: list[str]) -> pd.DataF
     index_records = {}
     for index in indexes:
         index_records[index] = calc_statistics(data, index)
-    df_stats = pd.DataFrame.from_dict(index_records, orient="index", columns=pd.Index(("min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "_CIL", "_CIU", "N"))).round(2)
+    df_stats = pd.DataFrame.from_dict(
+        index_records,
+        orient="index",
+        columns=pd.Index(
+            (
+                "min",
+                "Q1",
+                "median",
+                "Q3",
+                "max",
+                "mean",
+                "winsor_mean",
+                "std",
+                "var",
+                "CV",
+                "skew",
+                "kurtosis",
+                "_CIL",
+                "_CIU",
+                "N",
+            )
+        ),
+    ).round(2)
     df_stats["95% CI"] = df_stats.apply(lambda row: f"[{row['_CIL']:.2f}, {row['_CIU']:.2f}]", axis=1)
-    df_stats = df_stats[["min", "Q1", "median", "Q3", "max", "mean", "winsor_mean", "std", "var", "CV", "skew", "kurtosis", "95% CI", "N"]]
+    df_stats = df_stats[
+        [
+            "min",
+            "Q1",
+            "median",
+            "Q3",
+            "max",
+            "mean",
+            "winsor_mean",
+            "std",
+            "var",
+            "CV",
+            "skew",
+            "kurtosis",
+            "95% CI",
+            "N",
+        ]
+    ]
     return df_stats
 
 
@@ -162,6 +236,74 @@ with st.expander(_("Filtering")):
 
 df_o = apply_filter(df)
 
+
+def create_distplot(
+    hist_data,
+    group_labels,
+    colors: list[str],
+    bin_size: list[float],
+    curve_type="kde",
+    show_hist=True,
+    show_curve=True,
+    histnorm="probability density",
+):
+    """替代 plotly.figure_factory.create_distplot"""
+    fig = go.Figure()
+
+    for i, (data, label) in enumerate(zip(hist_data, group_labels)):
+        data = np.asarray(data)
+        data = data[~np.isnan(data)]  # 去 NaN
+        color = colors[i % len(colors)]
+
+        # 直方图
+        if show_hist:
+            if bin_size is not None and bin_size[i] is not None:
+                xbins = dict(start=data.min(), end=data.max(), size=bin_size[i])
+            else:
+                xbins = None
+            fig.add_trace(
+                go.Histogram(
+                    x=data,
+                    name=label,
+                    marker_color=color,
+                    opacity=0.7,
+                    histnorm=histnorm,
+                    xbins=xbins,
+                )
+            )
+
+        # 曲线
+        if show_curve:
+            pad = 0.2 * (data.max() - data.min())
+            x_grid = np.linspace(data.min() - pad, data.max() + pad, 200)
+            if curve_type == "kde":
+                if len(data) < 2 or np.all(data == data[0]):
+                    y = None
+                else:
+                    y = stats.gaussian_kde(data)(x_grid)
+            elif curve_type == "normal":
+                mu, std = data.mean(), data.std()
+                y = stats.norm.pdf(x_grid, mu, std)
+            else:  # 'none'
+                y = None
+            if y is not None:
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_grid,
+                        y=y,
+                        mode="lines",
+                        name=f"{label} {curve_type}",
+                        line=dict(color=color, width=2),
+                    )
+                )
+
+    # 叠加多组时用 overlay 而不是堆叠
+    if show_hist and len(hist_data) > 1:
+        fig.update_layout(barmode="overlay")
+
+    return fig
+
+
 with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("Compared to"), all_users)
@@ -200,8 +342,32 @@ with st.container(border=True):
     df_o_stats = generate_stats_dataframe(df_o, stats_indexes)
     df_c_stats = generate_stats_dataframe(df_c, stats_indexes)
     with st.expander(_("Statistics")):
-        st.dataframe(df_o_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
-        st.dataframe(df_c_stats, column_order=("min", "median", "max", "mean", "winsor_mean", "std", "95% CI", "N"))
+        st.dataframe(
+            df_o_stats,
+            column_order=(
+                "min",
+                "median",
+                "max",
+                "mean",
+                "winsor_mean",
+                "std",
+                "95% CI",
+                "N",
+            ),
+        )
+        st.dataframe(
+            df_c_stats,
+            column_order=(
+                "min",
+                "median",
+                "max",
+                "mean",
+                "winsor_mean",
+                "std",
+                "95% CI",
+                "N",
+            ),
+        )
 
     memorized_selectbox(_("Index"), "cat_comp_index", stats_indexes, "b_star_rating")
 
@@ -217,10 +383,24 @@ with st.container(border=True):
     st.table(df_stats_ind_joined)
     can_show_chart_pr = True
     if df_o_stats.at[st.session_state.cat_comp_index, "std"] == 0:
-        st.error(_("%s of user %s is constant (%s)") % (st.session_state.cat_comp_index, user, df_o_stats.at[st.session_state.cat_comp_index, "mean"]))
+        st.error(
+            _("%s of user %s is constant (%s)")
+            % (
+                st.session_state.cat_comp_index,
+                user,
+                df_o_stats.at[st.session_state.cat_comp_index, "mean"],
+            )
+        )
         can_show_chart_pr = False
     if df_c_stats.at[st.session_state.cat_comp_index, "std"] == 0:
-        st.error(_("%s of user %s is constant (%s)") % (st.session_state.cat_comp_index, comp_user, df_c_stats.at[st.session_state.cat_comp_index, "mean"]))
+        st.error(
+            _("%s of user %s is constant (%s)")
+            % (
+                st.session_state.cat_comp_index,
+                comp_user,
+                df_c_stats.at[st.session_state.cat_comp_index, "mean"],
+            )
+        )
         can_show_chart_pr = False
     if can_show_chart_pr:
         df_ind_joined = pd.DataFrame(
@@ -230,7 +410,7 @@ with st.container(border=True):
             },
         )
         fig_data = [list(df_o_ind), list(df_c_ind)]
-        fig = ff.create_distplot(
+        fig = create_distplot(
             fig_data,
             [user, comp_user],
             bin_size=[calc_bin_size(data) for data in fig_data],
@@ -264,11 +444,17 @@ with st.container(border=True):
                 memorized_selectbox("x", "cat_x2", list(df.columns), "score_nf")
             with col2:
                 memorized_selectbox("s", "cat_s", list(df.columns), "b_star_rating")
-            memorized_multiselect("y", "cat_y2", list(df.columns), ["b_aim_difficulty", "b_speed_difficulty"])
+            memorized_multiselect(
+                "y",
+                "cat_y2",
+                list(df.columns),
+                ["b_aim_difficulty", "b_speed_difficulty"],
+            )
             fig_data = [list(df_o[col]) for col in st.session_state.cat_y2]
-            fig = ff.create_distplot(
+            fig = create_distplot(
                 fig_data,
                 st.session_state.cat_y2,
+                colors=[CO],
                 bin_size=[calc_bin_size(data) for data in fig_data],
             )
             st.plotly_chart(fig)
@@ -292,6 +478,11 @@ with st.container(border=True):
 with st.container(border=True):
     st.markdown(_("## Filtered Data"))
     if len(st.session_state.cat_col) > 0:
-        st.dataframe(df_o.sort_values(by="ts", ascending=False), key="cat_dataframe", column_order=st.session_state.cat_col, hide_index=True)
+        st.dataframe(
+            df_o.sort_values(by="ts", ascending=False),
+            key="cat_dataframe",
+            column_order=st.session_state.cat_col,
+            hide_index=True,
+        )
     else:
         st.dataframe(df_o, key="cat_dataframe")

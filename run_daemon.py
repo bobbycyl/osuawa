@@ -20,7 +20,13 @@ import redis
 import requests
 import schedule
 import toml
-from clayutil.cmdparse import CollectionField as Coll, Command, CommandParser, IntegerField as Int, JSONStringField as JsonStr
+from clayutil.cmdparse import (
+    CollectionField as Coll,
+    Command,
+    CommandParser,
+    IntegerField as Int,
+    JSONStringField as JsonStr,
+)
 from ossapi.ossapiv2_async import Domain, Scope, Score
 from sqlalchemy import create_engine, text
 
@@ -85,7 +91,14 @@ if _url is None:
     _database = st_secrets["connections"]["osuawa"]["database"]
     if _dialect == "mysql":
         _dialect += "+pymysql"
-    _url = "%s://%s:%s@%s:%s/%s" % (_dialect, _username, _password, _host, _port, _database)
+    _url = "%s://%s:%s@%s:%s/%s" % (
+        _dialect,
+        _username,
+        _password,
+        _host,
+        _port,
+        _database,
+    )
     with contextlib.suppress(KeyError):
         _ca_path = st_secrets["connections"]["osuawa"]["create_engine_kwargs"]["connect_args"]["ssl"]["ca"]
 else:
@@ -107,7 +120,17 @@ r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 logger.info("redis connected")
 
 # Daemon 使用 Client Credentials Grant
-daemon_awa = Osuawa(loop, st_secrets["args"]["client_id"], st_secrets["args"]["client_secret"], None, [Scope.PUBLIC.value], Domain.OSU.value, "daemon", None, None)
+daemon_awa = Osuawa(
+    loop,
+    st_secrets["args"]["client_id"],
+    st_secrets["args"]["client_secret"],
+    None,
+    [Scope.PUBLIC.value],
+    Domain.OSU.value,
+    "daemon",
+    None,
+    None,
+)
 logger.info("osu! api initialized")
 sem = asyncio.Semaphore(1)
 
@@ -195,7 +218,9 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
         for pk, _v in completed_recent_scores_compact.items():
             score = asdict(
                 _v,
-                dict_factory=lambda items: {k.lstrip("_"): None if v is None else v.timestamp() if isinstance(v, datetime) else int(v) if isinstance(v, bool) else orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v for k, v in items},
+                dict_factory=lambda items: {
+                    k.lstrip("_"): (None if v is None else (v.timestamp() if isinstance(v, datetime) else (int(v) if isinstance(v, bool) else (orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v)))) for k, v in items
+                },
             )
             score["score_id"] = pk
             # todo: 默认的时间是倒序的，是否有必要转换为正序？（可能只是一些强迫症需求罢了）
@@ -299,7 +324,12 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     return playlist_beatmaps_db
 
 
-def _update_beatmap(action: Literal["add", "update0", "update1", "delete"], beatmap: Optional[DatabasePlaylistBeatmap], old_bid: Optional[int] = None, old_mods: Optional[str] = None) -> tuple[int, str, int, str]:
+def _update_beatmap(
+    action: Literal["add", "update0", "update1", "delete"],
+    beatmap: Optional[DatabasePlaylistBeatmap],
+    old_bid: Optional[int] = None,
+    old_mods: Optional[str] = None,
+) -> tuple[int, str, int, str]:
     """更新课题谱面（包括删除）
 
     如果 beatmap 不为 None，则 old_bid 必须为 None
@@ -410,7 +440,10 @@ def refresh_oauth_token():
             refresh_token = pickle.load(fi_b)
         _oauth_r = requests.post(
             Awapi.TOKEN_URL.format(domain=Domain.OSU.value),
-            headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
             data={
                 "client_id": st_secrets["args"]["client_id"],
                 "client_secret": st_secrets["args"]["client_secret"],
@@ -477,7 +510,12 @@ def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
     for i, beatmap_to_update in enumerate(obj):
         database_beatmap = database_beatmaps[i] if has_spec_list[i] else None
         action = beatmap_to_update.get("action")
-        new_bid, new_mods, old_bid, old_mods = _update_beatmap(action, database_beatmap, beatmap_to_update.get("old_bid"), beatmap_to_update.get("old_mods"))
+        new_bid, new_mods, old_bid, old_mods = _update_beatmap(
+            action,
+            database_beatmap,
+            beatmap_to_update.get("old_bid"),
+            beatmap_to_update.get("old_mods"),
+        )
         match action:
             case "add":
                 add_list.append((new_bid, new_mods))
@@ -487,7 +525,16 @@ def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
                 update_list.append((new_bid, new_mods))
             case "update1":  # update from old mods
                 update_list.append((new_bid, "%s -> %s" % (old_mods, new_mods)))
-    return "; ".join([_build_update_return_message(action_verb, action_list) for action_verb, action_list in [("added", add_list), ("updated", update_list), ("deleted", delete_list)]])
+    return "; ".join(
+        [
+            _build_update_return_message(action_verb, action_list)
+            for action_verb, action_list in [
+                ("added", add_list),
+                ("updated", update_list),
+                ("deleted", delete_list),
+            ]
+        ]
+    )
 
 
 cmdparser = CommandParser()
@@ -504,7 +551,10 @@ refresh_oauth_token()
 
 while True:
     try:
-        result: Optional[tuple[str, str]] = cast(Optional[tuple[str, str]], cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)))
+        result: Optional[tuple[str, str]] = cast(
+            Optional[tuple[str, str]],
+            cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)),
+        )
         if result is None:
             schedule.run_pending()
             continue

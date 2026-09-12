@@ -20,7 +20,14 @@ from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
-from osuawa.components import delete_user_cache, get_session_id, load_value, register_commands, task_board, update_user_cache
+from osuawa.components import (
+    delete_user_cache,
+    get_session_id,
+    load_value,
+    register_commands,
+    task_board,
+    update_user_cache,
+)
 from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code
 
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
@@ -71,14 +78,33 @@ def init_logger_fh():
     _init_logger_fh(logger.get_logger(st.session_state.username))
 
 
-def register_awa(ci, cs, ru, sc, dm, oauth_token: Optional[str] = None, oauth_refresh_token: Optional[str] = None):
+def register_awa(
+    ci,
+    cs,
+    ru,
+    sc,
+    dm,
+    oauth_token: Optional[str] = None,
+    oauth_refresh_token: Optional[str] = None,
+):
     # 在 session_state 中持久化事件循环
     if "async_loop" not in st.session_state:
         # 创建新的事件循环
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         st.session_state.async_loop = loop
-    return Osuawa(st.session_state.async_loop, ci, cs, ru, sc, dm, st.context.cookies["ajs_anonymous_id"], oauth_token, oauth_refresh_token, debugging_mode=st.session_state._debugging_mode)
+    return Osuawa(
+        st.session_state.async_loop,
+        ci,
+        cs,
+        ru,
+        sc,
+        dm,
+        st.context.cookies["ajs_anonymous_id"],
+        oauth_token,
+        oauth_refresh_token,
+        debugging_mode=st.session_state._debugging_mode,
+    )
 
 
 def toggle_immersive():
@@ -156,15 +182,43 @@ if "awa" not in st.session_state:
     try:
         if "code" not in st.query_params:
             # check if oauth token is pickled
-            if "ajs_anonymous_id" in st.context.cookies and os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"])):
-                with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "rb") as fi_b:
+            if "ajs_anonymous_id" in st.context.cookies and os.path.exists(
+                os.path.join(
+                    C.OAUTH_TOKEN_DIRECTORY.value,
+                    "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
+                )
+            ):
+                with open(
+                    os.path.join(
+                        C.OAUTH_TOKEN_DIRECTORY.value,
+                        "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
+                    ),
+                    "rb",
+                ) as fi_b:
                     _oauth_token = pickle.load(fi_b)
-                with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "rb") as fi_b:
+                with open(
+                    os.path.join(
+                        C.OAUTH_TOKEN_DIRECTORY.value,
+                        "refresh",
+                        "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
+                    ),
+                    "rb",
+                ) as fi_b:
                     _refresh_token = pickle.load(fi_b)
                 prepare_bar.progress(67, text=get_an_osu_meme())
             else:
                 st.info(_("Please click the button below to authorize the app."))
-                st.link_button(_("OAuth2 URL"), "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s" % (Awapi.AUTH_CODE_URL.format(domain=domain), html_escape(str(client_id)), html_escape(redirect_url), "+".join(scopes)), icon=":material/login:")
+                st.link_button(
+                    _("OAuth2 URL"),
+                    "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s"
+                    % (
+                        Awapi.AUTH_CODE_URL.format(domain=domain),
+                        html_escape(str(client_id)),
+                        html_escape(redirect_url),
+                        "+".join(scopes),
+                    ),
+                    icon=":material/login:",
+                )
                 prepare_bar.empty()
                 st.stop()
         else:
@@ -172,8 +226,17 @@ if "awa" not in st.session_state:
             prepare_bar.progress(50, text=get_an_osu_meme())
             _oauth_r = requests.post(
                 Awapi.TOKEN_URL.format(domain=domain),
-                headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
-                data={"client_id": client_id, "client_secret": client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_url},
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": redirect_url,
+                },
             ).json()
             if _oauth_r.get("error"):
                 raise NotImplementedError(_oauth_r.get("error_description"))
@@ -182,15 +245,36 @@ if "awa" not in st.session_state:
             _refresh_token = _oauth_r.get("refresh_token")
             prepare_bar.progress(67, text=get_an_osu_meme())
 
-        awa = register_awa(client_id, client_secret, redirect_url, scopes, domain, _oauth_token, _refresh_token)
+        awa = register_awa(
+            client_id,
+            client_secret,
+            redirect_url,
+            scopes,
+            domain,
+            _oauth_token,
+            _refresh_token,
+        )
         # set variables
         awa.tz = st.context.timezone
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
         # save token
-        with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "wb") as fi_b:
+        with open(
+            os.path.join(
+                C.OAUTH_TOKEN_DIRECTORY.value,
+                "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
+            ),
+            "wb",
+        ) as fi_b:
             pickle.dump(_oauth_token, fi_b)
-        with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", "%s.pickle" % st.context.cookies["ajs_anonymous_id"]), "wb") as fi_b:
+        with open(
+            os.path.join(
+                C.OAUTH_TOKEN_DIRECTORY.value,
+                "refresh",
+                "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
+            ),
+            "wb",
+        ) as fi_b:
             pickle.dump(_refresh_token, fi_b)
     except Exception as e:
         # 由于自动刷新功能由 daemon 承担，这里理论上不会触发
@@ -201,7 +285,12 @@ if "awa" not in st.session_state:
         if "code" in st.query_params:
             st.query_params.pop("code")
         st.stop()
-    update_user_cache(st.session_state.user, st.session_state.username, st.context.cookies["ajs_anonymous_id"], time())
+    update_user_cache(
+        st.session_state.user,
+        st.session_state.username,
+        st.context.cookies["ajs_anonymous_id"],
+        time(),
+    )
 
     if st.session_state._debugging_mode:
         from random import randint
@@ -211,7 +300,14 @@ if "awa" not in st.session_state:
         ctx = get_script_run_ctx()
         if ctx is None:
             raise RuntimeError("no streamlit runtime")
-        logger.get_logger("streamlit").info("renamed %s to %s at session %s" % (st.session_state.awa.user[1], st.session_state.username, get_session_id()))
+        logger.get_logger("streamlit").info(
+            "renamed %s to %s at session %s"
+            % (
+                st.session_state.awa.user[1],
+                st.session_state.username,
+                get_session_id(),
+            )
+        )
 
     prepare_bar.progress(100, text=get_an_osu_meme())
     if st.session_state.user in admins:
@@ -224,7 +320,13 @@ if "fh_init" not in st.session_state:
     st.session_state.fh_init = True
     init_logger_fh()
 register_commands({"simple": True})
-pg_list = [pg_homepage, pg_score_visualizer, pg_playlist_generator, pg_recorder, pg_room_spectator]
+pg_list = [
+    pg_homepage,
+    pg_score_visualizer,
+    pg_playlist_generator,
+    pg_recorder,
+    pg_room_spectator,
+]
 if st.session_state.perm >= 2:
     pg_list.append(st.Page("tools/Easter_egg.py", title=_("Easter Egg")))
 pg = st.navigation(pg_list)
@@ -249,13 +351,32 @@ if "basic_interaction_enabled" not in st.session_state or st.session_state.get("
 
 with st.sidebar:
     if not st.session_state.immersive_active:
-        st.button(_("Immersive Mode"), on_click=toggle_immersive, use_container_width=True, shortcut="F", icon=":material/expand_content:", disabled=not st.session_state.basic_interaction_enabled)
+        st.button(
+            _("Immersive Mode"),
+            on_click=toggle_immersive,
+            use_container_width=True,
+            shortcut="F",
+            icon=":material/expand_content:",
+            disabled=not st.session_state.basic_interaction_enabled,
+        )
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
-    if st.button(_("Task Board"), use_container_width=True, icon=":material/assignment:", disabled=not st.session_state.basic_interaction_enabled):
+    if st.button(
+        _("Task Board"),
+        use_container_width=True,
+        icon=":material/assignment:",
+        disabled=not st.session_state.basic_interaction_enabled,
+    ):
         st.dialog(_("Task Board"), width="large")(task_board)()
 if st.session_state.immersive_active:
     with st.container(gap="xxsmall"):
-        st.button(_("Exit Immersive Mode"), on_click=toggle_immersive, type="tertiary", shortcut="F", icon=":material/collapse_content:", disabled=not st.session_state.basic_interaction_enabled)
+        st.button(
+            _("Exit Immersive Mode"),
+            on_click=toggle_immersive,
+            type="tertiary",
+            shortcut="F",
+            icon=":material/collapse_content:",
+            disabled=not st.session_state.basic_interaction_enabled,
+        )
 # _page_manager = get_script_run_ctx().pages_manager
 # _current_page_script_hash = _page_manager.current_page_script_hash
 # _url_path = _page_manager.get_pages().get(_current_page_script_hash, None).get("url_pathname", "")

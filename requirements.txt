@@ -11,7 +11,7 @@ orjson
 ossapi[async]
 pandas
 pillow
-plotly<5
+plotly
 psycopg2-binary
 py7zr
 pymysql

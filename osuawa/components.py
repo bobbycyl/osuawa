@@ -78,7 +78,12 @@ def save_value(key: str) -> None:
         st.session_state["_%s_value" % key] = st.session_state[key]
         # semi-persistent storage
         # ./.streamlit/.components/<ajs_anonymous_id>
-        with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"])) as db:
+        with shelve.open(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                st.context.cookies["ajs_anonymous_id"],
+            )
+        ) as db:
             db[key] = st.session_state["_%s_value" % key]
 
 
@@ -86,7 +91,15 @@ def del_value(key: str, prefix_mode: bool = False) -> None:
     keys = [k for k in get_union_keys() if k.startswith(key)] if prefix_mode else [key]
     del key
 
-    with st.session_state.lck, shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"])) as db:
+    with (
+        st.session_state.lck,
+        shelve.open(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                st.context.cookies["ajs_anonymous_id"],
+            )
+        ) as db,
+    ):
         for key in keys:
             if "_%s_value" % key in st.session_state:
                 del st.session_state["_%s_value" % key]
@@ -98,10 +111,30 @@ def del_value(key: str, prefix_mode: bool = False) -> None:
 
 def check_shelve_exists() -> bool:
     return "ajs_anonymous_id" in st.context.cookies and (
-        os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"]))
-        or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.bak" % st.context.cookies["ajs_anonymous_id"]))
-        or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dat" % st.context.cookies["ajs_anonymous_id"]))
-        or os.path.exists(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, "%s.dir" % st.context.cookies["ajs_anonymous_id"]))
+        os.path.exists(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                st.context.cookies["ajs_anonymous_id"],
+            )
+        )
+        or os.path.exists(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                "%s.bak" % st.context.cookies["ajs_anonymous_id"],
+            )
+        )
+        or os.path.exists(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                "%s.dat" % st.context.cookies["ajs_anonymous_id"],
+            )
+        )
+        or os.path.exists(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                "%s.dir" % st.context.cookies["ajs_anonymous_id"],
+            )
+        )
     )
 
 
@@ -110,7 +143,13 @@ def get_union_keys() -> set:
     session_state_keys = set(st.session_state.keys())
     shelve_keys = set()
     if check_shelve_exists():
-        with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"]), "r") as db:
+        with shelve.open(
+            os.path.join(
+                C.COMPONENTS_SHELVES_DIRECTORY.value,
+                st.context.cookies["ajs_anonymous_id"],
+            ),
+            "r",
+        ) as db:
             shelve_keys = set(db.keys())
     return session_state_keys | shelve_keys
 
@@ -123,7 +162,13 @@ def load_value(key: str, default_value: Any) -> None:
             # ./.streamlit/.components/<ajs_anonymous_id>
             # 由于 load 可能发生在第一次访问（save 不会），所以还要检查 cookie 是否存在
             if check_shelve_exists():
-                with shelve.open(os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, st.context.cookies["ajs_anonymous_id"]), "r") as db:
+                with shelve.open(
+                    os.path.join(
+                        C.COMPONENTS_SHELVES_DIRECTORY.value,
+                        st.context.cookies["ajs_anonymous_id"],
+                    ),
+                    "r",
+                ) as db:
                     st.session_state["_%s_value" % key] = db.get(key, default_value)
             else:
                 st.session_state["_%s_value" % key] = default_value
@@ -134,28 +179,66 @@ def load_value(key: str, default_value: Any) -> None:
 
 def memorized_multiselect(label: str, key: str, options: list, default_value: Any, **kwargs) -> None:
     load_value(key, default_value)
-    st.multiselect(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+    st.multiselect(
+        label,
+        options,
+        key=key,
+        on_change=save_value,
+        args=(key,),
+        disabled=not st.session_state.basic_interaction_enabled,
+        **kwargs,
+    )
 
 
 def memorized_selectbox(label: str, key: str, options: list, default_value: Any, **kwargs) -> None:
     load_value(key, default_value)
-    st.selectbox(label, options, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+    st.selectbox(
+        label,
+        options,
+        key=key,
+        on_change=save_value,
+        args=(key,),
+        disabled=not st.session_state.basic_interaction_enabled,
+        **kwargs,
+    )
 
 
 def memorized_checkbox(label: str, key: str, default_value: bool, **kwargs) -> None:
     load_value(key, default_value)
-    st.checkbox(label, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+    st.checkbox(
+        label,
+        key=key,
+        on_change=save_value,
+        args=(key,),
+        disabled=not st.session_state.basic_interaction_enabled,
+        **kwargs,
+    )
 
 
 def memorized_number_input(label: str, key: str, default_value: int | float, **kwargs) -> None:
     load_value(key, default_value)
     step = kwargs.get("step") or (1 if isinstance(default_value, int) else 0.01)
-    st.number_input(label, key=key, step=step, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+    st.number_input(
+        label,
+        key=key,
+        step=step,
+        on_change=save_value,
+        args=(key,),
+        disabled=not st.session_state.basic_interaction_enabled,
+        **kwargs,
+    )
 
 
 def memorized_text_input(label: str, key: str, default_value: str, **kwargs) -> None:
     load_value(key, default_value)
-    st.text_input(label, key=key, on_change=save_value, args=(key,), disabled=not st.session_state.basic_interaction_enabled, **kwargs)
+    st.text_input(
+        label,
+        key=key,
+        on_change=save_value,
+        args=(key,),
+        disabled=not st.session_state.basic_interaction_enabled,
+        **kwargs,
+    )
 
 
 def get_session_id() -> str:
@@ -197,17 +280,77 @@ _r = get_redis_connection()
 
 def commands():
     return [
-        Command("reg", _("Register command parser"), [JsonStr("obj", True)], 0, register_commands),
-        Command("fman", "Show or clean files", [Str("action"), Str("filename", True)], 4, files_action),
-        Command("logfilter", "Tail logs", [Int("n", True), Str("keyword", True)], 3, tail_log),
+        Command(
+            "reg",
+            _("Register command parser"),
+            [JsonStr("obj", True)],
+            0,
+            register_commands,
+        ),
+        Command(
+            "fman",
+            "Show or clean files",
+            [Str("action"), Str("filename", True)],
+            4,
+            files_action,
+        ),
+        Command(
+            "logfilter",
+            "Tail logs",
+            [Int("n", True), Str("keyword", True)],
+            3,
+            tail_log,
+        ),
         Command("apicache", "Show api cache", [], 3, CachedMixIn.get_cache),
-        Command("where", _("Get user info"), [Str("username")], 0, st.session_state.awa.get_user_info),
-        Command("save", _("Save user's recent scores"), [Int("user")], 1, lambda user: push_task_with_session_state("save %d" % user)),
-        Command("score", _("Get and display score"), [Int("score_id")], 0, st.session_state.awa.get_score),
-        Command("scores", _("Get and display user scores of a beatmap"), [Int("beatmap"), Int("user", True)], 0, st.session_state.awa.get_user_beatmap_scores),
-        Command("gen", _("Generate local playlists"), [Bool("fast_mode", True), Bool("output_zip", True)], 4, generate_all_playlists),
-        Command("cat", _("Display user's recent scores (only saved scores are available)"), [Int("user")], 0, cat),
-        Command("strain", _("Draw strain graph of an osu! beatmap (converted beatmap supported)"), [Int("beatmap"), Str("mod_settings", True), Int("ruleset_id", True)], 0, draw_strain_graph),
+        Command(
+            "where",
+            _("Get user info"),
+            [Str("username")],
+            0,
+            st.session_state.awa.get_user_info,
+        ),
+        Command(
+            "save",
+            _("Save user's recent scores"),
+            [Int("user")],
+            1,
+            lambda user: push_task_with_session_state("save %d" % user),
+        ),
+        Command(
+            "score",
+            _("Get and display score"),
+            [Int("score_id")],
+            0,
+            st.session_state.awa.get_score,
+        ),
+        Command(
+            "scores",
+            _("Get and display user scores of a beatmap"),
+            [Int("beatmap"), Int("user", True)],
+            0,
+            st.session_state.awa.get_user_beatmap_scores,
+        ),
+        Command(
+            "gen",
+            _("Generate local playlists"),
+            [Bool("fast_mode", True), Bool("output_zip", True)],
+            4,
+            generate_all_playlists,
+        ),
+        Command(
+            "cat",
+            _("Display user's recent scores (only saved scores are available)"),
+            [Int("user")],
+            0,
+            cat,
+        ),
+        Command(
+            "strain",
+            _("Draw strain graph of an osu! beatmap (converted beatmap supported)"),
+            [Int("beatmap"), Str("mod_settings", True), Int("ruleset_id", True)],
+            0,
+            draw_strain_graph,
+        ),
         Command("sessions", _("Display all active sessions"), [], 0, query_all_sessions),
         Command("invalidate", _("Invalidate all sessions"), [], 0, invalidate_user_cache),
     ]
@@ -225,7 +368,11 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
                 # 三个主要文件夹
                 # todo: components shelves 是否需要检查
                 ret_md += "## Storage\n\n"
-                for action_path in [C.OUTPUT_DIRECTORY.value, C.UPLOADED_DIRECTORY.value, C.BEATMAPS_CACHE_DIRECTORY.value]:
+                for action_path in [
+                    C.OUTPUT_DIRECTORY.value,
+                    C.UPLOADED_DIRECTORY.value,
+                    C.BEATMAPS_CACHE_DIRECTORY.value,
+                ]:
                     size, count = get_size_and_count(action_path)
                     size = format_size(size)
                     # - **action_path**: size, count
@@ -314,8 +461,16 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
             st.write(_("skipped %s") % m.group(1))
             continue
         try:
-            copyfile("./playlists/raw/%s" % m.group(0), "./playlists/%s.properties" % m.group(1))
-            o = OsuPlaylist(st.session_state.awa, "./playlists/%s.properties" % m.group(1), suffix, 1)
+            copyfile(
+                "./playlists/raw/%s" % m.group(0),
+                "./playlists/%s.properties" % m.group(1),
+            )
+            o = OsuPlaylist(
+                st.session_state.awa,
+                "./playlists/%s.properties" % m.group(1),
+                suffix,
+                1,
+            )
             if suffix == " — original playlist":
                 for element in o.beatmap_list:
                     original_playlist_beatmaps[element["bid"]] = original_playlist_beatmaps.get(element["bid"], 0) + 1
@@ -401,7 +556,11 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
                       AND TS <= :end_date
                     ORDER BY TS""",
                 ),
-                params={"user": user, "begin_date": begin_date_ts, "end_date": end_date_ts},
+                params={
+                    "user": user,
+                    "begin_date": begin_date_ts,
+                    "end_date": end_date_ts,
+                },
             )
         rows = res.fetchall()
     # 处理 bool 和 datetime
@@ -522,7 +681,12 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
     # 生成 osu_tools 所能接受的样式
     my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(mods)
-    calculator = calculate_performance(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), ruleset, my_attr.osu_tool_mods, my_attr.osu_tool_mod_options)
+    calculator = calculate_performance(
+        os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
+        ruleset,
+        my_attr.osu_tool_mods,
+        my_attr.osu_tool_mod_options,
+    )
     osupp_attr = next(calculator)
     # todo: 这里要更新
     strains: dict[str, list[float]] = osupp_attr["__ek_strains_of_skills"]  # type: ignore[union-attr]
@@ -530,9 +694,21 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
     timeline = sorted(set(chain.from_iterable(timelines.values())))
     df_strain = pd.DataFrame({**strains, "time": timeline})
     df_strain["time"] = pd.to_datetime(df_strain["time"], unit="ms")
-    df_strain = df_strain.melt(id_vars="time", value_vars=list(strains.keys()), var_name="skill", value_name="strain")
+    df_strain = df_strain.melt(
+        id_vars="time",
+        value_vars=list(strains.keys()),
+        var_name="skill",
+        value_name="strain",
+    )
 
-    fig = px.line(df_strain, x="time", y="strain", color="skill", title="Difficulty Graph of %d" % beatmap.id, color_discrete_sequence=px.colors.qualitative.D3)
+    fig = px.line(
+        df_strain,
+        x="time",
+        y="strain",
+        color="skill",
+        title="Difficulty Graph of %d" % beatmap.id,
+        color_discrete_sequence=px.colors.qualitative.D3,
+    )
     fig.update_layout(
         xaxis_title="Start Time",
         yaxis_title="Strain",
@@ -549,7 +725,10 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
 def query_all_sessions() -> pd.DataFrame:
     df = _conn.query("SELECT * FROM USER_CACHE WHERE USER_ID = %d" % st.session_state.user)
     df["LAST_SEEN_TS"] = pd.to_datetime(df["LAST_SEEN_TS"], unit="s").dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz)  # type: ignore[union-attr]
-    df.rename(columns={"AID": "ajs_anonymous_id", "LAST_SEEN_TS": "last_seen_datetime"}, inplace=True)
+    df.rename(
+        columns={"AID": "ajs_anonymous_id", "LAST_SEEN_TS": "last_seen_datetime"},
+        inplace=True,
+    )
     df.drop(columns=["USER_ID", "USERNAME"], inplace=True)
     return df
 
@@ -600,7 +779,12 @@ def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -
                 VALUES(:user, :username, :aid, :last_seen_ts)
                 %s""" % upsert_text,
             ),
-            params={"user": user, "username": username, "aid": aid, "last_seen_ts": last_seen_ts},
+            params={
+                "user": user,
+                "username": username,
+                "aid": aid,
+                "last_seen_ts": last_seen_ts,
+            },
         )
         s.commit()
 
@@ -637,7 +821,12 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
             None,
             placeholder=_("Select a mod"),
             label_visibility="collapsed",
-            format_func=lambda acronym: "%s %-4s - %s" % (get_mod_type_mapping(all_mod_indexes[acronym]["Type"], True), acronym, all_mod_indexes[acronym]["Name"]),
+            format_func=lambda acronym: "%s %-4s - %s"
+            % (
+                get_mod_type_mapping(all_mod_indexes[acronym]["Type"], True),
+                acronym,
+                all_mod_indexes[acronym]["Name"],
+            ),
         )
         with st.container(gap="xxsmall"):
             if st.session_state[_mod_key] is not None:
@@ -647,7 +836,11 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
                 for _setting in _settings:
                     _name = _setting["Name"]
                     _type = _setting["Type"]
-                    _mod_setting_key = "modgen_mod_%d_%s_%s" % (key_suffix, _name, _type)
+                    _mod_setting_key = "modgen_mod_%d_%s_%s" % (
+                        key_suffix,
+                        _name,
+                        _type,
+                    )
                     _desc = _setting["Description"]
                     _enum_values = _setting["EnumValues"]
                     _default = _setting["Default"] or _setting["UnderlyingValue"]
@@ -658,15 +851,34 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
                             step = _setting["DefaultPrecision"]
                             if step is None:
                                 step = 1 if _setting["IsInteger"] else 0.01
-                            memorized_number_input(_name, _mod_setting_key, _default or 0.0, help=_desc, step=step)
+                            memorized_number_input(
+                                _name,
+                                _mod_setting_key,
+                                _default or 0.0,
+                                help=_desc,
+                                step=step,
+                            )
                         case "string":
                             memorized_text_input(_name, _mod_setting_key, _default or "", help=_desc)
                         case "enum":
                             assert _enum_values is not None
-                            memorized_selectbox(_name, _mod_setting_key, _enum_values, _default or _enum_values[0], help=_desc)
+                            memorized_selectbox(
+                                _name,
+                                _mod_setting_key,
+                                _enum_values,
+                                _default or _enum_values[0],
+                                help=_desc,
+                            )
                     # 如果选中值非不是默认值，才添加模组设置
                     if st.session_state[_mod_setting_key] != _default:
-                        ret.append("%s_%s=%s" % (st.session_state[_mod_key], _name, st.session_state[_mod_setting_key]))
+                        ret.append(
+                            "%s_%s=%s"
+                            % (
+                                st.session_state[_mod_key],
+                                _name,
+                                st.session_state[_mod_setting_key],
+                            )
+                        )
     return ret
 
 
@@ -690,7 +902,9 @@ def mods_generator(ret_type: Literal[0]) -> list[str]: ...
 
 
 @overload
-def mods_generator(ret_type: Literal[1]) -> list[dict[str, str | dict[str, str | float | bool]]]: ...
+def mods_generator(
+    ret_type: Literal[1],
+) -> list[dict[str, str | dict[str, str | float | bool]]]: ...
 
 
 @overload
@@ -708,7 +922,13 @@ def mods_generator(ret_type=None):
         st.session_state.modgen_increment = 0
         st.session_state.modgen_selected = []  # 这是一个整型列表，用于储存选中的模组索引
         st.session_state.modgen_ret = deque(maxlen=1)
-    ruleset = st.segmented_control(_("Ruleset"), options=["osu", "taiko", "catch", "mania"], key="modgen_ruleset", default="osu", width="stretch")
+    ruleset = st.segmented_control(
+        _("Ruleset"),
+        options=["osu", "taiko", "catch", "mania"],
+        key="modgen_ruleset",
+        default="osu",
+        width="stretch",
+    )
     lines: list[str] = []
     # st.write(st.session_state.modgen_increment)
     # st.write(st.session_state.modgen_selected)
@@ -716,7 +936,12 @@ def mods_generator(ret_type=None):
     for modgen_suffix in st.session_state.modgen_selected:
         col_content, col_del = st.columns([0.85, 0.15])
         with col_content:
-            lines.extend(_mod_customization(modgen_suffix, cast(Literal["osu", "taiko", "catch", "mania"], ruleset)))
+            lines.extend(
+                _mod_customization(
+                    modgen_suffix,
+                    cast(Literal["osu", "taiko", "catch", "mania"], ruleset),
+                )
+            )
         with col_del:
             st.button(
                 _("Delete"),
@@ -738,7 +963,13 @@ def mods_generator(ret_type=None):
     with st.expander(_("Preview")):
         mods = make_unstandardized_mods_from_lines("SP", "\n".join(lines))
         mods.remove({"acronym": "SP"})
-        mods, _mod_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(mods, cast(Literal[0, 1, 2, 3], ["osu", "taiko", "catch", "mania"].index(ruleset or "osu")))
+        mods, _mod_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(
+            mods,
+            cast(
+                Literal[0, 1, 2, 3],
+                ["osu", "taiko", "catch", "mania"].index(ruleset or "osu"),
+            ),
+        )
         lines = osu_tool_mods + osu_tool_mod_options
         st.code("\n".join(lines), language="properties")
         st.json(mods)
@@ -802,7 +1033,14 @@ def task_board():
             tasks_to_show.append((task_id, status_mapping))
 
     # 使用 tabs 分类显示
-    tab1, tab2, tab3, tab4 = st.tabs([":material/format_list_bulleted: all", ":material/pending: pending", ":material/check_circle: success", ":material/error: error"])
+    tab1, tab2, tab3, tab4 = st.tabs(
+        [
+            ":material/format_list_bulleted: all",
+            ":material/pending: pending",
+            ":material/check_circle: success",
+            ":material/error: error",
+        ]
+    )
     with tab1:
         tasks_grid(tasks_to_show)
     with tab2:

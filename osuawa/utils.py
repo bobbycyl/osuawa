@@ -12,7 +12,18 @@ from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
 from time import sleep, time, time_ns
-from typing import Any, Literal, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
+from typing import (
+    Any,
+    Literal,
+    NamedTuple,
+    NewType,
+    Optional,
+    TypedDict,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+)
 
 import numpy as np
 import orjson
@@ -28,7 +39,13 @@ from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
 from osupp.difficulty import calculate_difficulty as calculate_difficulty, get_all_mods
-from osupp.performance import CatchPerformance, ManiaPerformance, OsuPerformance, TaikoPerformance, calculate_performance as calculate_performance
+from osupp.performance import (
+    CatchPerformance,
+    ManiaPerformance,
+    OsuPerformance,
+    TaikoPerformance,
+    calculate_performance as calculate_performance,
+)
 from osupp.util import validate_mod_setting_value
 from redis import Redis
 
@@ -107,7 +124,17 @@ def hex_to_rgba(hex_color, alpha=0.3):
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def get_mod_type_mapping(mod_type: Literal["DifficultyReduction", "DifficultyIncrease", "Automation", "Conversion", "Fun", "System"], alt: bool = False):
+def get_mod_type_mapping(
+    mod_type: Literal[
+        "DifficultyReduction",
+        "DifficultyIncrease",
+        "Automation",
+        "Conversion",
+        "Fun",
+        "System",
+    ],
+    alt: bool = False,
+):
     match mod_type:
         case "DifficultyReduction":
             return "🟢" if alt else "#b1fe66"
@@ -281,7 +308,12 @@ def _check_index_range(v: int, max_index: int, setting_name: str, acronym: str):
 class SimpleDifficultyAttribute(object):
 
     @classmethod
-    def validate_and_transform_mods(cls, mods: list[dict[str, Any]], ruleset_id: Optional[Literal[0, 1, 2, 3]] = None, beatmap_path: Optional[str] = None) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str]]:
+    def validate_and_transform_mods(
+        cls,
+        mods: list[dict[str, Any]],
+        ruleset_id: Optional[Literal[0, 1, 2, 3]] = None,
+        beatmap_path: Optional[str] = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str]]:
         """验证并转换标准 mods 列表
 
         :param mods: 模组列表
@@ -316,7 +348,14 @@ class SimpleDifficultyAttribute(object):
         # 1. 首先把所有 mods 分为五堆："DifficultyReduction", "DifficultyIncrease", "Automation", "Conversion", "Fun", "System"
         # 2. 每一堆内，按照 acronym 字符串排序
         # 3. 拼接所有堆，得到 standardized_mods
-        _mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy = [], [], [], [], [], []
+        _mods_dr, _mods_di, _mods_au, _mods_co, _mods_fu, _mods_sy = (
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
 
         standardized_mods = []
         mods_dict = {}  # {acronym, settings}
@@ -372,7 +411,12 @@ class SimpleDifficultyAttribute(object):
                             if setting_value.isdecimal():
                                 # 这里要确保前导 0 被正确剔除，如 "01" -> "1"
                                 int_setting_value = int(setting_value)
-                                _check_index_range(int_setting_value, len(enum_values), setting_name, acronym)
+                                _check_index_range(
+                                    int_setting_value,
+                                    len(enum_values),
+                                    setting_name,
+                                    acronym,
+                                )
                                 setting_value = str(int_setting_value)
                             else:
                                 raise ValueError("unknown enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
@@ -415,7 +459,15 @@ class SimpleDifficultyAttribute(object):
 
         return standardized_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
 
-    def __init__(self, cs: float, accuracy: float, ar: float, bpm: float, hit_length: int, ruleset_id: Literal[0, 1, 2, 3] = 0):
+    def __init__(
+        self,
+        cs: float,
+        accuracy: float,
+        ar: float,
+        bpm: float,
+        hit_length: int,
+        ruleset_id: Literal[0, 1, 2, 3] = 0,
+    ):
         self.cs = cs
         self.accuracy = accuracy
         self.hit_window = calc_hit_window(self.accuracy)
@@ -437,7 +489,12 @@ class SimpleDifficultyAttribute(object):
         self.ruleset_id = ruleset_id
 
     def set_mods(self, mods: list):
-        self.standardized_mods, mods_dict, self.osu_tool_mods, self.osu_tool_mod_options = self.validate_and_transform_mods(mods, self.ruleset_id)
+        (
+            self.standardized_mods,
+            mods_dict,
+            self.osu_tool_mods,
+            self.osu_tool_mod_options,
+        ) = self.validate_and_transform_mods(mods, self.ruleset_id)
         if "NF" in mods_dict:
             self.is_nf = True
         if "HD" in mods_dict:
@@ -1031,7 +1088,7 @@ def make_unstandardized_mods_from_lines(slot: str, lines: str) -> list[dict[str,
                     value = str(value)
                 mods_dict[acronym].update({mod_setting: value})
 
-    return [{"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym} for acronym, _settings in mods_dict.items()]
+    return [({"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym}) for acronym, _settings in mods_dict.items()]
 
 
 def safe_norm(value, type_: type = str):

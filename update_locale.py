@@ -14,11 +14,22 @@ if __name__ == "__main__":
     print("langs:", langs)
 
     for lang in langs:
-        subprocess.run("pybabel extract -o {} --input-dirs . --project=osuawa".format(os.path.join(C.LOCALE.value, lang, "LC_MESSAGES", "messages.po.new")), encoding="utf-8")
-        subprocess.run("msgmerge -U messages.po messages.po.new", cwd=os.path.join(C.LOCALE.value, lang, "LC_MESSAGES"), encoding="utf-8")
+        subprocess.run(
+            "pybabel extract -o {} --input-dirs . --project=osuawa".format(os.path.join(C.LOCALE.value, lang, "LC_MESSAGES", "messages.po.new")),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            "msgmerge -U messages.po messages.po.new",
+            cwd=os.path.join(C.LOCALE.value, lang, "LC_MESSAGES"),
+            encoding="utf-8",
+        )
         try:
             os.remove(os.path.join(C.LOCALE.value, lang, "LC_MESSAGES", "messages.po.new"))
             os.remove(os.path.join(C.LOCALE.value, lang, "LC_MESSAGES", "messages.po~"))
         except FileNotFoundError:
             pass
-        subprocess.run("msgfmt messages.po", cwd=os.path.join(C.LOCALE.value, lang, "LC_MESSAGES"), encoding="utf-8")
+        subprocess.run(
+            "msgfmt messages.po",
+            cwd=os.path.join(C.LOCALE.value, lang, "LC_MESSAGES"),
+            encoding="utf-8",
+        )

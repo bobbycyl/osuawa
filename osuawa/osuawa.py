@@ -39,7 +39,19 @@ from clayutil.sutil import sha256sum
 from clayutil.validator import Integer
 from fontfallback import writing
 from ossapi.models import MultiplayerScore, RoomPlaylistItem
-from ossapi.ossapiv2_async import Beatmap, Domain, GameMode, GameModeT, Grant, MultiplayerScores, OssapiAsync, Room, Scope, Score, User
+from ossapi.ossapiv2_async import (
+    Beatmap,
+    Domain,
+    GameMode,
+    GameModeT,
+    Grant,
+    MultiplayerScores,
+    OssapiAsync,
+    Room,
+    Scope,
+    Score,
+    User,
+)
 
 from .utils import (
     C,
@@ -64,7 +76,15 @@ from .utils import (
 
 if platform.system() == "Windows":
     fribidi = ctypes.CDLL(os.path.join(assets_dir, "fribidi-0.dll"))
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, UnidentifiedImageError
+from PIL import (
+    Image,
+    ImageDraw,
+    ImageEnhance,
+    ImageFilter,
+    ImageFont,
+    UnidentifiedImageError,
+)
+
 _d = _datetime
 
 
@@ -133,7 +153,12 @@ class CachedMixIn:
 
     @classmethod
     def get_cache(cls):
-        return MappingProxyType({"global": dict(CachedMixIn._global_cache), "isolated": dict(CachedMixIn._isolated_cache)})
+        return MappingProxyType(
+            {
+                "global": dict(CachedMixIn._global_cache),
+                "isolated": dict(CachedMixIn._isolated_cache),
+            }
+        )
 
 
 class Awapi(OssapiAsync):
@@ -156,7 +181,20 @@ class Awapi(OssapiAsync):
     ):
         if scopes is None:
             scopes = [Scope.PUBLIC]
-        super().__init__(client_id, client_secret, redirect_uri, scopes, grant=grant, strict=strict, token_directory=token_directory, token_key=token_key, access_token=access_token, refresh_token=refresh_token, domain=domain, api_version=api_version)
+        super().__init__(
+            client_id,
+            client_secret,
+            redirect_uri,
+            scopes,
+            grant=grant,
+            strict=strict,
+            token_directory=token_directory,
+            token_key=token_key,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            domain=domain,
+            api_version=api_version,
+        )
 
     @override
     def _new_authorization_grant(self, client_id, client_secret, redirect_uri, scopes) -> Never:
@@ -184,13 +222,35 @@ class Osuawa(CachedMixIn):
         "V2",
     }
 
-    def __init__(self, loop: AbstractEventLoop, client_id, client_secret, redirect_url, scopes, domain, token_key: str, oauth_token: Optional[str], oauth_refresh_token: Optional[str], *, debugging_mode: bool = False):
+    def __init__(
+        self,
+        loop: AbstractEventLoop,
+        client_id,
+        client_secret,
+        redirect_url,
+        scopes,
+        domain,
+        token_key: str,
+        oauth_token: Optional[str],
+        oauth_refresh_token: Optional[str],
+        *,
+        debugging_mode: bool = False,
+    ):
         super().__init__()
         self.loop: AbstractEventLoop = loop
         # 不再暴露 api，而是使用 async_cached_method 包裹用得到的方法，避免直接调用原始方法
         # 后续可能针对 post 请求单独建立函数映射
         # 对于 get_me 等和用户相关的方法，必须将 isolated 设置为 True
-        self.__api: Awapi = Awapi(client_id, client_secret, redirect_url, scopes, domain=domain, token_key=token_key, access_token=oauth_token, refresh_token=oauth_refresh_token)
+        self.__api: Awapi = Awapi(
+            client_id,
+            client_secret,
+            redirect_url,
+            scopes,
+            domain=domain,
+            token_key=token_key,
+            access_token=oauth_token,
+            refresh_token=oauth_refresh_token,
+        )
         if debugging_mode:
             self.__debugging_expose_api()
         no_identify = True
@@ -215,7 +275,13 @@ class Osuawa(CachedMixIn):
         return await self.__api.friends()
 
     @async_cached_method()
-    async def api_user(self, user: int | str, *, mode: Optional[GameModeT] = None, key: Optional[Literal["id", "username"]] = None) -> User:
+    async def api_user(
+        self,
+        user: int | str,
+        *,
+        mode: Optional[GameModeT] = None,
+        key: Optional[Literal["id", "username"]] = None,
+    ) -> User:
         return await self.__api.user(user, mode=mode, key=key)
 
     @async_cached_method()
@@ -245,7 +311,14 @@ class Osuawa(CachedMixIn):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> list[Score]:
-        return await self.__api.user_scores(user_id, type_, include_fails=include_fails, mode=mode, limit=limit, offset=offset)
+        return await self.__api.user_scores(
+            user_id,
+            type_,
+            include_fails=include_fails,
+            mode=mode,
+            limit=limit,
+            offset=offset,
+        )
 
     @async_cached_method()
     async def api_room(self, room_id: int) -> Room:
@@ -446,7 +519,19 @@ class BeatmapCover(object):
     font_mono_italic = os.path.join(assets_dir, "MapleMono-NF-CN-Italic.ttf")
     font_mono_semibold = os.path.join(assets_dir, "MapleMono-NF-CN-SemiBold.ttf")
 
-    def __init__(self, beatmap: Beatmap, block_color, stars1: float, cs: str, ar: str, od: str, bpm: str, hit_length: str, max_combo: str, stars2: Optional[float] = None):
+    def __init__(
+        self,
+        beatmap: Beatmap,
+        block_color,
+        stars1: float,
+        cs: str,
+        ar: str,
+        od: str,
+        bpm: str,
+        hit_length: str,
+        max_combo: str,
+        stars2: Optional[float] = None,
+    ):
         self.beatmap = beatmap
         self.block_color = block_color
         self.stars1 = stars1
@@ -502,18 +587,36 @@ class BeatmapCover(object):
         mod_theme_len = 50
         stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
         title_u = self.beatmap.beatmapset().title_unicode
-        t1_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u, len_set - stars_len - text_pos - padding - mod_theme_len, False)
+        t1_cut = cut_text(
+            draw,
+            ImageFont.truetype(font=self.font_sans, size=72),
+            title_u,
+            len_set - stars_len - text_pos - padding - mod_theme_len,
+            False,
+        )
         if t1_cut != "":
             title_u2 = title_u[len(t1_cut) :]
             title_u = "%s\n%s" % (t1_cut, title_u2)
-            t2_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=72), title_u2, len_set - padding - mod_theme_len, True)
+            t2_cut = cut_text(
+                draw,
+                ImageFont.truetype(font=self.font_sans, size=72),
+                title_u2,
+                len_set - padding - mod_theme_len,
+                True,
+            )
             if t2_cut != "":
                 title_u = "%s\n%s" % (t1_cut, t2_cut)
 
         # 绘制左侧文字
         fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
         version = self.beatmap.version
-        ver_cut = cut_text(draw, ImageFont.truetype(font=self.font_sans, size=48), version, len_set - padding - mod_theme_len - 328, True)
+        ver_cut = cut_text(
+            draw,
+            ImageFont.truetype(font=self.font_sans, size=48),
+            version,
+            len_set - padding - mod_theme_len - 328,
+            True,
+        )
         if ver_cut != "":
             version = ver_cut
         writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
@@ -528,18 +631,84 @@ class BeatmapCover(object):
         writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
         writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
-        writing.draw_text_v2(draw, (42, 260), self.beatmap.beatmapset().artist_unicode, "#1f1f1f", fonts, 48, "ls")
-        writing.draw_text_v2(draw, (40, 257), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
-        writing.draw_text_v2(draw, (40, 258), self.beatmap.beatmapset().artist_unicode, "white", fonts, 48, "ls")
-        draw.text((42 + 1188, 326), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill="#1f1f2a", anchor="rs")
-        draw.text((41 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
-        draw.text((40 + 1188, 324), self.beatmap.beatmapset().creator, font=ImageFont.truetype(font=self.font_sans_medium, size=48), fill=(180, 235, 250), anchor="rs")
+        writing.draw_text_v2(
+            draw,
+            (42, 260),
+            self.beatmap.beatmapset().artist_unicode,
+            "#1f1f1f",
+            fonts,
+            48,
+            "ls",
+        )
+        writing.draw_text_v2(
+            draw,
+            (40, 257),
+            self.beatmap.beatmapset().artist_unicode,
+            "white",
+            fonts,
+            48,
+            "ls",
+        )
+        writing.draw_text_v2(
+            draw,
+            (40, 258),
+            self.beatmap.beatmapset().artist_unicode,
+            "white",
+            fonts,
+            48,
+            "ls",
+        )
+        draw.text(
+            (42 + 1188, 326),
+            self.beatmap.beatmapset().creator,
+            font=ImageFont.truetype(font=self.font_sans_medium, size=48),
+            fill="#1f1f2a",
+            anchor="rs",
+        )
+        draw.text(
+            (41 + 1188, 324),
+            self.beatmap.beatmapset().creator,
+            font=ImageFont.truetype(font=self.font_sans_medium, size=48),
+            fill=(180, 235, 250),
+            anchor="rs",
+        )
+        draw.text(
+            (40 + 1188, 324),
+            self.beatmap.beatmapset().creator,
+            font=ImageFont.truetype(font=self.font_sans_medium, size=48),
+            fill=(180, 235, 250),
+            anchor="rs",
+        )
 
         # 在右上角绘制星数
-        draw.rounded_rectangle([len_set + text_pos - stars_len - padding, 32, len_set + text_pos + padding, 106], 72, fill="#1f1f1f")
-        draw.rounded_rectangle([len_set + text_pos - stars_len - padding, 30, len_set + text_pos + padding, 104], 72, fill=calc_star_rating_color(self.stars1))
+        draw.rounded_rectangle(
+            [
+                len_set + text_pos - stars_len - padding,
+                32,
+                len_set + text_pos + padding,
+                106,
+            ],
+            72,
+            fill="#1f1f1f",
+        )
+        draw.rounded_rectangle(
+            [
+                len_set + text_pos - stars_len - padding,
+                30,
+                len_set + text_pos + padding,
+                104,
+            ],
+            72,
+            fill=calc_star_rating_color(self.stars1),
+        )
 
-        draw.text((len_set + text_pos, 37), self.stars, anchor="ra", font=ImageFont.truetype(font=self.font_mono_semibold, size=48), fill=self.stars_text_color)
+        draw.text(
+            (len_set + text_pos, 37),
+            self.stars,
+            anchor="ra",
+            font=ImageFont.truetype(font=self.font_mono_semibold, size=48),
+            fill=self.stars_text_color,
+        )
 
         # 绘制mod主题色
         draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=(40, 40, 40))
@@ -552,12 +721,35 @@ class BeatmapCover(object):
 
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
-    custom_mods_acronym = {"NM", "TB", "FM", "F+", "SP"}  # NM 其实是官方的模组，但是为了逻辑便捷以及符合惯例，这里加上了
-    mod_color = {"NM": "#107fb9", "HD": "#b97f10", "HR": "#b91010", "EZ": "#10b97f", "DT": "#7f10b9", "NC": "#b9107f", "HT": "#7f7f7f", "FM": "#40507f", "TB": "#7f4050", "F+": "#507f40"}
+    custom_mods_acronym = {
+        "NM",
+        "TB",
+        "FM",
+        "F+",
+        "SP",
+    }  # NM 其实是官方的模组，但是为了逻辑便捷以及符合惯例，这里加上了
+    mod_color = {
+        "NM": "#107fb9",
+        "HD": "#b97f10",
+        "HR": "#b91010",
+        "EZ": "#10b97f",
+        "DT": "#7f10b9",
+        "NC": "#b9107f",
+        "HT": "#7f7f7f",
+        "FM": "#40507f",
+        "TB": "#7f4050",
+        "F+": "#507f40",
+    }
 
     # osz_type = OneOf("full", "novideo", "mini")
 
-    def __init__(self, awa_instance: Osuawa, playlist_filename: str, suffix: str = "", css_style: Optional[int] = None):
+    def __init__(
+        self,
+        awa_instance: Osuawa,
+        playlist_filename: str,
+        suffix: str = "",
+        css_style: Optional[int] = None,
+    ):
         self.__awa_instance = awa_instance  # 如果用 self.awa 的话 st.session_state.awa 的 IDE 类型推断会出错
         p = Properties(playlist_filename)
         p.load()
@@ -608,17 +800,26 @@ class OsuPlaylist(object):
         self.tmp_d = Downloader(self.tmp_dir)
         if not os.path.exists(os.path.join(os.path.split(playlist_filename)[0], "images")):
             os.mkdir(os.path.join(os.path.split(playlist_filename)[0], "images"))
-            with open(os.path.join(os.path.split(playlist_filename)[0], "images", "total_length.svg"), "w") as fo:
+            with open(
+                os.path.join(os.path.split(playlist_filename)[0], "images", "total_length.svg"),
+                "w",
+            ) as fo:
                 fo.write(
                     """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
                     <svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 562.5 562.5" height="562.5" width="562.5" xml:space="preserve" version="1.1" id="svg4155"><metadata id="metadata4161"><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/><dc:title/></cc:Work></rdf:RDF></metadata><defs id="defs4159"/><g transform="matrix(1.25,0,0,-1.25,0,562.5)" id="g4163"><g id="g4165"/><g id="g4167"><path id="path4169" style="fill:#441188;fill-opacity:0;fill-rule:evenodd;stroke:none" d="m 410.8631,145.698 c 43.7972,43.7973 43.7972,114.8067 0,158.604 0,0 -106.5611,106.5611 -106.5611,106.5611 -43.7973,43.7972 -114.8067,43.7972 -158.604,0 0,0 -106.56109,-106.5611 -106.56109,-106.5611 -43.797259,-43.7973 -43.797259,-114.8067 0,-158.604 0,0 106.56109,-106.56109 106.56109,-106.56109 43.7973,-43.797259 114.8067,-43.797259 158.604,0 0,0 106.5611,106.56109 106.5611,106.56109 z"/><path id="path4171" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 250,293.75 c 0,3.5156 -2.7344,6.25 -6.25,6.25 0,0 -12.5,0 -12.5,0 -3.5156,0 -6.25,-2.7344 -6.25,-6.25 0,0 0,-68.75 0,-68.75 0,0 -43.75,0 -43.75,0 -3.5156,0 -6.25,-2.7344 -6.25,-6.25 0,0 0,-12.5 0,-12.5 0,-3.5156 2.7344,-6.25 6.25,-6.25 0,0 62.5,0 62.5,0 3.5156,0 6.25,2.7344 6.25,6.25 0,0 0,87.5 0,87.5 z M 331.25,225 c 0,-58.5938 -47.6563,-106.25 -106.25,-106.25 -58.5938,0 -106.25,47.6562 -106.25,106.25 0,58.5938 47.6562,106.25 106.25,106.25 58.5937,0 106.25,-47.6562 106.25,-106.25 z M 375,225 C 375,307.8125 307.8125,375 225,375 142.1875,375 75,307.8125 75,225 75,142.1875 142.1875,75 225,75 c 82.8125,0 150,67.1875 150,150 z"/></g></g></svg>""",
                 )
-            with open(os.path.join(os.path.split(playlist_filename)[0], "images", "bpm.svg"), "w") as fo:
+            with open(
+                os.path.join(os.path.split(playlist_filename)[0], "images", "bpm.svg"),
+                "w",
+            ) as fo:
                 fo.write(
                     """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
                     <svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 562.5 562.5" height="562.5" width="562.5" xml:space="preserve" version="1.1" id="svg4155"><metadata id="metadata4161"><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/><dc:title/></cc:Work></rdf:RDF></metadata><defs id="defs4159"/><g transform="matrix(1.25,0,0,-1.25,0,562.5)" id="g4163"><g id="g4165"/><g id="g4167"><path id="path4169" style="fill:#441188;fill-opacity:0;fill-rule:evenodd;stroke:none" d="m 410.8631,145.698 c 43.7972,43.7973 43.7972,114.8067 0,158.604 0,0 -106.5611,106.5611 -106.5611,106.5611 -43.7973,43.7972 -114.8067,43.7972 -158.604,0 0,0 -106.56109,-106.5611 -106.56109,-106.5611 -43.797259,-43.7973 -43.797259,-114.8067 0,-158.604 0,0 106.56109,-106.56109 106.56109,-106.56109 43.7973,-43.797259 114.8067,-43.797259 158.604,0 0,0 106.5611,106.56109 106.5611,106.56109 z"/><path id="path4171" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 331.25,225 c 0,-58.5938 -47.6563,-106.25 -106.25,-106.25 -58.5938,0 -106.25,47.6562 -106.25,106.25 0,58.5938 47.6562,106.25 106.25,106.25 58.5937,0 106.25,-47.6562 106.25,-106.25 z M 375,225 C 375,307.8125 307.8125,375 225,375 142.1875,375 75,307.8125 75,225 75,142.1875 142.1875,75 225,75 c 82.8125,0 150,67.1875 150,150 z"/><path id="path4173" style="fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke:none" d="m 178.3058,157.4747 c 0,0 -0.9539,0.0227 -0.9539,0.0227 0,0 -0.9517,0.0683 -0.9517,0.0683 0,0 -0.9473,0.1135 -0.9473,0.1135 0,0 -0.9408,0.1586 -0.9408,0.1586 0,0 -0.9322,0.2033 -0.9322,0.2033 0,0 -0.9215,0.2475 -0.9215,0.2475 0,0 -0.9086,0.2911 -0.9086,0.2911 0,0 -0.8937,0.3342 -0.8937,0.3342 0,0 -0.8767,0.3764 -0.8767,0.3764 0,0 -0.8578,0.4178 -0.8578,0.4178 0,0 -0.8369,0.4582 -0.8369,0.4582 0,0 -0.814,0.4977 -0.814,0.4977 0,0 -0.7895,0.5358 -0.7895,0.5358 0,0 -0.7629,0.573 -0.7629,0.573 0,0 -0.7348,0.6086 -0.7348,0.6086 0,0 -0.7049,0.643 -0.7049,0.643 0,0 -0.6734,0.6759 -0.6734,0.6759 0,0 -0.6404,0.7072 -0.6404,0.7072 0,0 -0.606,0.737 -0.606,0.737 0,0 -0.5701,0.7651 -0.5701,0.7651 0,0 -0.533,0.7913 -0.533,0.7913 0,0 -0.4947,0.8159 -0.4947,0.8159 0,0 -0.4552,0.8385 -0.4552,0.8385 0,0 -0.4146,0.8593 -0.4146,0.8593 0,0 -0.3732,0.8781 -0.3732,0.8781 0,0 -0.331,0.8949 -0.331,0.8949 0,0 -0.2878,0.9097 -0.2878,0.9097 0,0 -0.2442,0.9223 -0.2442,0.9223 0,0 -0.1998,0.933 -0.1998,0.933 0,0 -0.1552,0.9414 -0.1552,0.9414 0,0 -0.1101,0.9477 -0.1101,0.9477 0,0 -0.0647,0.9519 -0.0647,0.9519 0,0 -0.0193,0.954 -0.0193,0.954 0,0 0.0262,0.9537 0.0262,0.9537 0,0 0.0717,0.9514 0.0717,0.9514 0,0 0.117,0.947 0.117,0.947 0,0 0.162,0.9402 0.162,0.9402 0,0 0.2067,0.9315 0.2067,0.9315 0,0 0.2508,0.9205 0.2508,0.9205 0,0 0.2945,0.9076 0.2945,0.9076 0,0 0.3374,0.8924 0.3374,0.8924 0,0 46.8116,115.4124 46.8116,115.4124 0,0 0.3771,0.8701 0.3771,0.8701 0,0 0.418,0.8512 0.418,0.8512 0,0 0.4579,0.8304 0.4579,0.8304 0,0 0.4967,0.8078 0.4967,0.8078 0,0 0.5344,0.7834 0.5344,0.7834 0,0 0.571,0.7571 0.571,0.7571 0,0 0.6062,0.7292 0.6062,0.7292 0,0 0.6401,0.6997 0.6401,0.6997 0,0 0.6725,0.6685 0.6725,0.6685 0,0 0.7035,0.6359 0.7035,0.6359 0,0 0.7328,0.6018 0.7328,0.6018 0,0 0.7606,0.5665 0.7606,0.5665 0,0 0.7865,0.5297 0.7865,0.5297 0,0 0.8107,0.4919 0.8107,0.4919 0,0 0.8332,0.4529 0.8332,0.4529 0,0 0.8537,0.4128 0.8537,0.4128 0,0 0.8723,0.372 0.8723,0.372 0,0 0.8889,0.3302 0.8889,0.3302 0,0 0.9036,0.2877 0.9036,0.2877 0,0 0.9162,0.2445 0.9162,0.2445 0,0 0.9268,0.2008 0.9268,0.2008 0,0 0.9353,0.1567 0.9353,0.1567 0,0 0.9416,0.1121 0.9416,0.1121 0,0 0.9459,0.0674 0.9459,0.0674 0,0 0.948,0.0225 0.948,0.0225 0,0 0.948,-0.0225 0.948,-0.0225 0,0 0.9459,-0.0674 0.9459,-0.0674 0,0 0.9416,-0.1121 0.9416,-0.1121 0,0 0.9353,-0.1567 0.9353,-0.1567 0,0 0.9268,-0.2008 0.9268,-0.2008 0,0 0.9162,-0.2445 0.9162,-0.2445 0,0 0.9036,-0.2877 0.9036,-0.2877 0,0 0.8889,-0.3302 0.8889,-0.3302 0,0 0.8723,-0.372 0.8723,-0.372 0,0 0.8537,-0.4128 0.8537,-0.4128 0,0 0.8332,-0.4529 0.8332,-0.4529 0,0 0.8107,-0.4919 0.8107,-0.4919 0,0 0.7866,-0.5297 0.7866,-0.5297 0,0 0.7605,-0.5665 0.7605,-0.5665 0,0 0.7328,-0.6018 0.7328,-0.6018 0,0 0.7035,-0.6359 0.7035,-0.6359 0,0 0.6725,-0.6685 0.6725,-0.6685 0,0 0.6401,-0.6997 0.6401,-0.6997 0,0 0.6062,-0.7292 0.6062,-0.7292 0,0 0.571,-0.7571 0.571,-0.7571 0,0 0.5344,-0.7834 0.5344,-0.7834 0,0 0.4967,-0.8078 0.4967,-0.8078 0,0 0.4579,-0.8304 0.4579,-0.8304 0,0 0.418,-0.8512 0.418,-0.8512 0,0 0.3771,-0.8701 0.3771,-0.8701 0,0 46.8116,-115.4124 46.8116,-115.4124 0,0 0.3374,-0.8924 0.3374,-0.8924 0,0 0.2945,-0.9076 0.2945,-0.9076 0,0 0.2508,-0.9205 0.2508,-0.9205 0,0 0.2067,-0.9315 0.2067,-0.9315 0,0 0.162,-0.9402 0.162,-0.9402 0,0 0.117,-0.947 0.117,-0.947 0,0 0.0717,-0.9514 0.0717,-0.9514 0,0 0.0262,-0.9537 0.0262,-0.9537 0,0 -0.0192,-0.954 -0.0192,-0.954 0,0 -0.0648,-0.9519 -0.0648,-0.9519 0,0 -0.1101,-0.9477 -0.1101,-0.9477 0,0 -0.1551,-0.9414 -0.1551,-0.9414 0,0 -0.1999,-0.933 -0.1999,-0.933 0,0 -0.2442,-0.9223 -0.2442,-0.9223 0,0 -0.2878,-0.9097 -0.2878,-0.9097 0,0 -0.3309,-0.8949 -0.3309,-0.8949 0,0 -0.3732,-0.8781 -0.3732,-0.8781 0,0 -0.4147,-0.8593 -0.4147,-0.8593 0,0 -0.4552,-0.8385 -0.4552,-0.8385 0,0 -0.4946,-0.8159 -0.4946,-0.8159 0,0 -0.533,-0.7913 -0.533,-0.7913 0,0 -0.5702,-0.7651 -0.5702,-0.7651 0,0 -0.6059,-0.737 -0.6059,-0.737 0,0 -0.6405,-0.7072 -0.6405,-0.7072 0,0 -0.6734,-0.6759 -0.6734,-0.6759 0,0 -0.7049,-0.643 -0.7049,-0.643 0,0 -0.7348,-0.6086 -0.7348,-0.6086 0,0 -0.7629,-0.573 -0.7629,-0.573 0,0 -0.7894,-0.5358 -0.7894,-0.5358 0,0 -0.8141,-0.4977 -0.8141,-0.4977 0,0 -0.8369,-0.4582 -0.8369,-0.4582 0,0 -0.8578,-0.4178 -0.8578,-0.4178 0,0 -0.8767,-0.3764 -0.8767,-0.3764 0,0 -0.8937,-0.3342 -0.8937,-0.3342 0,0 -0.9086,-0.2911 -0.9086,-0.2911 0,0 -0.9214,-0.2475 -0.9214,-0.2475 0,0 -0.9322,-0.2033 -0.9322,-0.2033 0,0 -0.9409,-0.1586 -0.9409,-0.1586 0,0 -0.9473,-0.1135 -0.9473,-0.1135 0,0 -0.9517,-0.0683 -0.9517,-0.0683 0,0 -0.9538,-0.0227 -0.9538,-0.0227 0,0 -93.6231,0 -93.6231,0 z m 0,20 c 0,0 93.6231,0 93.6231,0 0,0 -46.8116,115.4124 -46.8116,115.4124 0,0 -46.8115,-115.4124 -46.8115,-115.4124 z"/><g transform="matrix(0.75,0,0,-0.75,0,450)" id="g4175"><path id="path4177" style="fill:none;stroke:#ffffff;stroke-width:26.66666985;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.41421402;stroke-dasharray:none;stroke-opacity:1" d="m 307.0915,367.5999 c 0,0 -84.6338,-106.4347 -84.6338,-106.4347"/></g></g></g></svg>""",
                 )
-            with open(os.path.join(os.path.split(playlist_filename)[0], "images", "count_circles.svg"), "w") as fo:
+            with open(
+                os.path.join(os.path.split(playlist_filename)[0], "images", "count_circles.svg"),
+                "w",
+            ) as fo:
                 fo.write(
                     """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
                     <svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 562.5 562.5" height="562.5" width="562.5" xml:space="preserve" version="1.1" id="svg4155"><metadata id="metadata4161"><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/><dc:title/></cc:Work></rdf:RDF></metadata><defs id="defs4159"/><g transform="matrix(1.25,0,0,-1.25,0,562.5)" id="g4163"><g id="g4165"/><g id="g4167"><path id="path4169" style="fill:#441188;fill-opacity:0;fill-rule:evenodd;stroke:none" d="m 410.8631,145.698 c 43.7972,43.7973 43.7972,114.8067 0,158.604 0,0 -106.5611,106.5611 -106.5611,106.5611 -43.7973,43.7972 -114.8067,43.7972 -158.604,0 0,0 -106.56109,-106.5611 -106.56109,-106.5611 -43.797259,-43.7973 -43.797259,-114.8067 0,-158.604 0,0 106.56109,-106.56109 106.56109,-106.56109 43.7973,-43.797259 114.8067,-43.797259 158.604,0 0,0 106.5611,106.56109 106.5611,106.56109 z"/><path id="path4171" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 331.25,225 c 0,-58.5938 -47.6563,-106.25 -106.25,-106.25 -58.5938,0 -106.25,47.6562 -106.25,106.25 0,58.5938 47.6562,106.25 106.25,106.25 58.5937,0 106.25,-47.6562 106.25,-106.25 z M 375,225 C 375,307.8125 307.8125,375 225,375 142.1875,375 75,307.8125 75,225 75,142.1875 142.1875,75 225,75 c 82.8125,0 150,67.1875 150,150 z"/><g transform="matrix(0.75,0,0,-0.75,0,450)" id="g4173"><path id="path4175" style="fill:none;stroke:#ffffff;stroke-width:26.66666985;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.41421402;stroke-dasharray:none;stroke-opacity:1" d="m 300,218.7598 c 44.8677,0 81.2402,36.3725 81.2402,81.2402 0,44.8677 -36.3725,81.2402 -81.2402,81.2402 -44.8677,0 -81.2402,-36.3725 -81.2402,-81.2402 0,-44.8677 36.3725,-81.2402 81.2402,-81.2402 z"/></g></g></g></svg>""",
@@ -651,11 +852,19 @@ class OsuPlaylist(object):
         my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
         my_attr.set_mods(mods)
         mods_ready: list[str] = to_readable_mods(my_attr.standardized_mods)  # 准备给用户看的 Mods 表现形式
-        osupp_attr = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods, mod_options=my_attr.osu_tool_mod_options)
+        osupp_attr = calculate_difficulty(
+            beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id),
+            mods=my_attr.osu_tool_mods,
+            mod_options=my_attr.osu_tool_mod_options,
+        )
         stars1 = osupp_attr["star_rating"]
         stars2 = None
         if is_fm:
-            osupp_attr_fm = calculate_difficulty(beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id), mods=my_attr.osu_tool_mods + ["HR"], mod_options=my_attr.osu_tool_mod_options)
+            osupp_attr_fm = calculate_difficulty(
+                beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id),
+                mods=my_attr.osu_tool_mods + ["HR"],
+                mod_options=my_attr.osu_tool_mod_options,
+            )
             stars2 = osupp_attr_fm["star_rating"]
         cs = "%s" % round(my_attr.cs, 2)
         ar = "0" if my_attr.ar is None else "%s" % round(my_attr.ar, 2)
@@ -668,12 +877,27 @@ class OsuPlaylist(object):
         max_combo = "%dx" % osupp_attr["max_combo"]
 
         # 绘制cover
-        cover = BeatmapCover(b, self.mod_color.get(slot_mod, "#eb50eb"), stars1, cs, ar, od, bpm, hit_length, max_combo, stars2)
+        cover = BeatmapCover(
+            b,
+            self.mod_color.get(slot_mod, "#eb50eb"),
+            stars1,
+            cs,
+            ar,
+            od,
+            bpm,
+            hit_length,
+            max_combo,
+            stars2,
+        )
         if self.css_style:
             # 将背景图片保存在统一文件夹内以减小占用
             if not os.path.exists(os.path.join(self.bg_dir, "%d.jpg" % bid)):
                 bg_d = Downloader(self.bg_dir)
-                bg_filename = await bg_d.async_start("https://assets.ppy.sh/beatmaps/%d/covers/fullsize.jpg" % b.beatmapset_id, "%d" % bid, headers)
+                bg_filename = await bg_d.async_start(
+                    "https://assets.ppy.sh/beatmaps/%d/covers/fullsize.jpg" % b.beatmapset_id,
+                    "%d" % bid,
+                    headers,
+                )
                 # bg_filename = await bg_d.async_start(f"https://beatconnect.io/bg/%d/%d" % (b.beatmapset_id, bid), "%d" % bid, headers)
                 try:
                     im: Image.Image = Image.open(bg_filename)
@@ -816,7 +1040,13 @@ class OsuPlaylist(object):
             "BID": b.id,
             "SID": b.beatmapset_id,
             "Beatmap Info (Click to View)": beatmap_info,
-            "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]" % (b.beatmapset().artist, b.beatmapset().title, b.beatmapset().creator, b.version),
+            "Artist - Title (Creator) [Version]": "%s - %s (%s) [%s]"
+            % (
+                b.beatmapset().artist,
+                b.beatmapset().title,
+                b.beatmapset().creator,
+                b.version,
+            ),
             "Stars": cover.stars,
             "SR": cover.stars.replace("󰓎", "★"),
             "BPM": cover.bpm,
@@ -850,8 +1080,27 @@ class OsuPlaylist(object):
         head_cols = ["#", "BID", "Beatmap Info (Click to View)"]
         head_standalone_cols = ["#", "BID", "SID", "Artist - Title (Creator) [Version]"]
         extra_cols = [c for c in self.custom_columns if c != "mods"]
-        tail_cols = ["Mods", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Notes"]
-        tail_standalone_cols = ["SR", "BPM", "Hit Length", "Max Combo", "CS", "AR", "OD", "Mods", "Notes"]
+        tail_cols = [
+            "Mods",
+            "BPM",
+            "Hit Length",
+            "Max Combo",
+            "CS",
+            "AR",
+            "OD",
+            "Notes",
+        ]
+        tail_standalone_cols = [
+            "SR",
+            "BPM",
+            "Hit Length",
+            "Max Combo",
+            "CS",
+            "AR",
+            "OD",
+            "Mods",
+            "Notes",
+        ]
         df_columns = head_cols + extra_cols + tail_cols
         df_standalone_columns = head_standalone_cols + extra_cols + tail_standalone_cols
         df = pd.DataFrame(playlist, columns=pd.Index(df_columns))
@@ -877,7 +1126,11 @@ class OsuPlaylist(object):
             self.suffix,
             html_footer,
         )
-        with open(self.playlist_filename.replace(".properties", ".html"), "w", encoding="utf-8") as fo:
+        with open(
+            self.playlist_filename.replace(".properties", ".html"),
+            "w",
+            encoding="utf-8",
+        ) as fo:
             if self.css_style:
                 html_head = """  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
@@ -903,9 +1156,23 @@ class OsuPlaylist(object):
                 html_body_suffix = """    </div>
   </div>
 """
-                fo.write(html_string.format(html_head=html_head, html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]), html_body_prefix=html_body_prefix, html_body_suffix=html_body_suffix))
+                fo.write(
+                    html_string.format(
+                        html_head=html_head,
+                        html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]),
+                        html_body_prefix=html_body_prefix,
+                        html_body_suffix=html_body_suffix,
+                    )
+                )
             else:
-                fo.write(html_string.format(html_head="", html_body=df.to_html(index=False, escape=False, classes="pd"), html_body_prefix="", html_body_suffix=""))
+                fo.write(
+                    html_string.format(
+                        html_head="",
+                        html_body=df.to_html(index=False, escape=False, classes="pd"),
+                        html_body_prefix="",
+                        html_body_suffix="",
+                    )
+                )
 
         # 清理临时文件夹
         rmtree(self.tmp_dir)

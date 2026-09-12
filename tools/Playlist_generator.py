@@ -14,9 +14,26 @@ from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 
 from osuawa import C, OsuPlaylist
-from osuawa.components import get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, save_value
+from osuawa.components import (
+    get_session_id,
+    init_page,
+    load_value,
+    memorized_selectbox,
+    mods_generator,
+    push_task_with_session_state,
+    save_value,
+)
 from osuawa.osuawa import Osuawa
-from osuawa.utils import BeatmapSpec, BeatmapToUpdate, RedisTaskId, _create_tmp_playlist_p, _make_query_uppercase, make_unstandardized_mods_from_lines, read_injected_code, safe_norm
+from osuawa.utils import (
+    BeatmapSpec,
+    BeatmapToUpdate,
+    RedisTaskId,
+    _create_tmp_playlist_p,
+    _make_query_uppercase,
+    make_unstandardized_mods_from_lines,
+    read_injected_code,
+    safe_norm,
+)
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -29,14 +46,24 @@ if TYPE_CHECKING:
 
 init_page(_("Playlist Generator") + " - osuawa")
 with st.sidebar:
-    if st.button(_("Mod Generator"), use_container_width=True, icon=":material/sync_alt:", disabled=not st.session_state.basic_interaction_enabled):
+    if st.button(
+        _("Mod Generator"),
+        use_container_width=True,
+        icon=":material/sync_alt:",
+        disabled=not st.session_state.basic_interaction_enabled,
+    ):
 
         @st.dialog(_("Mod Generator"), width="medium")
         def _mods_generator(ret_type=None):
             return mods_generator(ret_type)
 
         _mods_generator()
-    st.toggle(_("New Style"), key="new_style", value=True, disabled=not st.session_state.basic_interaction_enabled)
+    st.toggle(
+        _("New Style"),
+        key="new_style",
+        value=True,
+        disabled=not st.session_state.basic_interaction_enabled,
+    )
 
 conn = st.connection("osuawa", type="sql", ttl=3600)
 conn.query = _make_query_uppercase(conn.query)
@@ -82,7 +109,16 @@ def export_filtered_playlist():
         st.error(_("no beatmaps selected"))
     else:
         parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
-        specs_x = [BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0) for bid, mods, skill, note in zip(selected_rows["BID"], parsed_mods_list, selected_rows["SKILL_SLOT"], selected_rows["NOTES"], strict=True)]  # 直接用解析好的列表
+        specs_x = [
+            BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0)
+            for bid, mods, skill, note in zip(
+                selected_rows["BID"],
+                parsed_mods_list,
+                selected_rows["SKILL_SLOT"],
+                selected_rows["NOTES"],
+                strict=True,
+            )
+        ]  # 直接用解析好的列表
         tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
         st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
         with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
@@ -122,7 +158,12 @@ if st.session_state.perm >= 1:
             pool_input = st.selectbox(_("Pool"), available_pools, index=_pool_index, accept_new_options=True)
             if "modgen_ret" in st.session_state and len(st.session_state.modgen_ret) > 0:
                 st.session_state.gen_form_mod_settings = "\n".join(st.session_state.modgen_ret.pop()[0])
-            mod_settings_input = st.text_area(_("Mod Settings"), height="stretch", key="gen_form_mod_settings", placeholder="Tip: You can use `%s` to set mods." % _("Mod Generator"))
+            mod_settings_input = st.text_area(
+                _("Mod Settings"),
+                height="stretch",
+                key="gen_form_mod_settings",
+                placeholder="Tip: You can use `%s` to set mods." % _("Mod Generator"),
+            )
             # status_input = st.slider(_("Status"), 0, 2, 0)
         submitted = st.form_submit_button(_("Add"), use_container_width=True)
         if submitted:
@@ -162,7 +203,18 @@ if st.session_state.perm >= 1:
                 elif not specs_input_valid:
                     pass
                 else:
-                    push_beatmap_task([BeatmapToUpdate(action="add", name=uid, beatmap=spec_input, old_bid=None, old_mods=None) for spec_input in specs_input])
+                    push_beatmap_task(
+                        [
+                            BeatmapToUpdate(
+                                action="add",
+                                name=uid,
+                                beatmap=spec_input,
+                                old_bid=None,
+                                old_mods=None,
+                            )
+                            for spec_input in specs_input
+                        ]
+                    )
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -171,7 +223,11 @@ if st.session_state.perm >= 1:
         with filter_col2:
             memorized_selectbox(_("Status"), "gen_filter_status", [-1, 0, 1, 2], -1)
         with filter_col3:
-            st.text_input(_("Search"), key="gen_filter_search", placeholder=_("Search in BID, slot, notes etc."))
+            st.text_input(
+                _("Search"),
+                key="gen_filter_search",
+                placeholder=_("Search in BID, slot, notes etc."),
+            )
         with ctrl_col1:
             highlight_dup = st.checkbox(_("Highlight duplicates"), value=True)
             match_slot_sort = st.checkbox(_("Match sorting"), value=False)
@@ -212,7 +268,10 @@ if st.session_state.perm >= 1:
     if st.session_state.gen_filter_search:
         keyword_lower = st.session_state.gen_filter_search.lower()
         target_cols = ["BID", "SID", "INFO", "SKILL_SLOT", "MODS", "NOTES"]
-        mask = df[target_cols].apply(lambda x: x.astype(str).str.lower().str.contains(keyword_lower, na=False).any(), axis=1)
+        mask = df[target_cols].apply(
+            lambda x: x.astype(str).str.lower().str.contains(keyword_lower, na=False).any(),
+            axis=1,
+        )
         df = df[mask]
 
     # 新增 JS 辅助列
@@ -288,7 +347,11 @@ if st.session_state.perm >= 1:
             },
         ),
     )
-    gb.configure_default_column(cellStyle={"padding-left": "4px", "padding-right": "4px"}, resizable=True, suppressSizeToFit=True)
+    gb.configure_default_column(
+        cellStyle={"padding-left": "4px", "padding-right": "4px"},
+        resizable=True,
+        suppressSizeToFit=True,
+    )
     gb.configure_column(
         field="LINK",
         header_name="Cover",
@@ -303,8 +366,21 @@ if st.session_state.perm >= 1:
     # 因此用户可以更改的是与 mods_input 对应的 RAW_MODS 列
     # 可修改列: SKILL_SLOT, STATUS, COMMENTS, POOL, NOTES, RAW_MODS,
     cell_rules = {"clickable-cell-style": "true"}  # 这里的 "true" 是 JS 表达式
-    gb.configure_column("BID", header_name="BID", width=88, cellClassRules=cell_rules, cellStyle={"cursor": "copy"}, onCellClicked=copy_on_click_js)
-    gb.configure_column("SKILL_SLOT", header_name="Slot", editable=True, cellStyle=slot_cell_style_js, width=48)
+    gb.configure_column(
+        "BID",
+        header_name="BID",
+        width=88,
+        cellClassRules=cell_rules,
+        cellStyle={"cursor": "copy"},
+        onCellClicked=copy_on_click_js,
+    )
+    gb.configure_column(
+        "SKILL_SLOT",
+        header_name="Slot",
+        editable=True,
+        cellStyle=slot_cell_style_js,
+        width=48,
+    )
     gb.configure_column("MODS", header_name="Mods", width=68)
     gb.configure_column("INFO", header_name="Beatmap", width=350)
     gb.configure_column("SR", width=88)
@@ -318,7 +394,17 @@ if st.session_state.perm >= 1:
     gb.configure_column("SUGGESTOR", header_name="Suggestor", width=85)
     gb.configure_column("NOTES", header_name="Notes", editable=True, width=138)
     gb.configure_column("ADD_DATETIME", header_name="Added at", width=118)
-    gb.configure_column("COMMENTS", header_name="Comments", editable=True, wrapText=True, width=250, cellStyle={"white-space": "pre-wrap"}, autoHeight=False, cellEditor="agLargeTextCellEditor", cellEditorPopup=True)
+    gb.configure_column(
+        "COMMENTS",
+        header_name="Comments",
+        editable=True,
+        wrapText=True,
+        width=250,
+        cellStyle={"white-space": "pre-wrap"},
+        autoHeight=False,
+        cellEditor="agLargeTextCellEditor",
+        cellEditorPopup=True,
+    )
     gb.configure_column(
         "RAW_MODS",
         header_name="Raw Mods",
@@ -337,7 +423,15 @@ if st.session_state.perm >= 1:
         },
         cellEditorPopup=True,
     )
-    gb.configure_column("STATUS", header_name="Status", editable=True, cellEditor="agSelectCellEditor", cellEditorParams={"values": [0, 1, 2]}, width=25, filter=False)
+    gb.configure_column(
+        "STATUS",
+        header_name="Status",
+        editable=True,
+        cellEditor="agSelectCellEditor",
+        cellEditorParams={"values": [0, 1, 2]},
+        width=25,
+        filter=False,
+    )
 
     # 隐藏列
     for col in df.columns:
@@ -428,9 +522,25 @@ if st.session_state.perm >= 1:
                 beatmaps_to_update: list[BeatmapToUpdate] = []
                 for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate, strict=True):
                     if old_to_drop[1]:
-                        beatmaps_to_update.append(BeatmapToUpdate(action="update1", name=uid, beatmap=beatmap_to_upsert, old_bid=None, old_mods=old_to_drop[0]))
+                        beatmaps_to_update.append(
+                            BeatmapToUpdate(
+                                action="update1",
+                                name=uid,
+                                beatmap=beatmap_to_upsert,
+                                old_bid=None,
+                                old_mods=old_to_drop[0],
+                            )
+                        )
                     else:
-                        beatmaps_to_update.append(BeatmapToUpdate(action="update0", name=uid, beatmap=beatmap_to_upsert, old_bid=None, old_mods=None))
+                        beatmaps_to_update.append(
+                            BeatmapToUpdate(
+                                action="update0",
+                                name=uid,
+                                beatmap=beatmap_to_upsert,
+                                old_bid=None,
+                                old_mods=None,
+                            )
+                        )
                 push_beatmap_task(beatmaps_to_update)
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
             refresh()
@@ -438,14 +548,27 @@ if st.session_state.perm >= 1:
             export_filtered_playlist()
 
     with col_del, st.container(border=False, horizontal_alignment="right"):
-        if st.button(_("Delete"), type="primary", use_container_width=True, icon=":material/delete:"):
+        if st.button(
+            _("Delete"),
+            type="primary",
+            use_container_width=True,
+            icon=":material/delete:",
+        ):
             if selected_rows is None or len(selected_rows) == 0:
                 st.toast(_("no beatmaps selected"))
             else:
                 required_rows = selected_rows[["BID", "MODS"]]
                 beatmaps_to_delete: list[BeatmapToUpdate] = []
                 for row in required_rows.itertuples(index=False):
-                    beatmaps_to_delete.append(BeatmapToUpdate(action="delete", name=uid, beatmap=None, old_bid=int(row.BID), old_mods=str(row.MODS)))
+                    beatmaps_to_delete.append(
+                        BeatmapToUpdate(
+                            action="delete",
+                            name=uid,
+                            beatmap=None,
+                            old_bid=int(row.BID),
+                            old_mods=str(row.MODS),
+                        )
+                    )
                 push_beatmap_task(beatmaps_to_delete)
 
 st.divider()
@@ -475,7 +598,13 @@ if uploaded_file is not None:
         table = generate_playlist(playlist_filename, 1)
     else:
         table = generate_playlist(playlist_filename)
-        for pic in [x[0] for x in sorted([(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)], key=lambda x: x[1])]:
+        for pic in [
+            x[0]
+            for x in sorted(
+                [(x, int(x[: x.find("-")])) for x in os.listdir(covers_dir)],
+                key=lambda x: x[1],
+            )
+        ]:
             st.image(os.path.join(covers_dir, pic), caption=pic, width="stretch")
     st.divider()
     table.to_csv(csv_filename, encoding="utf-8", index=False)

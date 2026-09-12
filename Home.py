@@ -5,7 +5,14 @@ from typing import Any, TYPE_CHECKING, cast
 import orjson
 import pandas as pd
 import streamlit as st
-from clayutil.cmdparse import BoolField as Bool, CommandError, CommandParser, Field, IntegerField as Int, JSONStringField as JsonStr
+from clayutil.cmdparse import (
+    BoolField as Bool,
+    CommandError,
+    CommandParser,
+    Field,
+    IntegerField as Int,
+    JSONStringField as JsonStr,
+)
 from streamlit import logger
 from streamlit.errors import Error
 from streamlit_ace import st_ace
@@ -14,7 +21,13 @@ from zai.core import StreamResponse
 from zai.types.chat import ChatCompletionChunk, ChoiceDeltaToolCall
 
 from osuawa import LANGUAGES
-from osuawa.components import cat, get_session_id, init_page, memorized_selectbox, tail_log
+from osuawa.components import (
+    cat,
+    get_session_id,
+    init_page,
+    memorized_selectbox,
+    tail_log,
+)
 
 if TYPE_CHECKING:
 
@@ -337,9 +350,21 @@ def home_form():
         _key = "home_param_%d" % i
         match _param:
             case Int():
-                st.number_input(_param_name, value=0, step=1, key=_key, disabled=disabled, label_visibility="collapsed")
+                st.number_input(
+                    _param_name,
+                    value=0,
+                    step=1,
+                    key=_key,
+                    disabled=disabled,
+                    label_visibility="collapsed",
+                )
             case Bool():
-                st.checkbox(_param_name, key=_key, disabled=disabled, label_visibility="collapsed")
+                st.checkbox(
+                    _param_name,
+                    key=_key,
+                    disabled=disabled,
+                    label_visibility="collapsed",
+                )
             case JsonStr():
                 st_ace(
                     language="json",
@@ -350,7 +375,12 @@ def home_form():
                     tab_size=4,
                 )
             case _:
-                st.text_input(_param_name, key=_key, disabled=disabled, label_visibility="collapsed")
+                st.text_input(
+                    _param_name,
+                    key=_key,
+                    disabled=disabled,
+                    label_visibility="collapsed",
+                )
 
     for i in range(max_param_len):
         cur_param: Field = params[i]
@@ -370,7 +400,10 @@ def home_form():
                             st.session_state["home_param_%d_enabled" % j] = False
                             st.session_state["home_param_%d_checkbox" % j] = False
                 with col_c:
-                    _create_param_input(cur_param, disabled=not st.session_state["home_param_%d_enabled" % i])
+                    _create_param_input(
+                        cur_param,
+                        disabled=not st.session_state["home_param_%d_enabled" % i],
+                    )
 
     parts = [st.session_state.home_command_selector]
     for i in range(max_param_len):
@@ -413,9 +446,14 @@ if st.session_state.perm >= 1:
 ### DEBUGGING COMPONENTS AREA ###
 #################################
 if st.session_state._debugging_mode:
-    from osuawa.components import memorized_selectbox, memorized_multiselect
+    from osuawa.components import memorized_multiselect, memorized_selectbox
 
     memorized_selectbox("Memorized Selectbox Test", "test_memorized_selectbox", list("abcde"), "c")
-    memorized_multiselect("Memorized Multiselect Test", "test_memorized_multiselect", list("abcde"), ["c", "e"])
+    memorized_multiselect(
+        "Memorized Multiselect Test",
+        "test_memorized_multiselect",
+        list("abcde"),
+        ["c", "e"],
+    )
 
 st.text(_("Session: %s") % get_session_id())

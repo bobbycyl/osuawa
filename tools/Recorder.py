@@ -85,8 +85,20 @@ def tosu_main() -> None:
             df = df.groupby("user").first()
         if st.session_state.rec_tosu_prettify:
             # row background color by rank
-            column_order = ("username", "pp", "accuracy", "max_combo", "total_score", "mods", "ts")
-            st.dataframe(df.style.apply(tosu_df_style, axis=1), column_order=column_order, hide_index=True)
+            column_order = (
+                "username",
+                "pp",
+                "accuracy",
+                "max_combo",
+                "total_score",
+                "mods",
+                "ts",
+            )
+            st.dataframe(
+                df.style.apply(tosu_df_style, axis=1),
+                column_order=column_order,
+                hide_index=True,
+            )
         else:
             st.dataframe(df)
         with st.expander(_("Full info")):
@@ -125,7 +137,11 @@ user_scores_current = st.session_state.awa.run_coro(
     ),
 )
 st.write(user_scores_current)
-with lck, open(os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username, "w", encoding="utf-8") as fo:
+with lck, open(
+    os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username,
+    "w",
+    encoding="utf-8",
+) as fo:
     fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
 
 if st.button(_("Clear all caches"), icon=":material/cleaning_services:"):
