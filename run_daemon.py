@@ -506,9 +506,24 @@ def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
             name = beatmap_to_update["name"]
         else:
             has_spec_list.append(False)
-    database_beatmaps = create_tmp_playlist(name, beatmap_specs)
+    if beatmap_specs:
+        database_beatmaps = create_tmp_playlist(name, beatmap_specs)
+        if len(database_beatmaps) != len(beatmap_specs):
+            raise ValueError(
+                "unexpected database beatmaps count: %d != %d" % (len(database_beatmaps), len(beatmap_specs)),
+            )
+    else:
+        # 纯删除操作没有任何 spec，无需创建临时课题
+        database_beatmaps = []
+    # beatmap_specs 只收集带 beatmap 的条目，其下标与 obj 的下标不同步，
+    # 因此用一个只随 spec 推进的游标取值
+    spec_index = 0
     for i, beatmap_to_update in enumerate(obj):
-        database_beatmap = database_beatmaps[i] if has_spec_list[i] else None
+        if has_spec_list[i]:
+            database_beatmap = database_beatmaps[spec_index]
+            spec_index += 1
+        else:
+            database_beatmap = None
         action = beatmap_to_update.get("action")
         new_bid, new_mods, old_bid, old_mods = _update_beatmap(
             action,
@@ -555,8 +570,8 @@ while True:
             Optional[tuple[str, str]],
             cast(object, r.brpop([C.TASK_QUEUE.value], timeout=5)),
         )
+        schedule.run_pending()
         if result is None:
-            schedule.run_pending()
             continue
         task_info = result[1]
         if task_info:
@@ -605,6 +620,9 @@ while True:
                     )
                     break
     except KeyboardInterrupt:
+        break
+    except Exception as e:
+        logger.error(f"unexpected error: {e}", exc_info=True)
         break
 
 logger.info("stopping osuawa daemon...")
