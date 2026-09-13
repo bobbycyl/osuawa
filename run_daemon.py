@@ -141,7 +141,7 @@ sem = asyncio.Semaphore(1)
 with engine.begin() as _conn:
     _conn.execute(
         text(
-            "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS VARCHAR(255), NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, U_ARTIST TEXT, U_TITLE TEXT, PRIMARY KEY (BID, MODS));",
+            "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS VARCHAR(255), NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, U_ARTIST TEXT, U_TITLE TEXT, SERIES TEXT, PRIMARY KEY (BID, MODS));",
         ),
     )
     _conn.execute(
@@ -315,6 +315,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
                 ADD_TS=beatmap_specs[i][8],
                 U_ARTIST=playlist_beatmap_raw["_Artist"],
                 U_TITLE=playlist_beatmap_raw["_Title"],
+                SERIES=beatmap_specs[i][3].split("-", 1)[0],
             ),
         )
     # 删除临时文件
@@ -375,7 +376,8 @@ def _update_beatmap(
                                STATUS     = :STATUS,
                                COMMENTS   = :COMMENTS,
                                POOL       = :POOL,
-                               RAW_MODS   = :RAW_MODS
+                               RAW_MODS   = :RAW_MODS,
+                               SERIES     = :SERIES
                            WHERE BID = :BID
                              AND MODS = :MODS""",
                     ),
@@ -408,7 +410,7 @@ def _update_beatmap(
                 conn.execute(
                     text(
                         """INSERT INTO BEATMAP
-                           VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE)""",
+                           VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE, :SERIES)""",
                     ),
                     beatmap,
                 )

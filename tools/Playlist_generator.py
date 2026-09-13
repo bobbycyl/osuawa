@@ -150,14 +150,14 @@ if st.session_state.perm >= 1:
                     _pool_index = available_pools.index(st.session_state.gen_form_pool)
                 except ValueError:
                     _pool_index = 0
-            pool_input = st.selectbox(_("Pool"), available_pools, index=_pool_index, accept_new_options=True)
+            pool_input = st.selectbox(_("Pool (text before '-' is considered series)"), available_pools, index=_pool_index, accept_new_options=True)
             if "modgen_ret" in st.session_state and len(st.session_state.modgen_ret) > 0:
                 st.session_state.gen_form_mod_settings = "\n".join(st.session_state.modgen_ret.pop()[0])
             st.text_area(
                 _("Mod Settings"),
                 height="stretch",
                 key="gen_form_mod_settings",
-                placeholder="Tip: You can use `%s` to set mods." % _("Mod Generator"),
+                placeholder="Tip: You can use %s to set mods." % _("Mod Generator"),
             )
             # status_input = st.slider(_("Status"), 0, 2, 0)
         submitted = st.form_submit_button(_("Add"), use_container_width=True)
@@ -229,21 +229,44 @@ if st.session_state.perm >= 1:
             match_slot_sort = st.checkbox(_("Match sorting"), value=False)
 
     # 查询重复的 BID 与曲目，用于后期查询结果表格渲染。重复的 BID 行要标记为红色，重复的曲目行要标记为黄色
+    # 按 SERIES 选定查询范围
     # U_ARTIST + U_TITLE 用于曲目识别
-    duplicate_bids = conn.query(
-        """SELECT BID
-           FROM BEATMAP
-           GROUP BY BID
-           HAVING COUNT(*) > 1""",
-        show_spinner=_("querying duplicate BIDs"),
-    )["BID"].to_list()
-    duplicate_songs_raw = conn.query(
-        """SELECT U_ARTIST, U_TITLE, COUNT(*)
-           FROM BEATMAP
-           GROUP BY U_ARTIST, U_TITLE
-           HAVING COUNT(*) > 1""",
-        show_spinner=_("querying duplicate song names"),
-    )
+    if st.session_state.gen_filter_pool != "-":
+        cur_series = st.session_state.gen_filter_pool.split("-")[0]
+        duplicate_bids = conn.query(
+            """SELECT BID
+               FROM BEATMAP
+               WHERE SERIES = :series
+               GROUP BY BID
+               HAVING COUNT(*) > 1""",
+            params={"series": cur_series},
+            show_spinner=_("querying duplicate BIDs"),
+        )["BID"].to_list()
+        duplicate_songs_raw = conn.query(
+            """SELECT U_ARTIST, U_TITLE, COUNT(*)
+               FROM BEATMAP
+               WHERE SERIES = :series
+               GROUP BY U_ARTIST, U_TITLE
+               HAVING COUNT(*) > 1""",
+            params={"series": cur_series},
+            show_spinner=_("querying duplicate song names"),
+        )
+    else:
+        # 如果不指定 POOL，就回退到原始模式
+        duplicate_bids = conn.query(
+            """SELECT BID
+               FROM BEATMAP
+               GROUP BY BID
+               HAVING COUNT(*) > 1""",
+            show_spinner=_("querying duplicate BIDs"),
+        )["BID"].to_list()
+        duplicate_songs_raw = conn.query(
+            """SELECT U_ARTIST, U_TITLE, COUNT(*)
+               FROM BEATMAP
+               GROUP BY U_ARTIST, U_TITLE
+               HAVING COUNT(*) > 1""",
+            show_spinner=_("querying duplicate song names"),
+        )
     duplicate_songs = (duplicate_songs_raw["U_ARTIST"] + " " + duplicate_songs_raw["U_TITLE"]).to_list()
 
     # pool 和 status 的查询使用 SQL 完成

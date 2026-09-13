@@ -774,6 +774,7 @@ class DatabasePlaylistBeatmap(TypedDict):
     ADD_TS: float
     U_ARTIST: str
     U_TITLE: str
+    SERIES: str
 
 
 class BeatmapSpec(NamedTuple):
