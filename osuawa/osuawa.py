@@ -860,6 +860,8 @@ class OsuPlaylist(object):
         my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
         my_attr.set_mods(mods)
         mods_ready: list[str] = to_readable_mods(my_attr.standardized_mods)  # 准备给用户看的 Mods 表现形式
+        if is_fm:
+            mods_ready.insert(0, "FM")
         osupp_attr = calculate_difficulty(
             beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % b.id),
             mods=my_attr.osu_tool_mods,
