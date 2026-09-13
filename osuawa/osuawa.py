@@ -730,6 +730,16 @@ class OsuPlaylist(object):
         "FM",
         "F+",
         "SP",
+        "$0",  # preserved 0
+        "$1",  # preserved 1
+        "$2",  # preserved 2
+        "$3",  # preserved 3
+        "$4",  # preserved 4
+        "$5",  # preserved 5
+        "$6",  # preserved 6
+        "$7",  # preserved 7
+        "$8",  # preserved 8
+        "$9",  # preserved 9
     }  # NM 其实是官方的模组，但是为了逻辑便捷以及符合惯例，这里加上了
     mod_color = {
         "NM": "#107fb9",
