@@ -761,7 +761,9 @@ def delete_user_cache(aid: str) -> None:
         os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid))
 
 
-def invalidate_user_cache(user: int) -> None:
+def invalidate_user_cache(user: Optional[int] = None) -> None:
+    if user is None:
+        user = st.session_state.user
     with _conn.session as s:
         # 首先查询所有 aid，删除本地缓存的 token pickle
         res = s.execute(
