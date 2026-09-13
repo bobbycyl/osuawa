@@ -115,6 +115,11 @@ def async_cached_method(isolated: bool = False):
         async def wrapper(self: "CachedMixIn", *args: Any, **kwargs: Any):
             cache = self._isolated_cache if isolated else self._global_cache
 
+            # isolated 缓存的 key 里有 self.identifier；__init__ 解析身份前它仍是 None，
+            # 所有实例会共用 (…, None, …) 这个 key，导致 B 读到 A 的身份
+            if isolated and self.identifier is None:
+                return await func(self, *args, **kwargs)
+
             key = (
                 _make_cached_method_key(
                     type(self).__qualname__,
