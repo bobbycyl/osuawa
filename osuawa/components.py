@@ -434,7 +434,7 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
 
 
 def tail_log(n: int = 100, keyword: Optional[str] = None) -> str:
-    ret_md = "# Show last %d lines of logs" % n
+    ret_md = "# Show last %d lines of logs\n" % n
     for log_filename in ["streamlit.log", "daemon.log"]:
         ret_md += "## %s" % log_filename
         log_filename = os.path.join(C.LOGS.value, log_filename)
