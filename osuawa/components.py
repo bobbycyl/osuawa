@@ -226,7 +226,7 @@ def memorized_number_input(label: str, key: str, default_value: int | float, **k
     if "step" in kwargs:
         step = kwargs.pop("step")
     else:
-        step = (1 if isinstance(default_value, int) else 0.01)
+        step = 1 if isinstance(default_value, int) else 0.01
     st.number_input(
         label,
         key=key,

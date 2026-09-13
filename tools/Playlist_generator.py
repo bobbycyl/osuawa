@@ -83,11 +83,9 @@ def default(obj):
     raise TypeError
 
 
-def push_beatmap_task(_b: list[BeatmapToUpdate]) -> None:
+def push_beatmap_task(_b: list[BeatmapToUpdate]) -> str:
     # todo: 由于 streamlit 的刷新机制，basic_interaction_enabled 在这里设置是无效的
-    online_playlist_slot.info(push_task_with_session_state("beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
-    time.sleep(2)
-    refresh()
+    return push_task_with_session_state("beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
 
 
 def generate_playlist(filename: str, css_style: Optional[int] = None):
@@ -179,7 +177,6 @@ if st.session_state.perm >= 1:
                 raw_mods_input = make_unstandardized_mods_from_lines(slot_input, st.session_state.gen_form_mod_settings or "")
 
                 # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
-                specs_input_valid = True
                 for url_input in urls_input_split:
                     # 处理 BID
                     bid_input = int(url_input.rsplit("/", 1)[-1])
@@ -198,21 +195,23 @@ if st.session_state.perm >= 1:
                     )
                 if len(specs_input) == 0:
                     st.toast(_("no beatmaps input"))
-                elif not specs_input_valid:
-                    pass
                 else:
-                    push_beatmap_task(
-                        [
-                            BeatmapToUpdate(
-                                action="add",
-                                name=uid,
-                                beatmap=spec_input,
-                                old_bid=None,
-                                old_mods=None,
-                            )
-                            for spec_input in specs_input
-                        ]
+                    online_playlist_slot.info(
+                        push_beatmap_task(
+                            [
+                                BeatmapToUpdate(
+                                    action="add",
+                                    name=uid,
+                                    beatmap=spec_input,
+                                    old_bid=None,
+                                    old_mods=None,
+                                )
+                                for spec_input in specs_input
+                            ]
+                        )
                     )
+                    time.sleep(2)
+                    refresh()
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -539,7 +538,9 @@ if st.session_state.perm >= 1:
                                 old_mods=None,
                             )
                         )
-                push_beatmap_task(beatmaps_to_update)
+                online_playlist_slot.info(push_beatmap_task(beatmaps_to_update))
+                time.sleep(2)
+                refresh()
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
             refresh()
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
@@ -567,7 +568,9 @@ if st.session_state.perm >= 1:
                             old_mods=str(row.MODS),
                         )
                     )
-                push_beatmap_task(beatmaps_to_delete)
+                online_playlist_slot.info(push_beatmap_task(beatmaps_to_delete))
+                time.sleep(2)
+                refresh()
 
 st.divider()
 

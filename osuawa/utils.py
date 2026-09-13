@@ -1041,6 +1041,7 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
     """对某一列进行正则搜索，有匹配则输出匹配内容，无匹配输出 None"""
 
     data = data.copy()
+
     def search_func(text):
         if pd.isna(text):
             return None
