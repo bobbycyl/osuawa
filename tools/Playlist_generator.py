@@ -312,12 +312,14 @@ if st.session_state.perm >= 1:
             set(df["_slot_name"].unique()) - set(custom_order) - {last_special},
         )
         category_order = custom_order + other_names + [last_special]
-        df["_slot_name_cat"] = pd.Categorical(
-            df["_slot_name"],
-            categories=category_order,
-            ordered=True,
-        )
+        # 这里不能使用 pd.Categorical：pandas 3 下 Categorical 列在 Arrow 中是 dictionary<values=large_string>，
+        # 而 Streamlit 的组件序列化只 downcast 顶层的 large 类型、不会处理 dictionary 内部类型，
+        # st_aggrid 前端内置的旧版 Arrow JS 无法解码 LargeUtf8，会导致表格直接渲染为空白
+        slot_order = {name: index for index, name in enumerate(category_order)}
+        df["_slot_name_cat"] = df["_slot_name"].map(slot_order).astype("int64")
         df.sort_values(by=["_slot_name_cat", "_slot_index", "ADD_TS"], inplace=True)
+        # 删除辅助列
+        df.drop(columns=["_slot_name", "_slot_index", "_slot_name_cat"], inplace=True)
 
     # 使用 streamlit-aggrid 实现可交互表格
     # 创建 LINK 列
