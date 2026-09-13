@@ -917,8 +917,11 @@ class OsuPlaylist(object):
                     im = im.convert("RGB")
                 be = ImageEnhance.Brightness(im)
                 im = be.enhance(0.67)
+                thumb = im.copy()
+                thumb.thumbnail((140, 64))
                 with lck:
                     im.save(bg_filename)
+                    thumb.save(os.path.splitext(bg_filename)[0] + ".thumb.jpg", format="JPEG", quality=80, optimize=True)
             bg_filename = os.path.join(self.bg_dir, "%d.jpg" % bid)
             extra_notes = ""
             for column in self.custom_columns:

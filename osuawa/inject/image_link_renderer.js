@@ -5,7 +5,7 @@ class ImageLinkRenderer {
         this.eGui.target = "_blank";
 
         const img = document.createElement("img");
-        img.src = "%s" + params.data.BID + ".jpg";
+        img.src = "%s" + params.data.BID + ".thumb.jpg";
         img.style.height = "32px";
         img.style.width = "70px";
         img.style.objectFit = "cover";
