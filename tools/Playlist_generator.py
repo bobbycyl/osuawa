@@ -128,6 +128,7 @@ if st.session_state.perm >= 1:
         st.session_state.online_playlist_info = True
 
     st.markdown(_("## Online Playlist Creator"))
+    online_playlist_slot = st.empty()
     available_pools = conn.query(
         """SELECT DISTINCT POOL
            FROM BEATMAP
@@ -567,7 +568,6 @@ if st.session_state.perm >= 1:
                         )
                     )
                 push_beatmap_task(beatmaps_to_delete)
-    online_playlist_slot = st.empty()
 
 st.divider()
 
