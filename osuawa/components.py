@@ -8,8 +8,8 @@ from datetime import date, datetime, time
 from itertools import chain
 from secrets import token_hex
 from shutil import copyfile
-from typing import Any, Literal, Optional, TYPE_CHECKING, cast, overload
-from uuid import UUID
+from typing import Any, Literal, Never, Optional, TYPE_CHECKING, cast, overload
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import orjson
@@ -285,6 +285,14 @@ def get_redis_connection():
 
 
 _r = get_redis_connection()
+
+
+def refresh(clear_cache: bool = True) -> Never:
+    _conn.reset()
+    st.session_state.aggrid_key = str(uuid4())
+    if clear_cache:
+        st.cache_data.clear()
+    st.rerun()
 
 
 def commands():
@@ -1027,10 +1035,10 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
                 case "pending":
                     st.spinner(_("pending..."))
                 case "success":
-                    st.json(sub, expanded=False)
+                    st.json(sub)
                     st.success(_("%d sub-tasks done") % int(final))
                 case "error":
-                    st.json(sub, expanded=False)
+                    st.json(sub)
                     st.error(final)
                 case _:
                     st.json(_result, expanded=False)

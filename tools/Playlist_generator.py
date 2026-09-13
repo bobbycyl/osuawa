@@ -2,7 +2,7 @@ import os.path
 import shutil
 import time
 from functools import partial
-from typing import Never, Optional, TYPE_CHECKING, cast
+from typing import Optional, TYPE_CHECKING, cast
 from uuid import uuid4
 
 import orjson
@@ -15,12 +15,14 @@ from streamlit import logger
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import (
+    _conn,
     get_session_id,
     init_page,
     load_value,
     memorized_selectbox,
     mods_generator,
     push_task_with_session_state,
+    refresh,
     save_value,
 )
 from osuawa.osuawa import Osuawa
@@ -29,7 +31,6 @@ from osuawa.utils import (
     BeatmapToUpdate,
     RedisTaskId,
     _create_tmp_playlist_p,
-    _make_query_uppercase,
     make_unstandardized_mods_from_lines,
     read_injected_code,
     safe_norm,
@@ -65,8 +66,7 @@ with st.sidebar:
         disabled=not st.session_state.basic_interaction_enabled,
     )
 
-conn = st.connection("osuawa", type="sql", ttl=3600)
-conn.query = _make_query_uppercase(conn.query)
+conn = _conn
 uid = get_session_id()
 row_style_with_dup = JsCode(read_injected_code("row_style_with_dup.js"))
 row_style = JsCode(read_injected_code("row_style.js"))
@@ -85,15 +85,9 @@ def default(obj):
 
 def push_beatmap_task(_b: list[BeatmapToUpdate]) -> None:
     # todo: 由于 streamlit 的刷新机制，basic_interaction_enabled 在这里设置是无效的
-    st.toast(push_task_with_session_state("beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
-
-
-def refresh(clear_cache: bool = True) -> Never:
-    conn.reset()
-    st.session_state.aggrid_key = str(uuid4())
-    if clear_cache:
-        st.cache_data.clear()
-    st.rerun()
+    online_playlist_slot.info(push_task_with_session_state("beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode()))
+    time.sleep(2)
+    refresh()
 
 
 def generate_playlist(filename: str, css_style: Optional[int] = None):
@@ -130,7 +124,7 @@ def export_filtered_playlist():
 
 if st.session_state.perm >= 1:
     if "online_playlist_info" not in st.session_state or not st.session_state.online_playlist_info:
-        st.info(_("Auto refresh on this page is disabled due to technical reasons. You might want to press the `%s` button manually to refresh the playlist.") % _("Refresh"))
+        # st.info(_("Auto refresh on this page is disabled due to technical reasons. You might want to press the `%s` button manually to refresh the playlist.") % _("Refresh"))
         st.session_state.online_playlist_info = True
 
     st.markdown(_("## Online Playlist Creator"))
@@ -573,6 +567,7 @@ if st.session_state.perm >= 1:
                         )
                     )
                 push_beatmap_task(beatmaps_to_delete)
+    online_playlist_slot = st.empty()
 
 st.divider()
 
