@@ -1,12 +1,11 @@
-from datetime import date, timedelta
-from typing import Optional, TYPE_CHECKING
-
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from datetime import date, timedelta
 from scipy import stats
+from typing import Optional, TYPE_CHECKING
 
 from osuawa.components import (
     get_all_score_users,
@@ -152,7 +151,7 @@ def generate_stats_dataframe(data: pd.DataFrame, indexes: list[str]) -> pd.DataF
                 "_CIL",
                 "_CIU",
                 "N",
-            )
+            ),
         ),
     ).round(4)
     df_stats["95% CI"] = df_stats.apply(lambda row: f"[{row['_CIL']:.2f}, {row['_CIU']:.2f}]", axis=1)
@@ -273,7 +272,7 @@ def create_distplot(
                     opacity=0.7,
                     histnorm=histnorm,
                     xbins=xbins,
-                )
+                ),
             )
 
         # 曲线
@@ -298,7 +297,7 @@ def create_distplot(
                         mode="lines",
                         name=f"{label} {curve_type}",
                         line=dict(color=color, width=2),
-                    )
+                    ),
                 )
 
     # 叠加多组时用 overlay 而不是堆叠
@@ -393,7 +392,7 @@ with st.container(border=True):
                 st.session_state.cat_comp_index,
                 user,
                 df_o_stats.at[st.session_state.cat_comp_index, "mean"],
-            )
+            ),
         )
         can_show_chart_pr = False
     if df_c_stats.at[st.session_state.cat_comp_index, "std"] == 0:
@@ -403,7 +402,7 @@ with st.container(border=True):
                 st.session_state.cat_comp_index,
                 comp_user,
                 df_c_stats.at[st.session_state.cat_comp_index, "mean"],
-            )
+            ),
         )
         can_show_chart_pr = False
     if can_show_chart_pr:

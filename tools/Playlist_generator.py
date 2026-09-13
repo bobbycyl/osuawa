@@ -1,17 +1,16 @@
-import os.path
-import shutil
-import time
-from functools import partial
-from typing import Optional, TYPE_CHECKING, cast
-from uuid import uuid4
-
 import orjson
+import os.path
 import pandas as pd
+import shutil
 import streamlit as st
+import time
 from clayutil.futil import compress_as_zip
 from clayutil.validator import validate_type
+from functools import partial
 from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
+from typing import Optional, TYPE_CHECKING, cast
+from uuid import uuid4
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import (
@@ -207,8 +206,8 @@ if st.session_state.perm >= 1:
                                     old_mods=None,
                                 )
                                 for spec_input in specs_input
-                            ]
-                        )
+                            ],
+                        ),
                     )
                     time.sleep(2)
                     refresh()
@@ -526,7 +525,7 @@ if st.session_state.perm >= 1:
                                 beatmap=beatmap_to_upsert,
                                 old_bid=None,
                                 old_mods=old_to_drop[0],
-                            )
+                            ),
                         )
                     else:
                         beatmaps_to_update.append(
@@ -536,7 +535,7 @@ if st.session_state.perm >= 1:
                                 beatmap=beatmap_to_upsert,
                                 old_bid=None,
                                 old_mods=None,
-                            )
+                            ),
                         )
                 online_playlist_slot.info(push_beatmap_task(beatmaps_to_update))
                 time.sleep(2)
@@ -566,7 +565,7 @@ if st.session_state.perm >= 1:
                             beatmap=None,
                             old_bid=int(row.BID),
                             old_mods=str(row.MODS),
-                        )
+                        ),
                     )
                 online_playlist_slot.info(push_beatmap_task(beatmaps_to_delete))
                 time.sleep(2)

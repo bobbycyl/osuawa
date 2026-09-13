@@ -8,7 +8,7 @@
 
 ## 软件要求
 
-Python 3.12、.NET 8.0、SQL(Sqlite、 PostgreSQL 或 MySQL 都可以)、Redis
+Python 3.12、.NET 8.0、SQL (Sqlite、 PostgreSQL 或 MySQL 都可以)、Redis
 
 ## 快速开始
 
@@ -50,8 +50,8 @@ dotnet build -c Release
 
 ### 配置设置
 
-1. 从 [官网](https://osu.ppy.sh/home/account/edit) 获取你的 osu! 开放授权客户端；
-   端口设置须与 `./.streamlit/config.toml` 中的保持一致；
+1. 从 [官网](https://osu.ppy.sh/home/account/edit) 获取你的 osu! 开放授权客户端； 端口设置须与 `./.streamlit/config.toml`
+   中的保持一致；
 
 2. 创建并编辑 `./.streamlit/secrets.toml`，可参考 [示例文件](./.streamlit/secrets.example.toml)；
 

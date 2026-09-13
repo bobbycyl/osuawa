@@ -1,14 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="PyToolsState">
+    <option name="tools">
+      <map>
+        <entry key="ruff">
+          <value>
+            <ToolEntry>
+              <option name="enabled" value="true" />
+            </ToolEntry>
+          </value>
+        </entry>
+        <entry key="ty">
+          <value>
+            <ToolEntry>
+              <option name="enabled" value="true" />
+            </ToolEntry>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="RuffConfiguration">
-    <option name="enabled" value="true" />
     <option name="formatting" value="false" />
     <option name="sortImports" value="false" />
   </component>
   <component name="TyConfiguration">
     <option name="completions" value="false" />
     <option name="documentation" value="false" />
-    <option name="enabled" value="true" />
     <option name="inlayHints" value="false" />
   </component>
 </project>

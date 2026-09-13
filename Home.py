@@ -1,7 +1,3 @@
-from collections.abc import Generator
-from time import sleep
-from typing import Any, TYPE_CHECKING, cast
-
 import orjson
 import pandas as pd
 import streamlit as st
@@ -13,9 +9,12 @@ from clayutil.cmdparse import (
     IntegerField as Int,
     JSONStringField as JsonStr,
 )
+from collections.abc import Generator
 from streamlit import logger
 from streamlit.errors import Error
 from streamlit_ace import st_ace
+from time import sleep
+from typing import Any, TYPE_CHECKING, cast
 from zai import ZhipuAiClient
 from zai.core import StreamResponse
 from zai.types.chat import ChatCompletionChunk, ChoiceDeltaToolCall

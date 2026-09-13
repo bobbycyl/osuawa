@@ -6,16 +6,10 @@
 import asyncio
 import contextlib
 import logging
+import orjson
 import os
 import os.path
 import pickle
-from dataclasses import asdict
-from datetime import datetime
-from shutil import rmtree
-from time import time
-from typing import Literal, Optional, cast
-
-import orjson
 import redis
 import requests
 import schedule
@@ -27,8 +21,13 @@ from clayutil.cmdparse import (
     IntegerField as Int,
     JSONStringField as JsonStr,
 )
+from dataclasses import asdict
+from datetime import datetime
 from ossapi.ossapiv2_async import Domain, Scope, Score
+from shutil import rmtree
 from sqlalchemy import create_engine, text
+from time import time
+from typing import Literal, Optional, cast
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.utils import (
@@ -555,7 +554,7 @@ def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
                 ("updated", update_list),
                 ("deleted", delete_list),
             ]
-        ]
+        ],
     )
 
 

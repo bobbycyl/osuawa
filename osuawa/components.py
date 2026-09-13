@@ -1,22 +1,13 @@
+import orjson
 import os
 import os.path
-import re
-import shelve
-import shutil
-from collections import deque
-from datetime import date, datetime, time
-from itertools import chain
-from secrets import token_hex
-from shutil import copyfile
-from typing import Any, Literal, Never, Optional, TYPE_CHECKING, cast, overload
-from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
-
-import orjson
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import re
 import redis
+import shelve
+import shutil
 import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
@@ -25,15 +16,23 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
     StringField as Str,
 )
+from collections import deque
+from datetime import date, datetime, time
+from itertools import chain
 from ossapi.ossapiv2_async import Beatmap, GameMode
 from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
 from plotly.graph_objs import Figure
+from secrets import token_hex
+from shutil import copyfile
 from sqlalchemy import text
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
+from typing import Any, Literal, Never, Optional, TYPE_CHECKING, cast, overload
+from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from osuawa import C, OsuPlaylist, Osuawa
 from osuawa.osuawa import CachedMixIn
@@ -82,7 +81,7 @@ def save_value(key: str) -> None:
             os.path.join(
                 C.COMPONENTS_SHELVES_DIRECTORY.value,
                 st.context.cookies["ajs_anonymous_id"],
-            )
+            ),
         ) as db:
             db[key] = st.session_state["_%s_value" % key]
 
@@ -97,7 +96,7 @@ def del_value(key: str, prefix_mode: bool = False) -> None:
             os.path.join(
                 C.COMPONENTS_SHELVES_DIRECTORY.value,
                 st.context.cookies["ajs_anonymous_id"],
-            )
+            ),
         ) as db,
     ):
         for key in keys:
@@ -115,31 +114,31 @@ def check_shelve_exists() -> bool:
             os.path.join(
                 C.COMPONENTS_SHELVES_DIRECTORY.value,
                 st.context.cookies["ajs_anonymous_id"],
-            )
+            ),
         )
         or os.path.exists(
             os.path.join(
                 C.COMPONENTS_SHELVES_DIRECTORY.value,
                 "%s.bak" % st.context.cookies["ajs_anonymous_id"],
-            )
+            ),
         )
         or os.path.exists(
             os.path.join(
                 C.COMPONENTS_SHELVES_DIRECTORY.value,
                 "%s.dat" % st.context.cookies["ajs_anonymous_id"],
-            )
+            ),
         )
         or os.path.exists(
             os.path.join(
                 C.COMPONENTS_SHELVES_DIRECTORY.value,
                 "%s.dir" % st.context.cookies["ajs_anonymous_id"],
-            )
+            ),
         )
         or os.path.exists(
             os.path.join(
                 C.COMPONENTS_SHELVES_DIRECTORY.value,
                 "%s.db" % st.context.cookies["ajs_anonymous_id"],
-            )
+            ),
         )
     )
 
@@ -899,7 +898,7 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
                                 st.session_state[_mod_key],
                                 _name,
                                 _setting_value,
-                            )
+                            ),
                         )
     return ret
 
@@ -962,7 +961,7 @@ def mods_generator(ret_type=None):
                 _mod_customization(
                     modgen_suffix,
                     cast(Literal["osu", "taiko", "catch", "mania"], ruleset),
-                )
+                ),
             )
         with col_del:
             st.button(
@@ -1061,7 +1060,7 @@ def task_board():
             ":material/pending: pending",
             ":material/check_circle: success",
             ":material/error: error",
-        ]
+        ],
     )
     with tab1:
         tasks_grid(tasks_to_show)
