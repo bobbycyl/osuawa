@@ -454,13 +454,14 @@ if st.session_state.perm >= 1:
 
     # 隐藏列
     for col in df.columns:
-        if col[0] == "_" or col in ["SID", "ADD_TS", "U_ARTIST", "U_TITLE"]:
+        if col[0] == "_" or col in ["SID", "ADD_TS", "U_ARTIST", "U_TITLE", "SERIES"]:
             gb.configure_column(col, hide=True)
 
     grid_options = gb.build()
 
     if "aggrid_key" not in st.session_state:
         st.session_state.aggrid_key = str(uuid4())
+    st.session_state.aggrid_key2 = st.session_state.aggrid_key + str(st.session_state.gen_filter_pool) + str(st.session_state.gen_filter_status) + st.session_state.gen_filter_search + str(highlight_dup) + str(match_slot_sort)
     grid_response = AgGrid(
         df,
         gridOptions=grid_options,
@@ -473,7 +474,7 @@ if st.session_state.perm >= 1:
         width="100%",
         # show_toolbar=True,
         allow_unsafe_jscode=True,
-        key=st.session_state.aggrid_key,
+        key=st.session_state.aggrid_key2,
     )
     edited_df = grid_response.data.copy() if grid_response.data is not None else pd.DataFrame()
     selected_rows = grid_response.selected_rows
