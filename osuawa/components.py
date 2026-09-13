@@ -757,6 +757,7 @@ def delete_user_cache(aid: str) -> None:
             ),
             params={"aid": aid},
         )
+        s.commit()
     if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid)):
         os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid))
 
@@ -782,6 +783,7 @@ def invalidate_user_cache(user: Optional[int] = None) -> None:
             ),
             params={"user": user},
         )
+        s.commit()
 
 
 def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -> None:
