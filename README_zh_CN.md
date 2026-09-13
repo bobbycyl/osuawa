@@ -8,7 +8,7 @@
 
 ## 软件要求
 
-Python 3.12、.NET 8.0、SQL (Sqlite、 PostgreSQL 或 MySQL 都可以)、Redis
+Python 3.12、.NET 10.0、SQL (Sqlite、 PostgreSQL 或 MySQL 都可以)、Redis
 
 ## 快速开始
 
@@ -45,6 +45,8 @@ python -m pip install -r requirements.txt
 # 确保位于 osuawa 文件夹内
 git clone https://github.com/ppy/osu-tools.git
 cd osu-tools/PerformanceCalculator
+dotnet build -c Release
+cd ../PerformanceCalculatorGUI
 dotnet build -c Release
 ```
 

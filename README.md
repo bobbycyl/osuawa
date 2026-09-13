@@ -10,7 +10,7 @@ current tools: Score Visualizer, Playlist Generator and Recorder
 
 ## Requirements
 
-Python 3.12, .NET 8.0, SQL (Sqlite, PostgreSQL or MySQL is tested), Redis
+Python 3.12, .NET 10.0, SQL (Sqlite, PostgreSQL or MySQL is tested), Redis
 
 ## Getting Started
 
@@ -47,6 +47,8 @@ Secondly, download and build `osu-tools`.
 # ensure you are in the directory of osuawa
 git clone https://github.com/ppy/osu-tools.git
 cd osu-tools/PerformanceCalculator
+dotnet build -c Release
+cd ../PerformanceCalculatorGUI
 dotnet build -c Release
 ```
 
