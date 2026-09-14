@@ -1,11 +1,12 @@
+from datetime import date, timedelta
+from typing import Optional, TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from datetime import date, timedelta
 from scipy import stats
-from typing import Optional, TYPE_CHECKING
 
 from osuawa.components import (
     get_all_score_users,

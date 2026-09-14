@@ -6,12 +6,17 @@
 import asyncio
 import contextlib
 import logging
-from collections.abc import Sequence
-
-import orjson
 import os
 import os.path
 import pickle
+from collections.abc import Sequence
+from dataclasses import asdict
+from datetime import datetime
+from shutil import rmtree
+from time import time
+from typing import Literal, Optional, cast
+
+import orjson
 import redis
 import requests
 import schedule
@@ -23,13 +28,8 @@ from clayutil.cmdparse import (
     IntegerField as Int,
     JSONStringField as JsonStr,
 )
-from dataclasses import asdict
-from datetime import datetime
 from ossapi.ossapiv2_async import Domain, Scope, Score
-from shutil import rmtree
 from sqlalchemy import create_engine, text
-from time import time
-from typing import Literal, Optional, cast
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.utils import (
@@ -204,9 +204,14 @@ async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str,
 
 def get_all_score_users() -> Sequence[int]:
     with engine.begin() as conn:
-        return conn.execute(
+        return (
+            conn.execute(
                 text("SELECT DISTINCT USER_ID FROM SCORE ORDER BY USER_ID"),
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
+        )
+
 
 def save_recent_scores(user: int, include_fails: bool = True) -> str:
     username, completed_recent_scores_compact = daemon_awa.run_coro(async_save_recent_scores(user, include_fails))

@@ -1,13 +1,14 @@
 import multiprocessing
 import os
-import py7zr
 import shutil
-import streamlit
 import tarfile
 import zipfile
+from typing import Optional
+
+import py7zr
+import streamlit
 from clayutil.futil import Downloader
 from streamlit.web import bootstrap
-from typing import Optional
 
 
 def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]]] = None) -> None:

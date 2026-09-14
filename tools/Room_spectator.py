@@ -1,5 +1,6 @@
-import streamlit as st
 from typing import TYPE_CHECKING, cast
+
+import streamlit as st
 
 from osuawa import Osuawa
 from osuawa.components import init_page

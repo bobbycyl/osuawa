@@ -4,19 +4,20 @@ import gettext
 import logging
 import os
 import pickle
+from html import escape as html_escape
+from threading import Lock
+from time import time
+from typing import Optional, TYPE_CHECKING, cast
+
 import requests
 import streamlit as st
 from babel import Locale, UnknownLocaleError
 from clayutil.cmdparse import (
     CommandParser,
 )
-from html import escape as html_escape
 from ossapi.ossapiv2_async import Domain, Scope
 from streamlit import logger
 from streamlit.runtime.scriptrunner import get_script_run_ctx
-from threading import Lock
-from time import time
-from typing import Optional, TYPE_CHECKING, cast
 
 from osuawa import Awapi, C, LANGUAGES, Osuawa
 from osuawa.components import (

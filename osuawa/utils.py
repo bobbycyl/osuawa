@@ -2,20 +2,36 @@
 osuawa.py and utils.py should not contain i18n related text and streamlit related statement
 """
 
-import numpy as np
-import orjson
 import os
-import pandas as pd
 import re
-import typing_extensions
 import uuid
-from PerformanceCalculator import ProcessorWorkingBeatmap
-from clayutil.futil import Downloader, Properties
-from clayutil.sutil import md5sum
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from enum import Enum, unique
 from math import log10, sqrt
+from random import shuffle
+from threading import BoundedSemaphore
+from time import sleep, time, time_ns
+from typing import (
+    Any,
+    Literal,
+    NamedTuple,
+    NewType,
+    Optional,
+    TypedDict,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+)
+
+import numpy as np
+import orjson
+import pandas as pd
+import typing_extensions
+from PerformanceCalculator import ProcessorWorkingBeatmap
+from clayutil.futil import Downloader, Properties
+from clayutil.sutil import md5sum
 from ossapi.models import MultiplayerScore
 from ossapi.ossapiv2_async import Beatmap, Score, User, UserCompact
 from osu.Game.Rulesets.Catch import CatchRuleset
@@ -31,22 +47,7 @@ from osupp.performance import (
     calculate_performance as calculate_performance,
 )
 from osupp.util import validate_mod_setting_value
-from random import shuffle
 from redis import Redis
-from threading import BoundedSemaphore
-from time import sleep, time, time_ns
-from typing import (
-    Any,
-    Literal,
-    NamedTuple,
-    NewType,
-    Optional,
-    TypedDict,
-    Union,
-    cast,
-    get_args,
-    get_origin,
-)
 
 _c = calculate_difficulty, calculate_performance
 

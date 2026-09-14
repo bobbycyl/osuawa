@@ -1,12 +1,13 @@
 import asyncio
-import orjson
 import os.path
-import pandas as pd
-import streamlit as st
 import threading
 from asyncio import Task
-from streamlit import logger
 from typing import Any, TYPE_CHECKING, cast
+
+import orjson
+import pandas as pd
+import streamlit as st
+from streamlit import logger
 from websockets.sync.client import connect
 
 from osuawa import C, Osuawa

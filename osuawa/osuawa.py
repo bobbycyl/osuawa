@@ -17,22 +17,27 @@ import datetime as _datetime
 import functools
 import html
 import json
-import numpy as np
-import orjson
 import os
 import os.path
-import pandas as pd
 import platform
 from asyncio import AbstractEventLoop, Task
+from collections.abc import Coroutine
+from dataclasses import fields
+from functools import cached_property
+from itertools import chain
+from shutil import rmtree
+from threading import Lock
+from types import MappingProxyType
+from typing import Any, Literal, Never, Optional, cast, override
+
+import numpy as np
+import orjson
+import pandas as pd
 from cachetools import TTLCache
 from clayutil.futil import Downloader, Properties
 from clayutil.sutil import sha256sum
 from clayutil.validator import Integer
-from collections.abc import Coroutine
-from dataclasses import fields
 from fontfallback import writing
-from functools import cached_property
-from itertools import chain
 from ossapi.models import MultiplayerScore, RoomPlaylistItem
 from ossapi.ossapiv2_async import (
     Beatmap,
@@ -47,10 +52,6 @@ from ossapi.ossapiv2_async import (
     Score,
     User,
 )
-from shutil import rmtree
-from threading import Lock
-from types import MappingProxyType
-from typing import Any, Literal, Never, Optional, cast, override
 
 from .utils import (
     C,
