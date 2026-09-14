@@ -6,6 +6,8 @@
 import asyncio
 import contextlib
 import logging
+from collections.abc import Sequence
+
 import orjson
 import os
 import os.path
@@ -172,7 +174,7 @@ def commands():
             [
                 Coll(
                     "user",
-                    get_all_score_users(),
+                    get_all_score_users,
                 ),
             ],
             0,
@@ -200,14 +202,11 @@ async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str,
     )
 
 
-def get_all_score_users() -> list[int]:
+def get_all_score_users() -> Sequence[int]:
     with engine.begin() as conn:
-        return list(
-            conn.execute(
+        return conn.execute(
                 text("SELECT DISTINCT USER_ID FROM SCORE ORDER BY USER_ID"),
-            ).scalars(),
-        )
-
+            ).scalars().all()
 
 def save_recent_scores(user: int, include_fails: bool = True) -> str:
     username, completed_recent_scores_compact = daemon_awa.run_coro(async_save_recent_scores(user, include_fails))
