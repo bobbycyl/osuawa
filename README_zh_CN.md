@@ -2,13 +2,13 @@
 
 ## 简介
 
-我用到的和 osu! 主模式相关的工具（支持 Lazer 数据！）
+只是一些用于 osu! 主模式的工具（支持 Lazer 数据！）
 
 现已上线工具：查成分、做课题和看记录
 
 ## 软件要求
 
-Python 3.12、.NET 10.0、SQL (Sqlite、 PostgreSQL 或 MySQL 都可以)、Redis
+Python 3.12、.NET 10.0、SQL (SQLite、 PostgreSQL 或 MySQL 都可以)、Redis
 
 ## 快速开始
 

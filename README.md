@@ -4,13 +4,13 @@
 
 ## Introduction
 
-just some useful tools for osu! standard (Lazer data supported!)
+just some utilities for osu! standard (Lazer data supported!)
 
 current tools: Score Visualizer, Playlist Generator and Recorder
 
 ## Requirements
 
-Python 3.12, .NET 10.0, SQL (Sqlite, PostgreSQL or MySQL is tested), Redis
+Python 3.12, .NET 10.0, SQL (SQLite, PostgreSQL or MySQL is tested), Redis
 
 ## Getting Started
 
