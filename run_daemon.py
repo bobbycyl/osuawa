@@ -105,15 +105,18 @@ if _url is None:
 else:
     # 获取 dialect
     _dialect = _url.split("://")[0].split("+")[0]
-engine = (
-    create_engine(_url)
-    if _ca_path is None
-    else create_engine(
-        _url,
-        connect_args={
-            "ssl_ca": _ca_path,
-        },
-    )
+engine = create_engine(
+    _url,
+    # daemon 大部分时间阻塞在 brpop 上、完全不碰数据库，连接池里的连接会长时间闲置。
+    # MySQL 的 wait_timeout（以及链路中的 NAT / 云负载均衡 / 防火墙）会单方面掐断空闲连接，
+    # 下次复用时才抛 OperationalError 2006 "MySQL server has gone away"。
+    # pool_pre_ping: 每次取出连接前先探活，失活则丢弃并透明重建（关键修复）
+    # pool_recycle : 兜底，主动回收超过 30 分钟的连接，避免长期持有陈旧 socket
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    pool_size=2,
+    max_overflow=0,
+    connect_args={"ssl_ca": _ca_path} if _ca_path is not None else {},
 )
 logger.info("sql connected: %s" % _url)
 
@@ -203,7 +206,7 @@ async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str,
 
 
 def get_all_score_users() -> Sequence[int]:
-    with engine.begin() as conn:
+    with engine.connect() as conn:
         return (
             conn.execute(
                 text("SELECT DISTINCT USER_ID FROM SCORE ORDER BY USER_ID"),
