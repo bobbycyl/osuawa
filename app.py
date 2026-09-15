@@ -32,6 +32,7 @@ from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code
 
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
+ops = st.secrets.args.ops
 if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
@@ -314,6 +315,10 @@ if "awa" not in st.session_state:
         st.session_state.token = ""
         register_commands({"token": ""})
         st.session_state.perm = 4
+    if st.session_state.user in ops:
+        st.session_state.token = ""
+        register_commands({"token": ""})
+        st.session_state.perm = 3
     prepare_bar.empty()
 
 if "fh_init" not in st.session_state:
