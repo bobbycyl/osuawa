@@ -121,7 +121,7 @@ def export_filtered_playlist():
             st.code(fi.read(), language="properties")
 
 
-@st.fragment(run_every="8s")
+@st.fragment(run_every="15s")
 def check_playlist_lastupdate():
     _playlist_lastupdate = get_playlist_lastupdate()
     if "playlist_lastupdate" not in st.session_state:

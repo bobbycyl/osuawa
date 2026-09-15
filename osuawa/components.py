@@ -291,7 +291,7 @@ _r = get_redis_connection()
 def refresh(clear_cache: bool = True) -> Never:
     _conn.reset()
     st.session_state.aggrid_key = str(uuid4())
-    st.session_state.playlist_update = get_playlist_lastupdate()
+    st.session_state.playlist_lastupdate = get_playlist_lastupdate()
     if clear_cache:
         st.cache_data.clear()
     st.rerun()
