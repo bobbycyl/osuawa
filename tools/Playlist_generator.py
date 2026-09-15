@@ -143,6 +143,7 @@ if st.session_state.perm >= 1:
         """SELECT DISTINCT POOL
            FROM BEATMAP
            ORDER BY POOL""",
+        ttl=0,
         show_spinner=_("querying available pools"),
     )["POOL"].to_list()
     if len(available_pools) == 0:
