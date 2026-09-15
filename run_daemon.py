@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import datetime
 from shutil import rmtree
-from time import time
+from time import time, time_ns
 from typing import Literal, Optional, cast
 
 import orjson
@@ -552,6 +552,9 @@ def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
                 update_list.append((new_bid, new_mods))
             case "update1":  # update from old mods
                 update_list.append((new_bid, "%s -> %s" % (old_mods, new_mods)))
+    # 更新时间戳
+    with open(os.path.join(C.STATIC_DIRECTORY.value, "playlist_lastupdate"), "w", encoding="utf-8") as fo:
+        fo.write(str(time_ns()))
     return "; ".join(
         [
             _build_update_return_message(action_verb, action_list)

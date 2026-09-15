@@ -1105,6 +1105,11 @@ def safe_norm(value, type_: type = str):
     return type_(value)
 
 
+def get_playlist_lastupdate():
+    with open(os.path.join(C.STATIC_DIRECTORY.value, "playlist_lastupdate"), encoding="utf-8") as fi:
+        return int(fi.read())
+
+
 def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
     # 暂时不考虑定制谱面/本地谱面需求，因为 playlist 要求是纯在线谱面
     # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具

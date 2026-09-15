@@ -31,6 +31,7 @@ from osuawa.utils import (
     BeatmapToUpdate,
     RedisTaskId,
     _create_tmp_playlist_p,
+    get_playlist_lastupdate,
     make_unstandardized_mods_from_lines,
     read_injected_code,
     safe_norm,
@@ -120,13 +121,24 @@ def export_filtered_playlist():
             st.code(fi.read(), language="properties")
 
 
+@st.fragment(run_every="1s")
+def check_playlist_lastupdate():
+    _playlist_lastupdate = get_playlist_lastupdate()
+    if "playlist_lastupdate" not in st.session_state:
+        st.session_state.playlist_lastupdate = _playlist_lastupdate
+    else:
+        if _playlist_lastupdate > st.session_state.playlist_lastupdate:
+            st.toast(_("Playlist had been updated. Shall we refresh?"))
+
+
 if st.session_state.perm >= 1:
     if "online_playlist_info" not in st.session_state or not st.session_state.online_playlist_info:
         # st.info(_("Auto refresh on this page is disabled due to technical reasons. You might want to press the `%s` button manually to refresh the playlist.") % _("Refresh"))
         st.session_state.online_playlist_info = True
 
     st.markdown(_("## Online Playlist Creator"))
-    online_playlist_slot = st.empty()
+    # online_playlist_slot = st.empty()
+    check_playlist_lastupdate()
     available_pools = conn.query(
         """SELECT DISTINCT POOL
            FROM BEATMAP
@@ -196,7 +208,7 @@ if st.session_state.perm >= 1:
                 if len(specs_input) == 0:
                     st.toast(_("no beatmaps input"))
                 else:
-                    online_playlist_slot.info(
+                    st.toast(
                         push_beatmap_task(
                             [
                                 BeatmapToUpdate(
@@ -210,8 +222,6 @@ if st.session_state.perm >= 1:
                             ],
                         ),
                     )
-                    time.sleep(2)
-                    refresh()
 
     with st.container(border=True):
         filter_col1, filter_col2, filter_col3, ctrl_col1 = st.columns([3, 3, 9, 4])
@@ -564,9 +574,7 @@ if st.session_state.perm >= 1:
                                 old_mods=None,
                             ),
                         )
-                online_playlist_slot.info(push_beatmap_task(beatmaps_to_update))
-                time.sleep(2)
-                refresh()
+                st.toast(push_beatmap_task(beatmaps_to_update))
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
             refresh()
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
@@ -594,9 +602,7 @@ if st.session_state.perm >= 1:
                             old_mods=str(row.MODS),
                         ),
                     )
-                online_playlist_slot.info(push_beatmap_task(beatmaps_to_delete))
-                time.sleep(2)
-                refresh()
+                st.toast(push_beatmap_task(beatmaps_to_delete))
 
 st.divider()
 
