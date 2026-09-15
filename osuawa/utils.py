@@ -1105,9 +1105,12 @@ def safe_norm(value, type_: type = str):
     return type_(value)
 
 
-def get_playlist_lastupdate():
-    with open(os.path.join(C.STATIC_DIRECTORY.value, "playlist_lastupdate"), encoding="utf-8") as fi:
-        return int(fi.read())
+def get_playlist_lastupdate() -> int:
+    if os.path.exists(os.path.join(C.STATIC_DIRECTORY.value, "playlist_lastupdate")):
+        with open(os.path.join(C.STATIC_DIRECTORY.value, "playlist_lastupdate"), encoding="utf-8") as fi:
+            return int(fi.read())
+    else:
+        return -1
 
 
 def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
