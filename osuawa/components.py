@@ -707,9 +707,8 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
         my_attr.osu_tool_mod_options,
     )
     osupp_attr = next(calculator)
-    # todo: 这里要更新
     strains: dict[str, list[float]] = osupp_attr["__ek_strains_of_skills"]  # type: ignore[union-attr]
-    timelines: dict[str, list[float]] = osupp_attr["__ek_time_timelines"]  # type: ignore[union-attr]
+    timelines: dict[str, list[float]] = osupp_attr["__ek_timeline_of_skills"]  # type: ignore[union-attr]
     timeline = sorted(set(chain.from_iterable(timelines.values())))
     df_strain = pd.DataFrame({**strains, "time": timeline})
     df_strain["time"] = pd.to_datetime(df_strain["time"], unit="ms")
