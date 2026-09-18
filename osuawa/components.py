@@ -709,8 +709,8 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
     osupp_attr = next(calculator)
     strains: dict[str, list[float]] = osupp_attr["__ek_strains_of_skills"]  # type: ignore[union-attr]
     timelines: dict[str, list[float]] = osupp_attr["__ek_timeline_of_skills"]  # type: ignore[union-attr]
-    timeline = sorted(set(chain.from_iterable(timelines.values())))
-    df_strain = pd.DataFrame({**strains, "time": timeline})
+    strain_dicts: dict[str, dict[float, float]] = {_skill: dict(zip(timelines[_skill], strains[_skill], strict=True)) for _skill in strains}
+    df_strain = pd.DataFrame(strain_dicts).fillna(0.0).reset_index(names=["time"])
     df_strain["time"] = pd.to_datetime(df_strain["time"], unit="ms")
     df_strain = df_strain.melt(
         id_vars="time",
