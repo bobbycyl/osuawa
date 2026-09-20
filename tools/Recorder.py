@@ -143,6 +143,3 @@ with lck, open(
     encoding="utf-8",
 ) as fo:
     fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
-
-if st.button(_("Clear all caches"), icon=":material/cleaning_services:"):
-    st.cache_data.clear()

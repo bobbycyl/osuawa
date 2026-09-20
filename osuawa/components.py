@@ -5,7 +5,6 @@ import shelve
 import shutil
 from collections import deque
 from datetime import date, datetime, time
-from itertools import chain
 from secrets import token_hex
 from shutil import copyfile
 from typing import Any, Literal, Never, Optional, TYPE_CHECKING, cast, overload
@@ -33,6 +32,7 @@ from osu.Game.Rulesets.Taiko import TaikoRuleset
 from plotly.graph_objs import Figure
 from sqlalchemy import text
 from streamlit import logger
+from streamlit.runtime.caching.cache_utils import CachedFunc
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
@@ -43,7 +43,6 @@ from osuawa.utils import (
     ScoreStatistics,
     SimpleDifficultyAttribute,
     _build_upsert,
-    _make_query_uppercase,
     calculate_performance,
     catch_mod_entries,
     catch_mod_indexes,
@@ -69,8 +68,16 @@ if TYPE_CHECKING:
 
     st.session_state.awa = cast(Osuawa, st.session_state.awa)
 
-_conn = st.connection("osuawa", type="sql", ttl=60)
-_conn.query = _make_query_uppercase(_conn.query)
+type DatabaseName = Literal["BEATMAP", "SCORE", "USER_CACHE"]
+
+
+def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False, params: Optional[Any] = None, **kwargs) -> pd.DataFrame:
+    if database not in sql:
+        raise ValueError(f"database name {database} not found in SQL query")
+    _conn = st.connection("osuawa", type="sql", ttl=0)
+    df = _conn.query(sql, ttl=0, show_spinner=show_spinner, params=params, **kwargs)
+    df.columns = df.columns.str.upper()
+    return df
 
 
 def save_value(key: str) -> None:
@@ -224,10 +231,7 @@ def memorized_checkbox(label: str, key: str, default_value: bool, **kwargs) -> N
 
 def memorized_number_input(label: str, key: str, default_value: int | float, **kwargs) -> None:
     load_value(key, default_value)
-    if "step" in kwargs:
-        step = kwargs.pop("step")
-    else:
-        step = 1 if isinstance(default_value, int) else 0.01
+    step = kwargs.pop("step") if "step" in kwargs else 1 if isinstance(default_value, int) else 0.01
     st.number_input(
         label,
         key=key,
@@ -288,12 +292,18 @@ def get_redis_connection():
 _r = get_redis_connection()
 
 
-def refresh(clear_cache: bool = True) -> Never:
-    _conn.reset()
+def refresh(clear_func: Optional[CachedFunc] = None, *args, **kwargs) -> Never:
+    """刷新
+
+    :param clear_func: CachedFunc
+    :param args: arguments of the cached functions
+    :param kwargs: keyword arguments of the cached function
+    :return:
+    """
     st.session_state.aggrid_key = str(uuid4())
     st.session_state.playlist_lastupdate = get_playlist_lastupdate()
-    if clear_cache:
-        st.cache_data.clear()
+    if clear_func is not None:
+        clear_func.clear(*args, **kwargs)
     st.rerun()
 
 
@@ -506,12 +516,12 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
 
 
 def get_all_score_users() -> list[int]:
-    return _conn.query(
+    return awa_query(
+        "SCORE",
         """
         SELECT DISTINCT USER_ID
         FROM SCORE
         ORDER BY USER_ID""",
-        ttl=0,
         show_spinner=_("querying the user list"),
     )["USER_ID"].to_list()
 
@@ -550,6 +560,7 @@ def register_commands(obj: Optional[dict] = None):
 
 
 def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = None) -> pd.DataFrame:
+    _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
         if date_range is None:
             res = s.execute(
@@ -741,7 +752,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
 
 
 def query_all_sessions() -> pd.DataFrame:
-    df = _conn.query("SELECT * FROM USER_CACHE WHERE USER_ID = %d" % st.session_state.user)
+    df = awa_query("USER_CACHE", "SELECT * FROM USER_CACHE WHERE USER_ID = %d" % st.session_state.user)
     df["LAST_SEEN_TS"] = pd.to_datetime(df["LAST_SEEN_TS"], unit="s").dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz)  # type: ignore[union-attr]
     df.rename(
         columns={"AID": "ajs_anonymous_id", "LAST_SEEN_TS": "last_seen_datetime"},
@@ -752,6 +763,7 @@ def query_all_sessions() -> pd.DataFrame:
 
 
 def delete_user_cache(aid: str) -> None:
+    _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
         s.execute(
             text(
@@ -767,6 +779,7 @@ def delete_user_cache(aid: str) -> None:
 def invalidate_user_cache(user: Optional[int] = None) -> None:
     if user is None:
         user = st.session_state.user
+    _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
         # 首先查询所有 aid，删除本地缓存的 token pickle
         res = s.execute(
@@ -789,6 +802,7 @@ def invalidate_user_cache(user: Optional[int] = None) -> None:
 
 
 def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -> None:
+    _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
         upsert_text = _build_upsert(
             st.secrets.connections.osuawa.get("dialect") or st.secrets.connections.osuawa.url.split("://")[0].split("+")[0],

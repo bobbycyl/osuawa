@@ -364,6 +364,16 @@ with st.sidebar:
             icon=":material/expand_content:",
             disabled=not st.session_state.basic_interaction_enabled,
         )
+    if st.button(
+        _("Clear Cache"),
+        use_container_width=True,
+        icon=":material/clear_all:",
+        disabled=not st.session_state.basic_interaction_enabled,
+    ):
+        st.session_state.clear()
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.rerun()
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
     if st.button(
         _("Task Board"),
