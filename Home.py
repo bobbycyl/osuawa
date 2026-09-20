@@ -424,25 +424,26 @@ st.button(_("Run"), width="stretch", type="primary", on_click=submit)
 
 if st.session_state.perm >= 1:
     st.divider()
-    # 显示历史消息
-    for message in st.session_state.llm_messages:
-        if message["role"] == "system":
-            continue
-        with st.chat_message(message["role"]):
-            st.markdown(message.get("content", ""))
+    with st.container(border=True):
+        # 显示历史消息
+        for message in st.session_state.llm_messages:
+            if message["role"] == "system":
+                continue
+            with st.chat_message(message["role"]):
+                st.markdown(message.get("content", ""))
 
-    # 用户输入
-    if prompt := st.chat_input(_("How can I help you?")):
-        # 当前仅支持文本输入
-        if not isinstance(prompt, str):
-            raise ValueError(_("unsupported input type"))
-        # 添加用户消息
-        st.session_state.llm_messages.append({"role": "user", "content": prompt})
+        # 用户输入
+        if prompt := st.text_input(_("How can I help you?"), label_visibility="hidden", placeholder=_("How can I help you?")):
+            # 当前仅支持文本输入
+            if not isinstance(prompt, str):
+                raise ValueError(_("unsupported input type"))
+            # 添加用户消息
+            st.session_state.llm_messages.append({"role": "user", "content": prompt})
 
-        with st.chat_message("user"):
-            st.markdown(prompt)
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-        process_streaming_with_tools()
+            process_streaming_with_tools()
 
 #################################
 ### DEBUGGING COMPONENTS AREA ###
@@ -458,4 +459,4 @@ if st.session_state._debugging_mode:
         ["c", "e"],
     )
 
-st.text(_("Session: %s") % get_session_id())
+st.caption(_("Session: %s") % get_session_id())
