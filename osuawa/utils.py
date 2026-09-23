@@ -4,7 +4,9 @@ osuawa.py and utils.py should not contain i18n related text and streamlit relate
 
 import os
 import re
+import types
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from enum import Enum, unique
@@ -12,18 +14,7 @@ from math import log10, sqrt
 from random import shuffle
 from threading import BoundedSemaphore
 from time import sleep, time, time_ns
-from typing import (
-    Any,
-    Literal,
-    NamedTuple,
-    NewType,
-    Optional,
-    TypedDict,
-    Union,
-    cast,
-    get_args,
-    get_origin,
-)
+from typing import Any, Literal, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
 
 import numpy as np
 import orjson
@@ -34,6 +25,7 @@ from clayutil.futil import Downloader, Properties
 from clayutil.sutil import md5sum
 from ossapi.models import MultiplayerScore
 from ossapi.ossapiv2_async import Beatmap, Score, User, UserCompact
+from osu.Game.Rulesets import Ruleset
 from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
@@ -46,8 +38,9 @@ from osupp.performance import (
     TaikoPerformance,
     calculate_performance as calculate_performance,
 )
-from osupp.util import validate_mod_setting_value
+from osupp.util import Result, validate_mod_setting_value
 from redis import Redis
+from sqlalchemy import RowMapping
 
 _c = calculate_difficulty, calculate_performance
 
@@ -71,14 +64,6 @@ _mania_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s i
 available_mods = set(osu_mod_indexes.keys()) | set(taiko_mod_indexes.keys()) | set(catch_mod_indexes.keys()) | set(mania_mod_indexes.keys())
 
 sem = BoundedSemaphore()
-
-TYPE_MAPPING: dict[type, str] = {
-    int: "INT",
-    float: "REAL",
-    bool: "INT",
-    str: "TEXT",
-    bytes: "BLOB",
-}
 
 assets_dir: str = os.path.dirname(__file__)
 
@@ -209,30 +194,13 @@ def create_unique_picker[_T](items: list[_T]):
     return picker
 
 
-def get_simple_sql_type(py_type: type) -> str:
-    # 处理 Optional (例如 Optional[int] 或 Union[int, None])
-    if get_origin(py_type) is Union:
-        # 获取 Union 里的参数列表
-        args = get_args(py_type)
-        # 遍历找到 NoneType 以外的那个类型
-        for arg in args:
-            if arg is not type(None):
-                py_type = arg
-                break
-
-    # 查表，默认 TEXT
-    return TYPE_MAPPING.get(py_type, "TEXT")
-
-
-def generate_columns_sql(dataclass_cls, name_mapping: Optional[dict] = None):
-    parts = []
-    for f in fields(dataclass_cls):
-        sql_type = get_simple_sql_type(cast(type, f.type))
-        if name_mapping and f.name in name_mapping:
-            parts.append(f"{name_mapping[f.name]} {sql_type}")
-        else:
-            parts.append(f"{f.name.upper()} {sql_type}")
-    return ", ".join(parts)
+def _unwrap_optional(annotation: Any) -> Any:
+    """剥掉 ``Optional[X]`` / ``X | None`` 外层，返回 X"""
+    if get_origin(annotation) in (Union, types.UnionType):
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(args) == 1:
+            return args[0]
+    return annotation
 
 
 def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
@@ -251,11 +219,17 @@ def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
 
 
 def calc_bin_size(data) -> float:
-    if len(data) == 0:
+    """估算直方图 bin 宽度
+
+    先剔除 NaN/None 再算
+    """
+    values = np.asarray(list(data), dtype=float).ravel()
+    values = values[np.isfinite(values)]
+    if len(values) == 0:
         return 0
-    if len(data) == 1:
+    if len(values) == 1:
         return 1
-    return (max(data) - min(data)) / min((sqrt(len(data)), 10 * log10(len(data))))
+    return float((values.max() - values.min()) / min((sqrt(len(values)), 10 * log10(len(values)))))
 
 
 async def simple_user_dict(user: User | UserCompact) -> dict[str, Any]:
@@ -548,6 +522,32 @@ class SimpleDifficultyAttribute(object):
         self.hit_length = round(self.hit_length / self.magnitude)
 
 
+#: 数据类字段名 -> 数据库列名。几乎一一对应（字段名去下划线转大写），只有 USER_ID 是个例外
+#:
+#: 这两个常量放在这里而不是 osuawa/db.py：``from_row`` 要用它们把一行还原成数据类，
+#: 而 db.py 是依赖 utils.py 的（建表、补列、upsert 全部从数据类推导），
+#: 反过来依赖就成了循环导入，整个包都进不来。
+SCORE_COLUMN_OVERRIDES = {"user": "USER_ID"}
+
+#: statistics 里那些「这个模式没有 / 这个版本不统计」的键的默认值，读到 NULL 或缺键时用它补齐
+SCORE_STATISTICS_DEFAULTS: dict[str, Any] = {
+    "miss": 0,
+    "meh": 0,
+    "ok": 0,
+    "good": 0,
+    "great": 0,
+    "perfect": None,
+    "small_tick_hit": None,
+    "large_tick_hit": None,
+    "small_bonus": None,
+    "large_bonus": None,
+    "ignore_miss": None,
+    "ignore_hit": None,
+    "combo_break": None,
+    "slider_tail_hit": None,
+}
+
+
 class ScoreStatistics(TypedDict):
     miss: int
     meh: int
@@ -631,6 +631,37 @@ class SimpleScoreInfo(object):
             score.ruleset_id,
         )
 
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any] | RowMapping):
+        """把 SCORE 表的一行还原为 ``SimpleScoreInfo``
+
+        按列名取值，因此不依赖 SELECT 的列顺序。``row`` 可以是 ``RowMapping``
+        或任意 ``Mapping``；键名大小写不敏感。
+        """
+        data = {str(key).upper(): value for key, value in row.items()}
+        mods = data.get("MODS")
+        statistics = data.get("STATISTICS")
+        st = data.get("ST")
+        return cls(
+            bid=int(data["BID"]),
+            user=int(data["USER_ID"]),
+            score=int(data["SCORE"]),
+            accuracy=float(data["ACCURACY"]),
+            max_combo=int(data["MAX_COMBO"]),
+            passed=bool(data["PASSED"]),
+            pp=data.get("PP"),
+            _mods=orjson.loads(mods) if mods else [],
+            ts=datetime.fromtimestamp(data["TS"], tz=timezone.utc),
+            statistics=ScoreStatistics(
+                **{**SCORE_STATISTICS_DEFAULTS, **(orjson.loads(statistics) if statistics else {})},
+            ),
+            st=datetime.fromtimestamp(st, tz=timezone.utc) if st is not None else None,
+            ruleset_id=int(data["RULESET_ID"]),
+        )
+
+
+_SCORE_BASE_FIELD_NAMES = frozenset(field.name for field in fields(SimpleScoreInfo))
+
 
 @dataclass(slots=True)
 class CompletedSimpleScoreInfo(SimpleScoreInfo):
@@ -683,6 +714,28 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     b_pp_92if: float
     b_pp_81if: float
     b_pp_67if: float
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any] | RowMapping):
+        """把 SCORE 表的一行按列名还原为 ``CompletedSimpleScoreInfo``"""
+        data = {str(key).upper(): value for key, value in row.items()}
+        # 这里只能显式写基础类，super 的两种写法都不行：
+        #   super().from_row(row)（等价于 super(CompletedSimpleScoreInfo, cls).from_row(row)）
+        #     会把 cls 绑成 CompletedSimpleScoreInfo，基类里的 ``return cls(...)`` 于是拿 12 个
+        #     基础字段去构造需要 52 个字段的完成版 → TypeError: missing 39 required arguments
+        #   super(SimpleScoreInfo, cls).from_row(row)
+        #     查表位置在 SimpleScoreInfo 之后（也就是 object），
+        #     → AttributeError: 'super' object has no attribute 'from_row'
+        base = SimpleScoreInfo.from_row(row)
+        kwargs: dict[str, Any] = {name: getattr(base, name) for name in _SCORE_BASE_FIELD_NAMES}
+        for field in fields(cls):
+            if field.name in _SCORE_BASE_FIELD_NAMES:
+                continue
+            value = data.get(SCORE_COLUMN_OVERRIDES.get(field.name, field.name.lstrip("_").upper()))
+            if value is not None and _unwrap_optional(field.type) is bool:
+                value = bool(value)
+            kwargs[field.name] = value
+        return cls(**kwargs)
 
 
 @dataclass(slots=True)
@@ -839,53 +892,68 @@ def download_osu(beatmap: Beatmap):
             sleep(0.5)
 
 
+def _get_ruleset_and_performance(score: SimpleScoreInfo) -> tuple[Ruleset, NamedTuple, type[NamedTuple]]:
+    match score.ruleset_id:
+        case 0:
+            return (
+                OsuRuleset(),
+                OsuPerformance(
+                    combo=score.max_combo,
+                    misses=score.statistics["miss"],
+                    mehs=score.statistics["meh"],
+                    oks=score.statistics["ok"],
+                    large_tick_hits=score.statistics["large_tick_hit"],
+                    slider_tail_hits=score.statistics["slider_tail_hit"],
+                ),
+                OsuPerformance,
+            )
+        case 1:
+            return (
+                TaikoRuleset(),
+                TaikoPerformance(
+                    combo=score.max_combo,
+                    misses=score.statistics["miss"],
+                    oks=score.statistics["ok"],
+                ),
+                TaikoPerformance,
+            )
+        case 2:
+            return (
+                CatchRuleset(),
+                CatchPerformance(
+                    combo=score.max_combo,
+                    misses=score.statistics["miss"],
+                    small_tick_hits=score.statistics["small_tick_hit"],
+                    large_tick_hits=score.statistics["large_tick_hit"],
+                ),
+                CatchPerformance,
+            )
+        case 3:
+            return (
+                ManiaRuleset(),
+                ManiaPerformance(
+                    misses=score.statistics["miss"],
+                    mehs=score.statistics["meh"],
+                    oks=score.statistics["ok"],
+                    goods=score.statistics["good"],
+                    greats=score.statistics["great"],
+                ),
+                ManiaPerformance,
+            )
+        case _:
+            raise ValueError("ruleset_id %d not supported" % score.ruleset_id)
+
+
 def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
-    """完整计算所需属性，这会覆盖 score 原本的 pp"""
-    ruleset_id = score.ruleset_id
+    """完整计算所需属性，这会覆盖 score 原本的 pp
+
+    逐条计算，适合零散调用。
+    批量重算历史成绩请用 :func:`calc_beatmap_attributes_batch`，它会复用同一谱面的难度计算。
+    """
     my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(score._mods)
     download_osu(beatmap)
-    match ruleset_id:
-        case 0:
-            ruleset = OsuRuleset()
-            performance = OsuPerformance(
-                combo=score.max_combo,
-                misses=score.statistics["miss"],
-                mehs=score.statistics["meh"],
-                oks=score.statistics["ok"],
-                large_tick_hits=score.statistics["large_tick_hit"],
-                slider_tail_hits=score.statistics["slider_tail_hit"],
-            )
-            performance_type = OsuPerformance
-        case 1:
-            ruleset = TaikoRuleset()
-            performance = TaikoPerformance(
-                combo=score.max_combo,
-                misses=score.statistics["miss"],
-                oks=score.statistics["ok"],
-            )
-            performance_type = TaikoPerformance
-        case 2:
-            ruleset = CatchRuleset()
-            performance = CatchPerformance(
-                combo=score.max_combo,
-                misses=score.statistics["miss"],
-                small_tick_hits=score.statistics["small_tick_hit"],
-                large_tick_hits=score.statistics["large_tick_hit"],
-            )
-            performance_type = CatchPerformance
-        case 3:
-            ruleset = ManiaRuleset()
-            performance = ManiaPerformance(
-                misses=score.statistics["miss"],
-                mehs=score.statistics["meh"],
-                oks=score.statistics["ok"],
-                goods=score.statistics["good"],
-                greats=score.statistics["great"],
-            )
-            performance_type = ManiaPerformance
-        case _:
-            raise ValueError("ruleset_id %d not supported" % ruleset_id)
+    ruleset, performance, performance_type = _get_ruleset_and_performance(score)
     calculator = calculate_performance(
         beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
         ruleset=ruleset,
@@ -904,6 +972,36 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]
     # noinspection PyArgumentList
     pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]
+
+    return _assemble_completed_score_info(
+        beatmap,
+        score,
+        my_attr,
+        osupp_attr,
+        perf_got_attr,
+        perf100_attr,
+        pp92,
+        pp81,
+        pp67,
+    )
+
+
+def _assemble_completed_score_info(
+    beatmap: Beatmap,
+    score: SimpleScoreInfo,
+    my_attr: SimpleDifficultyAttribute,
+    osupp_attr: Result,
+    perf_got_attr: Result,
+    perf100_attr: Result,
+    pp92: float,
+    pp81: float,
+    pp67: float,
+) -> CompletedSimpleScoreInfo:
+    """把「谱面/模组属性 + 难度属性 + 各载荷的 pp」装配成 ``CompletedSimpleScoreInfo``
+
+    ``calc_beatmap_attributes`` 与 ``calc_beatmap_attributes_batch`` 共用这一处装配逻辑，
+    保证逐条与批量两条路径的字段来源完全一致。
+    """
     pp_got = perf_got_attr["pp"]
     pp_got_aim = perf_got_attr["aim"]
     pp_got_speed = perf_got_attr["speed"]
@@ -978,6 +1076,81 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     )
 
 
+def calc_beatmap_attributes_batch(
+    beatmaps_dict: Mapping[int, Beatmap],
+    scores_compact: Mapping[str, SimpleScoreInfo],
+) -> dict[str, CompletedSimpleScoreInfo]:
+    """批量计算，按 ``(bid, mods, ruleset)`` 复用同一个 osupp 计算器
+
+    相比逐条调用 :func:`calc_beatmap_attributes`：
+
+    - 同一谱面只解析一次 ``.osu``、只做一次难度计算
+    - ``pp100 / pp92 / pp81 / pp67`` 只与谱面和模组有关，与成绩无关，
+      属于谱面级常量，整组只算一次
+    - 每条成绩只需要一次 performance 请求
+
+    :param beatmaps_dict: ``bid -> Beatmap``
+    :param scores_compact: ``score_id -> SimpleScoreInfo``
+    :return: ``score_id -> CompletedSimpleScoreInfo``，**与入参一一对应**（顺序也一致）；
+        任何一条算不出来都直接抛错，不会静默少返回
+    """
+    # (bid, osu_tool_mods, osu_tool_mod_options, ruleset_id) -> [score_id, ...]
+    groups: dict[tuple[int, tuple[str, ...], tuple[str, ...], int], list[str]] = {}
+    mod_attrs: dict[str, SimpleDifficultyAttribute] = {}
+    for score_id, score in scores_compact.items():
+        beatmap = beatmaps_dict[score.bid]
+        my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
+        my_attr.set_mods(score._mods)
+        key = (score.bid, tuple(my_attr.osu_tool_mods), tuple(my_attr.osu_tool_mod_options), score.ruleset_id)
+        groups.setdefault(key, []).append(score_id)
+        mod_attrs[score_id] = my_attr
+
+    results: dict[str, CompletedSimpleScoreInfo] = {}
+    downloaded: set[int] = set()
+    for (bid, osu_tool_mods, osu_tool_mod_options, _ruleset_id), score_ids in groups.items():
+        beatmap = beatmaps_dict[bid]
+        if bid not in downloaded:
+            download_osu(beatmap)
+            downloaded.add(bid)
+        ruleset, _, performance_type = _get_ruleset_and_performance(scores_compact[score_ids[0]])
+        calculator = calculate_performance(
+            beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % bid),
+            ruleset=ruleset,
+            mods=list(osu_tool_mods),
+            mod_options=list(osu_tool_mod_options),
+            allow_cancel=False,
+        )
+        try:
+            osupp_attr = next(calculator)
+            # 基准 pp 与成绩无关，整组共用一个结果
+            # noinspection PyArgumentList
+            perf100_attr = calculator.send(performance_type())
+            # noinspection PyArgumentList
+            pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]
+            # noinspection PyArgumentList
+            pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]
+            # noinspection PyArgumentList
+            pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]
+            for score_id in score_ids:
+                score = scores_compact[score_id]
+                _, performance, _ = _get_ruleset_and_performance(score)
+                perf_got_attr = calculator.send(performance)
+                results[score_id] = _assemble_completed_score_info(
+                    beatmap,
+                    score,
+                    mod_attrs[score_id],
+                    osupp_attr,
+                    perf_got_attr,
+                    perf100_attr,
+                    pp92,
+                    pp81,
+                    pp67,
+                )
+        finally:
+            calculator.close()
+    return results
+
+
 def calc_positive_percent(score: int | float | None, min_score: int | float, max_score: int | float) -> int:
     if score is None:
         score = 0.0
@@ -1030,7 +1203,7 @@ def get_size_and_count(path):
     return 0, 0
 
 
-def format_size(size_bytes):
+def format_size(size_bytes: float):
     for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:
         if size_bytes < 1024.0:
             return f"{size_bytes:.2f} {unit}"

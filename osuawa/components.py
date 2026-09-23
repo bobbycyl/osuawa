@@ -36,11 +36,16 @@ from streamlit.runtime.caching.cache_utils import CachedFunc
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from osuawa import C, OsuPlaylist, Osuawa
+from osuawa.db import (
+    SCORE_PRIMARY_KEY,
+    resolve_db_url,
+    score_rows_query,
+    score_users_query,
+)
 from osuawa.osuawa import CachedMixIn
 from osuawa.utils import (
     CompletedSimpleScoreInfo,
     RedisTaskId,
-    ScoreStatistics,
     SimpleDifficultyAttribute,
     _build_upsert,
     calculate_performance,
@@ -517,11 +522,8 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
 
 def get_all_score_users() -> list[int]:
     return awa_query(
-        "SCORE",
-        """
-        SELECT DISTINCT USER_ID
-        FROM SCORE
-        ORDER BY USER_ID""",
+        score_users_query(),
+        ttl=0,
         show_spinner=_("querying the user list"),
     )["USER_ID"].to_list()
 
@@ -560,119 +562,22 @@ def register_commands(obj: Optional[dict] = None):
 
 
 def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = None) -> pd.DataFrame:
+    """取某个用户的成绩表"""
     _conn = st.connection("osuawa", type="sql", ttl=0)
+    if date_range is None:
+        where = "USER_ID = :user ORDER BY TS"
+        params: dict[str, Any] = {"user": user}
+    else:
+        where = "USER_ID = :user AND TS >= :begin_date AND TS <= :end_date ORDER BY TS"
+        params = {
+            "user": user,
+            "begin_date": datetime.combine(date_range[0], time.min).timestamp(),
+            "end_date": datetime.combine(date_range[1], time.max).timestamp(),
+        }
     with _conn.session as s:
-        if date_range is None:
-            res = s.execute(
-                text(
-                    """
-                    SELECT *
-                    FROM SCORE
-                    WHERE USER_ID = :user
-                    ORDER BY TS""",
-                ),
-                params={"user": user},
-            )
-        else:
-            begin_date_ts = datetime.combine(date_range[0], time.min).timestamp()
-            end_date_ts = datetime.combine(date_range[1], time.max).timestamp()
-            res = s.execute(
-                text(
-                    """
-                    SELECT *
-                    FROM SCORE
-                    WHERE USER_ID = :user
-                      AND TS >= :begin_date
-                      AND TS <= :end_date
-                    ORDER BY TS""",
-                ),
-                params={
-                    "user": user,
-                    "begin_date": begin_date_ts,
-                    "end_date": end_date_ts,
-                },
-            )
-        rows = res.fetchall()
-    # 处理 bool 和 datetime
-    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {
-        str(row[0]): CompletedSimpleScoreInfo(
-            # 基础字段
-            row[1],
-            row[2],
-            row[3],
-            row[4],
-            row[5],
-            bool(row[6]),
-            row[7],
-            orjson.loads(row[8]) if row[8] is not None else [],
-            datetime.fromtimestamp(row[9]),
-            (
-                ScoreStatistics(**orjson.loads(row[10]))
-                if row[10] is not None
-                else ScoreStatistics(
-                    miss=0,
-                    meh=0,
-                    ok=0,
-                    good=0,
-                    great=0,
-                    perfect=None,
-                    small_tick_hit=None,
-                    large_tick_hit=None,
-                    small_bonus=None,
-                    large_bonus=None,
-                    ignore_miss=None,
-                    ignore_hit=None,
-                    combo_break=None,
-                    slider_tail_hit=None,
-                )
-            ),
-            datetime.fromtimestamp(row[11]) if row[11] is not None else None,
-            row[12],
-            # 扩展字段
-            row[13],
-            row[14],
-            row[15],
-            row[16],
-            row[17],
-            bool(row[18]),
-            bool(row[19]),
-            bool(row[20]),
-            bool(row[21]),
-            bool(row[22]),
-            bool(row[23]),
-            bool(row[24]),
-            row[25],
-            row[26],
-            row[27],
-            row[28],
-            row[29],
-            row[30],
-            row[31],
-            row[32],
-            row[33],
-            row[34],
-            row[35],
-            row[36],
-            row[37],
-            row[38],
-            row[39],
-            row[40],
-            row[41],
-            row[42],
-            row[43],
-            row[44],
-            row[45],
-            row[46],
-            row[47],
-            row[48],
-            row[49],
-            row[50],
-            row[51],
-        )
-        for row in rows
-    }
+        rows = s.execute(text(score_rows_query(where)), params=params).fetchall()
+    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {str(row._mapping[SCORE_PRIMARY_KEY]): CompletedSimpleScoreInfo.from_row(row._mapping) for row in rows}
     return st.session_state.awa.create_scores_dataframe(completed_recent_scores_compact)
-
 
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: Optional[int] = None) -> Figure:
     beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api_beatmap(bid))
@@ -804,8 +709,9 @@ def invalidate_user_cache(user: Optional[int] = None) -> None:
 def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -> None:
     _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
+        # 方言与 daemon / 重算脚本走同一处解析（resolve_db_url），不要在页面里另写一套
         upsert_text = _build_upsert(
-            st.secrets.connections.osuawa.get("dialect") or st.secrets.connections.osuawa.url.split("://")[0].split("+")[0],
+            resolve_db_url(st.secrets)[1],
             ["USER_ID", "USERNAME", "LAST_SEEN_TS"],
             ["AID"],
         )
