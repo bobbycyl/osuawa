@@ -493,7 +493,7 @@ if st.session_state.perm >= 1:
         allow_unsafe_jscode=True,
         key=st.session_state.aggrid_key2,
     )
-    st.write(df)
+    # st.write(df)
     edited_df = grid_response.data.copy() if grid_response.data is not None else pd.DataFrame()
     selected_rows = grid_response.selected_rows
 

@@ -306,7 +306,7 @@ def process_streaming_with_tools():
         )
 
         # 执行所有工具调用
-        with st.expander("工具调用详情", expanded=True, icon=":material/details:"):
+        with st.expander("工具调用详情", icon=":material/details:"):
             for i, tool_call in enumerate(tool_calls, 1):
                 func_name = tool_call["function"]["name"]
                 func_args = tool_call["function"]["arguments"]
@@ -316,7 +316,6 @@ def process_streaming_with_tools():
                 try:
                     result = execute_tool_call(tool_call)
                     st.success(f"工具调用 {i} 执行成功")
-                    st.text(result[:100] + "..." if len(result) > 100 else result)
                 except Exception as e:
                     st.error(f"工具调用 {i} 执行失败: {str(e)}")
 
