@@ -62,7 +62,20 @@ MAX_CONCURRENT_CALCULATIONS = 4
 COMMON_PARAMS = frozenset({"k", "b", "m", "mods"})
 
 # /api/difficulty 除基础难度属性外额外带出的 osupp 扩展键（在 Result 中带 __ek_ 前缀）
-DIFFICULTY_EXTRA_KEYS = ("strains_of_skills", "timeline_of_skills")
+DIFFICULTY_EXTRA_KEYS = (
+    "strains_of_skills",
+    "timeline_of_skills",
+    "cs_adj",
+    "ar_adj",
+    "od_adj",
+    "hp_adj",
+    "clock_rate",
+    "most_common_bpm_adj",
+    "hit_length_orig",
+    "drain_length_orig",
+    "hit_length_adj",
+    "drain_length_adj",
+)
 
 # ruleset_id -> Performance NamedTuple，用于构建 /api/performance 的载荷
 PERFORMANCE_TYPES: dict[int, type[NamedTuple]] = {
@@ -199,6 +212,10 @@ def _run_calculation(bid: int, ruleset_id: int, params: Mapping[str, str], *, wi
                 ex_diff_attr = difficulty_attributes._get_pure()
                 for key in DIFFICULTY_EXTRA_KEYS:
                     ex_diff_attr[key] = difficulty_attributes["__ek_%s" % key]
+                # 友好的 length 表达
+                # todo: 需要排查上游，这个和 osu! web 的数据会有大概 1s 的误差（PS：其实在其他地方，JavaScript/C#/Python 的 round 误差可能比这个更严重）
+                ex_diff_attr["hit_length_min_sec"] = "%d:%02d" % divmod(ex_diff_attr["hit_length_adj"] // 1000, 60)
+                ex_diff_attr["drain_length_min_sec"] = "%d:%02d" % divmod(ex_diff_attr["drain_length_adj"] // 1000, 60)
                 return ex_diff_attr
             performance_attributes = calculator.send(_build_performance(params, ruleset_id))
             return performance_attributes._get_pure()
@@ -248,4 +265,4 @@ def performance(request: Request) -> Any:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host=HOST, port=PORT)
+    uvicorn.run(app, host=HOST, port=PORT, log_level="warning", access_log=False)
