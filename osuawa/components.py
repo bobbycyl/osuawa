@@ -78,6 +78,8 @@ type DatabaseName = Literal["BEATMAP", "SCORE", "USER_CACHE"]
 
 
 def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False, params: Optional[Any] = None, **kwargs) -> pd.DataFrame:
+    if "ttl" in kwargs:
+        raise ValueError("cannot specify ttl")
     if database not in sql:
         raise ValueError(f"database name {database} not found in SQL query")
     _conn = st.connection("osuawa", type="sql", ttl=0)
