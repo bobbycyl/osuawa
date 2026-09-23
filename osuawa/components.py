@@ -525,7 +525,6 @@ def get_all_score_users() -> list[int]:
     return awa_query(
         SCORE_TABLE,
         score_users_query(),
-        ttl=0,
         show_spinner=_("querying the user list"),
     )["USER_ID"].to_list()
 
