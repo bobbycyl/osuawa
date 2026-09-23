@@ -38,6 +38,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 from osuawa import C, OsuPlaylist, Osuawa
 from osuawa.db import (
     SCORE_PRIMARY_KEY,
+    SCORE_TABLE,
     resolve_db_url,
     score_rows_query,
     score_users_query,
@@ -522,6 +523,7 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
 
 def get_all_score_users() -> list[int]:
     return awa_query(
+        SCORE_TABLE,
         score_users_query(),
         ttl=0,
         show_spinner=_("querying the user list"),
@@ -578,6 +580,7 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
         rows = s.execute(text(score_rows_query(where)), params=params).fetchall()
     completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {str(row._mapping[SCORE_PRIMARY_KEY]): CompletedSimpleScoreInfo.from_row(row._mapping) for row in rows}
     return st.session_state.awa.create_scores_dataframe(completed_recent_scores_compact)
+
 
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: Optional[int] = None) -> Figure:
     beatmap: Beatmap = st.session_state.awa.run_coro(st.session_state.awa.api_beatmap(bid))
