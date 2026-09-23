@@ -433,7 +433,8 @@ if st.session_state.perm >= 1:
                 st.markdown(message.get("content", ""))
 
         # 用户输入
-        if prompt := st.text_input(_("How can I help you?"), label_visibility="hidden", placeholder=_("How can I help you?")):
+        # todo: chat_input 会导致 scroll 不平滑，text_input 会导致 rerun 残留
+        if prompt := st.chat_input(_("How can I help you?")):
             # 当前仅支持文本输入
             if not isinstance(prompt, str):
                 raise ValueError(_("unsupported input type"))
