@@ -4,14 +4,11 @@
 """
 
 import asyncio
-import contextlib
 import logging
 import os
 import os.path
 import pickle
 from collections.abc import Sequence
-from dataclasses import asdict
-from datetime import datetime
 from shutil import rmtree
 from time import time, time_ns
 from typing import Literal, Optional, cast
@@ -29,9 +26,10 @@ from clayutil.cmdparse import (
     JSONStringField as JsonStr,
 )
 from ossapi.ossapiv2_async import Domain, Scope, Score
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
+from osuawa.db import build_score_insert_sql, create_db_engine, resolve_db_url, score_users_query, scores_compact_to_params, sync_score_columns
 from osuawa.utils import (
     BeatmapSpec,
     BeatmapToUpdate,
@@ -40,7 +38,6 @@ from osuawa.utils import (
     CompletedSimpleScoreInfo,
     DatabasePlaylistBeatmap,
     SimpleScoreInfo,
-    _build_update_ignore,
     _create_tmp_playlist_p,
     push_task,
 )
@@ -81,43 +78,9 @@ logger.addHandler(fh)
 logger.info("starting osuawa daemon...")
 
 # sql
-_url = st_secrets["connections"]["osuawa"].get("url")
-_ca_path: Optional[str] = None
-if _url is None:
-    _dialect = st_secrets["connections"]["osuawa"]["dialect"]
-    _host = st_secrets["connections"]["osuawa"]["host"]
-    _port = st_secrets["connections"]["osuawa"]["port"]
-    _username = st_secrets["connections"]["osuawa"]["username"]
-    _password = st_secrets["connections"]["osuawa"]["password"]
-    _database = st_secrets["connections"]["osuawa"]["database"]
-    if _dialect == "mysql":
-        _dialect += "+pymysql"
-    _url = "%s://%s:%s@%s:%s/%s" % (
-        _dialect,
-        _username,
-        _password,
-        _host,
-        _port,
-        _database,
-    )
-    with contextlib.suppress(KeyError):
-        _ca_path = st_secrets["connections"]["osuawa"]["create_engine_kwargs"]["connect_args"]["ssl"]["ca"]
-else:
-    # 获取 dialect
-    _dialect = _url.split("://")[0].split("+")[0]
-engine = create_engine(
-    _url,
-    # daemon 大部分时间阻塞在 brpop 上、完全不碰数据库，连接池里的连接会长时间闲置。
-    # MySQL 的 wait_timeout（以及链路中的 NAT / 云负载均衡 / 防火墙）会单方面掐断空闲连接，
-    # 下次复用时才抛 OperationalError 2006 "MySQL server has gone away"。
-    # pool_pre_ping: 每次取出连接前先探活，失活则丢弃并透明重建（关键修复）
-    # pool_recycle : 兜底，主动回收超过 30 分钟的连接，避免长期持有陈旧 socket
-    pool_pre_ping=True,
-    pool_recycle=1800,
-    pool_size=2,
-    max_overflow=0,
-    connect_args={"ssl_ca": _ca_path} if _ca_path is not None else {},
-)
+# 连接参数（含 pool_pre_ping / pool_recycle 的踩坑说明）见 osuawa.db.create_db_engine
+_url, _dialect, _ca_path = resolve_db_url(st_secrets)
+engine = create_db_engine(_url, _ca_path)
 logger.info("sql connected: %s" % _url)
 
 # socket_timeout 需明显大于下方 brpop 的阻塞时长：redis-py 8.x 起该值默认为 5s，与 brpop timeout 相同时 recv 会先于服务端返回 nil 而超时
@@ -141,25 +104,30 @@ sem = asyncio.Semaphore(1)
 
 # 数据库需要以下表和字段
 # 1. 表 BEATMAP，字段固定为 BID, SID, INFO, SKILL_SLOT, SR, BPM, HIT_LENGTH, MAX_COMBO, CS, AR, OD, MODS, NOTES, STATUS, COMMENTS, POOL, SUGGESTOR, RAW_MODS, ADD_TS, U_ARTIST, U_TITLE （一个经过修改的课题字段，后续可以复用生成课题的代码，逻辑是一样的），使用 BID + MODS 作为主键
-# 2. 表 SCORE，字段与 CompletedSimpleScoreInfo 大体一致，另附加 SCORE_ID 字段作为主键
+# 2. 表 SCORE，字段全部由 CompletedSimpleScoreInfo 推导（见 osuawa.db），另附加 SCORE_ID 字段作为主键。建表与补列都走 sync_score_columns，这里不手写
 # 3. 表 USER_CACHE，字段固定为 USER_ID, USERNAME, AID, LAST_SEEN_TS，AID 为主键
 with engine.begin() as _conn:
     _conn.execute(
         text(
-            "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS VARCHAR(255), NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS REAL, U_ARTIST TEXT, U_TITLE TEXT, SERIES TEXT, PRIMARY KEY (BID, MODS));",
+            # 时间戳用 DOUBLE PRECISION：REAL 在 PostgreSQL 下是 4 字节，epoch 秒在这个精度下分辨率只有 256 秒
+            "CREATE TABLE IF NOT EXISTS BEATMAP(BID BIGINT, SID BIGINT, INFO TEXT, SKILL_SLOT TEXT, SR TEXT, BPM TEXT, HIT_LENGTH TEXT, MAX_COMBO TEXT, CS TEXT, AR TEXT, OD TEXT, MODS VARCHAR(255), NOTES TEXT, STATUS INT, COMMENTS TEXT, POOL TEXT, SUGGESTOR TEXT, RAW_MODS TEXT, ADD_TS DOUBLE PRECISION, U_ARTIST TEXT, U_TITLE TEXT, SERIES TEXT, PRIMARY KEY (BID, MODS));",
         ),
     )
     _conn.execute(
         text(
-            "CREATE TABLE IF NOT EXISTS SCORE(SCORE_ID BIGINT, BID BIGINT, USER_ID BIGINT, SCORE INT, ACCURACY REAL, MAX_COMBO INT, PASSED INT, PP REAL, MODS TEXT, TS REAL, STATISTICS TEXT, ST REAL, RULESET_ID INT, \
-             CS REAL, HIT_WINDOW REAL, PREEMPT REAL, BPM REAL, HIT_LENGTH INT, IS_NF INT, IS_HD INT, IS_HIGH_AR INT, IS_LOW_AR INT, IS_VERY_LOW_AR INT, IS_SPEED_UP INT, IS_SPEED_DOWN INT, INFO TEXT, ORIGINAL_DIFFICULTY REAL, B_STAR_RATING REAL, B_MAX_COMBO INT, B_AIM_DIFFICULTY REAL, B_AIM_DIFFICULT_SLIDER_COUNT REAL, B_SPEED_DIFFICULTY REAL, B_SPEED_NOTE_COUNT REAL, B_READING_DIFFICULTY REAL, B_SLIDER_FACTOR REAL, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR REAL, B_AIM_DIFFICULT_STRAIN_COUNT REAL, B_SPEED_DIFFICULT_STRAIN_COUNT REAL, B_READING_DIFFICULT_NOTE_COUNT REAL, PP_AIM REAL, PP_SPEED REAL, PP_ACCURACY REAL, PP_READING REAL, B_PP_100IF_AIM REAL, B_PP_100IF_SPEED REAL, B_PP_100IF_ACCURACY REAL, B_PP_100IF_READING REAL, B_PP_100IF REAL, B_PP_92IF REAL, B_PP_81IF REAL, B_PP_67IF REAL, PRIMARY KEY (SCORE_ID));",
+            "CREATE TABLE IF NOT EXISTS USER_CACHE(USER_ID BIGINT, USERNAME TEXT, AID VARCHAR(36), LAST_SEEN_TS DOUBLE PRECISION, PRIMARY KEY (AID));",
         ),
     )
-    _conn.execute(
-        text(
-            "CREATE TABLE IF NOT EXISTS USER_CACHE(USER_ID BIGINT, USERNAME TEXT, AID VARCHAR(36), LAST_SEEN_TS REAL, PRIMARY KEY (AID));",
-        ),
-    )
+
+# SCORE 表：不存在就按数据类推导的 DDL 建表；数据类新增字段（比如 osupp 升级带来新的指标）时自动补列，
+# 否则 INSERT 会直接报 Unknown column。新列对旧行是 NULL，由重算脚本或 update 命令填充。
+_SCORE_CREATED, _SCORE_ADDED, _SCORE_EXTRA = sync_score_columns(engine)
+if _SCORE_CREATED:
+    logger.info("SCORE table created")
+if _SCORE_ADDED:
+    logger.warning("SCORE 表自动补列: %s（旧行该列为 NULL，需要重算填充）" % ", ".join("%s %s" % column for column in _SCORE_ADDED))
+if _SCORE_EXTRA:
+    logger.warning("SCORE 表存在数据类中已没有的列（未做删除）: %s" % ", ".join(_SCORE_EXTRA))
 
 
 def commands():
@@ -209,45 +177,30 @@ def get_all_score_users() -> Sequence[int]:
     with engine.connect() as conn:
         return (
             conn.execute(
-                text("SELECT DISTINCT USER_ID FROM SCORE ORDER BY USER_ID"),
+                text(score_users_query()),
             )
             .scalars()
             .all()
         )
 
 
+# 历史成绩的派生列（reading 系列等）对旧行是 NULL，而 INSERT IGNORE 会直接跳过已存在的
+# SCORE_ID，所以光修 INSERT 也补不回来。需要一次性回填时，把这里改成 "update"、跑一次
+# `update .*`（会用重算结果覆盖旧行；所有字段都是「谱面 + 成绩 + osupp 版本」的纯函数，
+# 重算结果可信），回填完再改回 "ignore"。
+# 更大规模的回填请用 recompute_scores.py（先跑一遍检查比对看差异，再加 --write 重算）。
+# ⚠ 改成 "update" 后 MySQL 的 rowcount 是「更新一行记 2」，日志里的 got/diff 会失真。
+SCORE_ON_CONFLICT: Literal["ignore", "update"] = "ignore"
+
+
 def save_recent_scores(user: int, include_fails: bool = True) -> str:
     username, completed_recent_scores_compact = daemon_awa.run_coro(async_save_recent_scores(user, include_fails))
     with engine.begin() as conn:
-        # 插入到表 SCORE，如果遇到冲突，则放弃
-        # 准备数据
-        scores = []
-        for pk, _v in completed_recent_scores_compact.items():
-            score = asdict(
-                _v,
-                dict_factory=lambda items: {
-                    k.lstrip("_"): (None if v is None else (v.timestamp() if isinstance(v, datetime) else (int(v) if isinstance(v, bool) else (orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v)))) for k, v in items
-                },
-            )
-            score["score_id"] = pk
-            # todo: 默认的时间是倒序的，是否有必要转换为正序？（可能只是一些强迫症需求罢了）
-            scores.append(score)
+        # 插入到表 SCORE，如果遇到冲突，则放弃（或按 SCORE_ON_CONFLICT 覆盖）
+        scores = [scores_compact_to_params(pk, _v) for pk, _v in completed_recent_scores_compact.items()]
         if len(scores) > 0:
             res = conn.execute(
-                text(
-                    _build_update_ignore(
-                        _dialect,
-                        """INSERT INTO SCORE (SCORE_ID, BID, USER_ID, SCORE, ACCURACY, MAX_COMBO, PASSED, PP, MODS, TS, STATISTICS, ST, RULESET_ID, CS, HIT_WINDOW, PREEMPT, BPM, HIT_LENGTH, IS_NF, IS_HD, IS_HIGH_AR, IS_LOW_AR, IS_VERY_LOW_AR, IS_SPEED_UP,
-                                              IS_SPEED_DOWN, INFO, ORIGINAL_DIFFICULTY, B_STAR_RATING, B_MAX_COMBO, B_AIM_DIFFICULTY, B_AIM_DIFFICULT_SLIDER_COUNT, B_SPEED_DIFFICULTY, B_SPEED_NOTE_COUNT, B_SLIDER_FACTOR, B_AIM_TOP_WEIGHTED_SLIDER_FACTOR,
-                                              B_SPEED_TOP_WEIGHTED_SLIDER_FACTOR, B_AIM_DIFFICULT_STRAIN_COUNT, B_SPEED_DIFFICULT_STRAIN_COUNT, PP_AIM, PP_SPEED, PP_ACCURACY, B_PP_100IF_AIM, B_PP_100IF_SPEED, B_PP_100IF_ACCURACY, B_PP_100IF, B_PP_92IF,
-                                              B_PP_81IF, B_PP_67IF)
-                           VALUES (:score_id, :bid, :user, :score, :accuracy, :max_combo, :passed, :pp, :mods, :ts, :statistics, :st, :ruleset_id, :cs, :hit_window, :preempt, :bpm, :hit_length, :is_nf, :is_hd, :is_high_ar, :is_low_ar, :is_very_low_ar,
-                                   :is_speed_up, :is_speed_down, :info, :original_difficulty, :b_star_rating, :b_max_combo, :b_aim_difficulty, :b_aim_difficult_slider_count, :b_speed_difficulty, :b_speed_note_count, :b_slider_factor,
-                                   :b_aim_top_weighted_slider_factor, :b_speed_top_weighted_slider_factor, :b_aim_difficult_strain_count, :b_speed_difficult_strain_count, :pp_aim, :pp_speed, :pp_accuracy, :b_pp_100if_aim, :b_pp_100if_speed,
-                                   :b_pp_100if_accuracy, :b_pp_100if, :b_pp_92if, :b_pp_81if, :b_pp_67if)""",
-                        ["SCORE_ID"],
-                    ),
-                ),
+                text(build_score_insert_sql(_dialect, SCORE_ON_CONFLICT)),
                 scores,
             )
 

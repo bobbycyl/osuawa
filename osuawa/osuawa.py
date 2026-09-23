@@ -21,7 +21,7 @@ import os
 import os.path
 import platform
 from asyncio import AbstractEventLoop, Task
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 from dataclasses import fields
 from functools import cached_property
 from itertools import chain
@@ -63,7 +63,7 @@ from .utils import (
     SimpleScoreInfo,
     assets_dir,
     available_mods,
-    calc_beatmap_attributes,
+    calc_beatmap_attributes_batch,
     calc_high_star_rating_text_color,
     calc_positive_percent,
     calc_star_rating_color,
@@ -368,7 +368,7 @@ class Osuawa(CachedMixIn):
     async def async_get_username(self, user: int) -> str:
         return (await self.api_user(user, key="id")).username
 
-    async def async_get_beatmaps_dict(self, bids: list[int]) -> dict[int, Beatmap]:
+    async def async_get_beatmaps_dict(self, bids: Sequence[int]) -> dict[int, Beatmap]:
         bids = list(set(bids))
         cut_bids: list[list[int]] = []
         for i in range(0, len(bids), 50):
@@ -416,7 +416,10 @@ class Osuawa(CachedMixIn):
 
     async def complete_scores_compact(self, scores_compact: dict[str, SimpleScoreInfo]) -> dict[str, CompletedSimpleScoreInfo]:
         beatmaps_dict = await self.async_get_beatmaps_dict([x.bid for x in scores_compact.values()])
-        return {score_id: calc_beatmap_attributes(beatmaps_dict[scores_compact[score_id].bid], scores_compact[score_id]) for score_id in scores_compact}
+        # 用批量版本：同一谱面只解析一次 .osu、只做一次难度计算
+        # 批量版按 (bid, mods, ruleset) 分组，结果顺序与入参不同，这里按入参顺序还原。
+        computed = calc_beatmap_attributes_batch(beatmaps_dict, scores_compact)
+        return {score_id: computed[score_id] for score_id in scores_compact}
 
     async def async_get_friends(self) -> list[dict[str, Any]]:
         friends = await self.api_friends()
@@ -861,10 +864,7 @@ class OsuPlaylist(object):
         last_slot_mod: str = self.beatmap_list[beatmap_index - 1]["mods"][0]["acronym"] if beatmap_index != 0 else ""
         is_fm = slot_mod == "FM" or slot_mod == "F+"
 
-        if slot_mod in available_mods:  # 偷懒行为允许：如果 slot_mod 是官方 Mod，自动加入
-            mods = raw_mods.copy()
-        else:
-            mods = raw_mods[1:].copy()  # 将自定义模组排除，只能使用官方 Mods 的用这个变量
+        mods = raw_mods.copy() if slot_mod in available_mods else raw_mods[1:].copy()
         for _mod in mods:
             # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 slot_mod 存在）
             if _mod["acronym"] in self.custom_mods_acronym:

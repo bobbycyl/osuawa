@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Optional, TYPE_CHECKING
 
@@ -244,27 +245,39 @@ df_o = apply_filter(df)
 def create_distplot(
     hist_data,
     group_labels,
-    bin_size: list[float],
+    bin_size: Optional[float | Sequence[float]] = None,
     curve_type="kde",
     show_hist=True,
     show_curve=True,
     colors: Optional[list[str]] = None,
     histnorm="probability density",
 ):
-    """替代 plotly.figure_factory.create_distplot"""
+    """替代 plotly.figure_factory.create_distplot
+
+    ``bin_size`` 传单个数时所有组共用同一个 bin 宽度（原来的 ``ff.create_distplot`` 就是这么
+    处理的：``if isinstance(bin_size, (float, int)): bin_size = [bin_size] * len(hist_data)``），
+    比较两组同一指标时应该这样传，否则两边的直方图刻度不一样、根本没法比。
+    传与 ``hist_data`` 等长的序列时各组用自己的宽度，适用于同一张图里画不同量纲的指标。
+    """
+    bin_sizes: list[Optional[float]] = [bin_size] * len(hist_data) if bin_size is None or isinstance(bin_size, (int, float)) else list(bin_size)
     fig = go.Figure()
 
-    for i, (data, label) in enumerate(zip(hist_data, group_labels)):
-        data = np.asarray(data)
-        data = data[~np.isnan(data)]  # 去 NaN
-        color = colors[i % len(colors)] if colors is not None else []
+    for i, (data, label) in enumerate(zip(hist_data, group_labels, strict=True)):
+        # 统一转成 float：指标尚未采集时整列都是 None（object dtype），
+        # 直接丢给 np.isnan 会报 TypeError
+        data = np.asarray(data, dtype=float).ravel()
+        data = data[np.isfinite(data)]  # 去 NaN / inf
+        if data.size == 0:
+            st.warning(_("no valid data for %s") % label)
+            continue
+        # 不给颜色时取 plotly 的默认定性调色板；不能像以前那样退化成 []
+        # （Scatter.line.color 收到空列表会直接 ValueError
+        color = colors[i % len(colors)] if colors is not None else px.colors.qualitative.D3[i % len(px.colors.qualitative.D3)]
 
         # 直方图
         if show_hist:
-            if bin_size is not None and bin_size[i] is not None:
-                xbins = dict(start=data.min(), end=data.max(), size=bin_size[i])
-            else:
-                xbins = None
+            size = bin_sizes[i] if i < len(bin_sizes) else None
+            xbins = dict(start=data.min(), end=data.max(), size=size) if size is not None else None
             fig.add_trace(
                 go.Histogram(
                     x=data,
@@ -281,10 +294,7 @@ def create_distplot(
             pad = 0.2 * (data.max() - data.min())
             x_grid = np.linspace(data.min() - pad, data.max() + pad, 200)
             if curve_type == "kde":
-                if len(data) < 2 or np.all(data == data[0]):
-                    y = None
-                else:
-                    y = stats.gaussian_kde(data)(x_grid)
+                y = None if len(data) < 2 or np.all(data == data[0]) else stats.gaussian_kde(data)(x_grid)
             elif curve_type == "normal":
                 mu, std = data.mean(), data.std()
                 y = stats.norm.pdf(x_grid, mu, std)
@@ -311,10 +321,13 @@ def create_distplot(
 with st.container(border=True):
     st.markdown(_("## Playing Preferences"))
     comp_user = st.selectbox(_("Compared to"), all_users)
-    df_c = get_scores_dataframe(comp_user, (begin_date, end_date))
-    if len(df_c) == 0:
+    df_c_raw = get_scores_dataframe(comp_user, (begin_date, end_date))
+    if len(df_c_raw) == 0:
         st.error(_("no scores found for user %d") % comp_user)
         st.stop()
+    df_c = apply_filter(df_c_raw)
+    # ⚠ 这里需要随 CompletedSimpleScoreInfo / ExtendedSimpleScoreInfo 的字段手动同步，
+    #   漏加的话指标只是不显示（不会报错），所以很容易被忽略
     stats_indexes = [
         "accuracy",
         "hit_window",
@@ -327,12 +340,27 @@ with st.container(border=True):
         "b_aim_difficult_slider_count",
         "b_speed_difficulty",
         "b_speed_note_count",
+        "b_reading_difficulty",
+        "b_reading_difficult_note_count",
         "b_slider_factor",
+        "b_aim_top_weighted_slider_factor",
+        "b_speed_top_weighted_slider_factor",
+        "b_aim_difficult_strain_count",
+        "b_speed_difficult_strain_count",
         "time",
+        "pp_aim",
+        "pp_speed",
+        "pp_accuracy",
+        "pp_reading",
+        "b_pp_100if_aim",
+        "b_pp_100if_speed",
+        "b_pp_100if_accuracy",
+        "b_pp_100if_reading",
         "pp_pct",
         "pp_aim_pct",
         "pp_speed_pct",
         "pp_accuracy_pct",
+        "pp_reading_pct",
         "pp_92pct",
         "pp_81pct",
         "pp_67pct",
@@ -417,7 +445,9 @@ with st.container(border=True):
         fig = create_distplot(
             fig_data,
             [user, comp_user],
-            bin_size=[calc_bin_size(data) for data in fig_data],
+            # 两组是同名指标，必须共用一个 bin 宽度才能对照着看。
+            # 之前是每组各算一次 calc_bin_size，两边刻度不同，直方图根本没法比
+            bin_size=calc_bin_size(df_ind_joined[st.session_state.cat_comp_index]),
             colors=[CO, CC],
         )
         st.plotly_chart(fig)
@@ -457,6 +487,7 @@ with st.container(border=True):
             fig = create_distplot(
                 fig_data,
                 st.session_state.cat_y2,
+                # 这里每组是不同量纲的指标，各自算 bin 宽度才是对的
                 bin_size=[calc_bin_size(data) for data in fig_data],
             )
             st.plotly_chart(fig)
