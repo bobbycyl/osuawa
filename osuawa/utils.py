@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
-from threading import BoundedSemaphore
 from time import sleep, time, time_ns
 from typing import Any, Literal, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
 
@@ -21,7 +20,7 @@ import orjson
 import pandas as pd
 import typing_extensions
 from PerformanceCalculator import ProcessorWorkingBeatmap
-from clayutil.futil import Downloader, Properties
+from clayutil.futil import Downloader, Properties, filelock
 from clayutil.sutil import md5sum
 from ossapi.models import MultiplayerScore
 from ossapi.ossapiv2_async import Beatmap, Score, User, UserCompact
@@ -62,8 +61,6 @@ mania_mod_entries = get_all_mods(ManiaRuleset())
 mania_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in mania_mod_entries}
 _mania_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
 available_mods = set(osu_mod_indexes.keys()) | set(taiko_mod_indexes.keys()) | set(catch_mod_indexes.keys()) | set(mania_mod_indexes.keys())
-
-sem = BoundedSemaphore()
 
 assets_dir: str = os.path.dirname(__file__)
 
@@ -877,19 +874,34 @@ def push_task(r: Redis, task_command: str) -> RedisTaskId:
     return RedisTaskId(task_id)
 
 
-def download_osu(beatmap: Beatmap):
-    need_download = False
-    if not os.path.exists(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id)):
-        need_download = True
-    else:
-        with open(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id), "rb") as fi_b:
-            if beatmap.checksum != md5sum(fi_b.read()):
-                need_download = True
-    if need_download:
-        with sem:
-            sleep(1)
-            Downloader(C.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % beatmap.id, "%s.osu" % beatmap.id, headers)
-            sleep(0.5)
+# 谱面下载的全局锁名：所有进程（web api / daemon / streamlit）共用这一个锁文件，
+# 保证任何时刻全局只有一个 _download_osu 在跑
+OSU_DOWNLOAD_LCK = "beatmap_down_0"
+
+
+@filelock(0)
+def _download_osu(_lck_key: str, bid: int, checksum: Optional[str] = None) -> None:
+    """真正下载谱面的函数，也是全局唯一的下载入口
+
+    :param _lck_key: 锁文件名，固定传 :data:`OSU_DOWNLOAD_LCK`（即 ``beatmap_down_0.LCK``）
+    :param bid: Beatmap ID
+    :param checksum: 期望的谱面 md5；为 None 时只判断缓存文件是否存在
+    """
+    osu_path = os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid)
+    if os.path.exists(osu_path):
+        if checksum is None:
+            return
+        with open(osu_path, "rb") as fi_b:
+            if checksum == md5sum(fi_b.read()):
+                return
+    sleep(1)
+    Downloader(C.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % bid, "%d.osu" % bid, headers)
+    sleep(0.5)
+
+
+def download_osu(beatmap: Beatmap) -> None:
+    """下载 beatmap 对应的谱面文件；缓存里已有且 md5 一致就直接返回"""
+    _download_osu(OSU_DOWNLOAD_LCK, beatmap.id, beatmap.checksum)
 
 
 def _get_ruleset_and_performance(score: SimpleScoreInfo) -> tuple[Ruleset, NamedTuple, type[NamedTuple]]:

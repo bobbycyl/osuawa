@@ -4,6 +4,7 @@ osupp @ git+https://github.com/bobbycyl/osupp.git
 SQLAlchemy
 babel
 cachetools
+fastapi
 fonttools
 matplotlib
 numpy
@@ -25,5 +26,6 @@ streamlit-ace
 streamlit-aggrid
 tabulate
 typing-extensions
+uvicorn
 websockets
 zai-sdk
