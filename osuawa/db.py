@@ -7,15 +7,7 @@ import orjson
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
-from .utils import (
-    SCORE_COLUMN_OVERRIDES,
-    SCORE_STATISTICS_DEFAULTS,
-    CompletedSimpleScoreInfo,
-    ScoreStatistics,
-    _build_update_ignore,
-    _build_upsert,
-    _unwrap_optional,
-)
+from .utils import CompletedSimpleScoreInfo, SCORE_COLUMN_OVERRIDES, SCORE_STATISTICS_DEFAULTS, ScoreStatistics, _build_update_ignore, _build_upsert, _unwrap_optional
 
 __all__ = (
     "SCORE_BIGINT_COLUMNS",
@@ -60,6 +52,7 @@ _SCORE_SQL_TYPES: dict[type, str] = {
     dict: "TEXT",
     ScoreStatistics: "TEXT",
 }
+
 
 #: ``SCORE_COLUMN_OVERRIDES`` / ``SCORE_STATISTICS_DEFAULTS`` 定义在 osuawa.utils（数据类旁边），
 #: 这里只是转出来给外部用：db.py 依赖 utils.py，utils.py 不能再反过来依赖 db.py。

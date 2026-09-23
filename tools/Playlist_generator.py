@@ -2,7 +2,7 @@ import os.path
 import shutil
 import time
 from functools import partial
-from typing import Optional, TYPE_CHECKING, cast
+from typing import Any, Optional, TYPE_CHECKING, cast
 from uuid import uuid4
 
 import orjson
@@ -15,7 +15,7 @@ from streamlit import logger
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import (
-    _conn,
+    awa_query as _awa_query,
     get_session_id,
     init_page,
     load_value,
@@ -67,7 +67,6 @@ with st.sidebar:
         disabled=not st.session_state.basic_interaction_enabled,
     )
 
-conn = _conn
 uid = get_session_id()
 row_style_with_dup = JsCode(read_injected_code("row_style_with_dup.js"))
 row_style = JsCode(read_injected_code("row_style.js"))
@@ -76,6 +75,11 @@ copy_on_click_js = JsCode(read_injected_code("copy_on_click.js"))
 image_link_renderer = JsCode(read_injected_code("image_link_renderer.js") % ("../../app/" + C.UPLOADED_DIRECTORY.value.strip("./") + "/online/darkened-backgrounds/"))
 monaco_editor = JsCode(read_injected_code("monaco_editor.js"))
 st.markdown(read_injected_code("st_aggrid_style.css"), unsafe_allow_html=True)
+
+
+@st.cache_data(ttl=60)
+def beatmap_database_query(sql: str, show_spinner: bool | str = False, params: Optional[Any] = None, **kwargs) -> pd.DataFrame:
+    return _awa_query("BEATMAP", sql, show_spinner, params, **kwargs)
 
 
 def default(obj):
@@ -133,17 +137,16 @@ def check_playlist_lastupdate():
 
 if st.session_state.perm >= 1:
     if "online_playlist_info" not in st.session_state or not st.session_state.online_playlist_info:
-        # st.info(_("Auto refresh on this page is disabled due to technical reasons. You might want to press the `%s` button manually to refresh the playlist.") % _("Refresh"))
+        st.info(_("Auto refresh is disabled on this page. Click the `%s` button to refresh manually.") % _("Refresh"))
         st.session_state.online_playlist_info = True
 
     st.markdown(_("## Online Playlist Creator"))
     # online_playlist_slot = st.empty()
     check_playlist_lastupdate()
-    available_pools = conn.query(
+    available_pools = beatmap_database_query(
         """SELECT DISTINCT POOL
            FROM BEATMAP
            ORDER BY POOL""",
-        ttl=0,
         show_spinner=_("querying available pools"),
     )["POOL"].to_list()
     if len(available_pools) == 0:
@@ -245,7 +248,7 @@ if st.session_state.perm >= 1:
     # U_ARTIST + U_TITLE 用于曲目识别
     if st.session_state.gen_filter_pool != "-":
         cur_series = st.session_state.gen_filter_pool.split("-")[0]
-        duplicate_bids = conn.query(
+        duplicate_bids = beatmap_database_query(
             """SELECT BID
                FROM BEATMAP
                WHERE SERIES = :series
@@ -254,7 +257,7 @@ if st.session_state.perm >= 1:
             params={"series": cur_series},
             show_spinner=_("querying duplicate BIDs"),
         )["BID"].to_list()
-        duplicate_songs_raw = conn.query(
+        duplicate_songs_raw = beatmap_database_query(
             """SELECT U_ARTIST, U_TITLE, COUNT(*)
                FROM BEATMAP
                WHERE SERIES = :series
@@ -265,14 +268,14 @@ if st.session_state.perm >= 1:
         )
     else:
         # 如果不指定 POOL，就回退到原始模式
-        duplicate_bids = conn.query(
+        duplicate_bids = beatmap_database_query(
             """SELECT BID
                FROM BEATMAP
                GROUP BY BID
                HAVING COUNT(*) > 1""",
             show_spinner=_("querying duplicate BIDs"),
         )["BID"].to_list()
-        duplicate_songs_raw = conn.query(
+        duplicate_songs_raw = beatmap_database_query(
             """SELECT U_ARTIST, U_TITLE, COUNT(*)
                FROM BEATMAP
                GROUP BY U_ARTIST, U_TITLE
@@ -293,7 +296,7 @@ if st.session_state.perm >= 1:
     if st.session_state.gen_filter_status != -1:
         filter_query += " AND STATUS = :status"
         filter_params["status"] = st.session_state.gen_filter_status
-    df: pd.DataFrame = conn.query(filter_query, show_spinner=_("querying the playlist"), params=filter_params)
+    df: pd.DataFrame = beatmap_database_query(filter_query, show_spinner=_("querying the playlist"), params=filter_params)
 
     # keywords 的筛选用 pandas 完成，从 bid、sid、info、slot、mods、notes 中查找包含输入内容的条目
     if st.session_state.gen_filter_search:
@@ -490,6 +493,7 @@ if st.session_state.perm >= 1:
         allow_unsafe_jscode=True,
         key=st.session_state.aggrid_key2,
     )
+    st.write(df)
     edited_df = grid_response.data.copy() if grid_response.data is not None else pd.DataFrame()
     selected_rows = grid_response.selected_rows
 
@@ -577,7 +581,7 @@ if st.session_state.perm >= 1:
                         )
                 st.toast(push_beatmap_task(beatmaps_to_update))
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
-            refresh()
+            refresh(beatmap_database_query)
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
             export_filtered_playlist()
 
