@@ -15,5 +15,6 @@ for lck in lck_pattern:
 
 shutil.rmtree(C.OAUTH_TOKEN_DIRECTORY.value, ignore_errors=True)
 shutil.rmtree(C.COMPONENTS_SHELVES_DIRECTORY.value, ignore_errors=True)
-if os.path.exists("./osuawa.db"):
-    os.remove("./osuawa.db")
+for db_file in ("./osuawa.db", "./osuawa.db.backup"):
+    if os.path.exists(db_file):
+        os.remove(db_file)

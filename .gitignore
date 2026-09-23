@@ -2,8 +2,7 @@
 /output/
 /playlists/
 /playlists
-/static/beatmaps/
-/static/uploaded/
+/static/
 /osuawa/*.dll
 /osuawa/*.jpg
 /osuawa/*.ttf
@@ -21,5 +20,7 @@
 __pycache__/
 qodana.yaml
 osuawa.db
+osuawa.db.backup
+check_result_*.json
 *LCK
 tmp.py
