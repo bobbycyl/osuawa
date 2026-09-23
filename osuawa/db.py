@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 from .utils import (
+    SCORE_COLUMN_OVERRIDES,
+    SCORE_STATISTICS_DEFAULTS,
     CompletedSimpleScoreInfo,
     ScoreStatistics,
     _build_update_ignore,
@@ -36,7 +38,6 @@ __all__ = (
 )
 
 SCORE_TABLE = "SCORE"
-SCORE_COLUMN_OVERRIDES = {"user": "USER_ID"}  # 数据库列名与 CompletedSimpleScoreInfo 字段几乎一一对应，只有 USER_ID 是个例外
 SCORE_PRIMARY_KEY = "SCORE_ID"  # 主键列名
 SCORE_BIGINT_COLUMNS = frozenset({SCORE_PRIMARY_KEY, "BID", "USER_ID"})  # 这些列在 DDL 里是 BIGINT（其余 int 字段是 INT）
 
@@ -60,22 +61,8 @@ _SCORE_SQL_TYPES: dict[type, str] = {
     ScoreStatistics: "TEXT",
 }
 
-SCORE_STATISTICS_DEFAULTS: dict[str, Any] = {
-    "miss": 0,
-    "meh": 0,
-    "ok": 0,
-    "good": 0,
-    "great": 0,
-    "perfect": None,
-    "small_tick_hit": None,
-    "large_tick_hit": None,
-    "small_bonus": None,
-    "large_bonus": None,
-    "ignore_miss": None,
-    "ignore_hit": None,
-    "combo_break": None,
-    "slider_tail_hit": None,
-}
+#: ``SCORE_COLUMN_OVERRIDES`` / ``SCORE_STATISTICS_DEFAULTS`` 定义在 osuawa.utils（数据类旁边），
+#: 这里只是转出来给外部用：db.py 依赖 utils.py，utils.py 不能再反过来依赖 db.py。
 
 
 def get_score_column_types() -> list[tuple[str, str]]:

@@ -42,8 +42,6 @@ from osupp.util import Result, validate_mod_setting_value
 from redis import Redis
 from sqlalchemy import RowMapping
 
-from osuawa.db import SCORE_COLUMN_OVERRIDES, SCORE_STATISTICS_DEFAULTS
-
 _c = calculate_difficulty, calculate_performance
 
 headers = {
@@ -524,6 +522,32 @@ class SimpleDifficultyAttribute(object):
         self.hit_length = round(self.hit_length / self.magnitude)
 
 
+#: 数据类字段名 -> 数据库列名。几乎一一对应（字段名去下划线转大写），只有 USER_ID 是个例外
+#:
+#: 这两个常量放在这里而不是 osuawa/db.py：``from_row`` 要用它们把一行还原成数据类，
+#: 而 db.py 是依赖 utils.py 的（建表、补列、upsert 全部从数据类推导），
+#: 反过来依赖就成了循环导入，整个包都进不来。
+SCORE_COLUMN_OVERRIDES = {"user": "USER_ID"}
+
+#: statistics 里那些「这个模式没有 / 这个版本不统计」的键的默认值，读到 NULL 或缺键时用它补齐
+SCORE_STATISTICS_DEFAULTS: dict[str, Any] = {
+    "miss": 0,
+    "meh": 0,
+    "ok": 0,
+    "good": 0,
+    "great": 0,
+    "perfect": None,
+    "small_tick_hit": None,
+    "large_tick_hit": None,
+    "small_bonus": None,
+    "large_bonus": None,
+    "ignore_miss": None,
+    "ignore_hit": None,
+    "combo_break": None,
+    "slider_tail_hit": None,
+}
+
+
 class ScoreStatistics(TypedDict):
     miss: int
     meh: int
@@ -695,7 +719,14 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     def from_row(cls, row: Mapping[str, Any] | RowMapping):
         """把 SCORE 表的一行按列名还原为 ``CompletedSimpleScoreInfo``"""
         data = {str(key).upper(): value for key, value in row.items()}
-        base = super().from_row(row)
+        # 这里只能显式写基础类，super 的两种写法都不行：
+        #   super().from_row(row)（等价于 super(CompletedSimpleScoreInfo, cls).from_row(row)）
+        #     会把 cls 绑成 CompletedSimpleScoreInfo，基类里的 ``return cls(...)`` 于是拿 12 个
+        #     基础字段去构造需要 52 个字段的完成版 → TypeError: missing 39 required arguments
+        #   super(SimpleScoreInfo, cls).from_row(row)
+        #     查表位置在 SimpleScoreInfo 之后（也就是 object），
+        #     → AttributeError: 'super' object has no attribute 'from_row'
+        base = SimpleScoreInfo.from_row(row)
         kwargs: dict[str, Any] = {name: getattr(base, name) for name in _SCORE_BASE_FIELD_NAMES}
         for field in fields(cls):
             if field.name in _SCORE_BASE_FIELD_NAMES:
