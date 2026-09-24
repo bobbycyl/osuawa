@@ -953,7 +953,7 @@ def _get_ruleset_and_performance(score: SimpleScoreInfo) -> tuple[Ruleset, Named
                 ManiaPerformance,
             )
         case _:
-            raise ValueError("ruleset_id %d not supported" % score.ruleset_id)
+            raise ValueError("ruleset id %d not supported" % score.ruleset_id)
 
 
 def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
