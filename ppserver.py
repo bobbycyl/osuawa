@@ -28,6 +28,7 @@ from typing import Any, Literal, NamedTuple, get_type_hints
 import toml
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from osuawa.utils import (
@@ -257,6 +258,13 @@ def _calculate(request: Request, *, with_performance: bool) -> Any:
 
 
 app = FastAPI(title="osuawa ppserver", description="A simple osupp Web API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 
 @app.get("/api/difficulty")
