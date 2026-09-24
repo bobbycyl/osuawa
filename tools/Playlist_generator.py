@@ -7,9 +7,11 @@ from uuid import uuid4
 
 import orjson
 import pandas as pd
+import requests
 import streamlit as st
 from clayutil.futil import compress_as_zip
 from clayutil.validator import validate_type
+from osupp.performance import calculate_performance
 from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 
@@ -23,15 +25,15 @@ from osuawa.components import (
     mods_generator,
     push_task_with_session_state,
     refresh,
-    save_value,
+    save_value, draw_clustered_bars,
 )
 from osuawa.osuawa import Osuawa
 from osuawa.utils import (
     BeatmapSpec,
     BeatmapToUpdate,
     RedisTaskId,
-    _create_tmp_playlist_p,
-    get_playlist_lastupdate,
+    SimpleDifficultyAttribute, _create_tmp_playlist_p,
+    available_mods, get_playlist_lastupdate,
     make_unstandardized_mods_from_lines,
     read_injected_code,
     safe_norm,
@@ -103,26 +105,119 @@ def generate_playlist(filename: str, css_style: Optional[int] = None):
 def export_filtered_playlist():
     if selected_rows is None or len(selected_rows) == 0:
         st.error(_("no beatmaps selected"))
-    else:
-        parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
-        specs_x = [
-            BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0)
-            for bid, mods, skill, note in zip(
-                selected_rows["BID"],
-                parsed_mods_list,
-                selected_rows["SKILL_SLOT"],
-                selected_rows["NOTES"],
-                strict=True,
-            )
-        ]  # 直接用解析好的列表
+        return
+    parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
+    specs_x = [
+        BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0)
+        for bid, mods, skill, note in zip(
+            selected_rows["BID"],
+            parsed_mods_list,
+            selected_rows["SKILL_SLOT"],
+            selected_rows["NOTES"],
+            strict=True,
+        )
+    ]  # 直接用解析好的列表
+    try:
+        tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
+    except ValueError as e:
+        st.error(e)
+        return
+    st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
+    with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
+        st.code(fi.read(), language="properties")
+
+
+NEEDED_ATTR_MAPPING = {
+    "star_rating": "SR",
+    "max_combo": "MaxCb",
+    "aim_difficulty": "Aim",
+    "speed_difficulty": "Speed",
+    "reading_difficulty": "Reading",
+    "__ek_cs_adj": "CS",
+    "__ek_ar_adj": "AR",
+    "__ek_od_adj": "OD",
+    "__ek_hp_adj": "HP",
+    "__ek_most_common_bpm_adj": "BPM",
+    "__ek_hit_length_adj": "LEN",
+}
+
+
+# noinspection
+@st.cache_data(ttl=300)
+def calc_attr(data) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    processed: dict[str, dict[str, Any]] = {}
+    skill_type_mapping: dict[str, list[str]] = {}  # {NM: [NM1, NM2, ...], FM: [FM1, FM2, ..., FM1 (HR), FM1 (HD), ...]}
+    # todo: 由于 osupp 设计问题，读取谱面现在只能重复进行。后续考虑优化
+    for i, row in enumerate(data.itertuples(), start=1):
+        _bid = int(row.BID)
+        _raw_mods = orjson.loads(row.RAW_MODS)
+        _raw_mods = _raw_mods.copy() if _raw_mods[0]["acronym"] in available_mods else _raw_mods[1:].copy()
+        _slot = row.SKILL_SLOT
+        skill_type = _slot[:2]
+        _path = os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % _bid)
+        _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(
+            _raw_mods, beatmap_path=_path
+        )
+        calculator = calculate_performance(
+            beatmap_path=_path,
+            mods=osu_tool_mods,
+            mod_options=osu_tool_mod_options,
+        )
         try:
-            tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
-        except ValueError as e:
-            st.error(e)
-            return
-        st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
-        with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
-            st.code(fi.read(), language="properties")
+            ex_diff_attr = next(calculator)
+        finally:
+            calculator.close()
+        key = "%s<br>(%d/l%d)" % (_slot, _bid, i)
+        processed[key] = {NEEDED_ATTR_MAPPING[attr]: ex_diff_attr[attr] for attr in NEEDED_ATTR_MAPPING}
+        skill_type_mapping.setdefault(skill_type, []).append(key)
+
+        if skill_type in ("FM", "F+", "SP"):  # 额外计算 bid(HR) bid(HD) bid(EZ)
+            calculator_hr = calculate_performance(
+                beatmap_path=_path,
+                mods=osu_tool_mods + ["HR"],
+                mod_options=osu_tool_mod_options,
+            )
+            calculator_hd = calculate_performance(
+                beatmap_path=_path,
+                mods=osu_tool_mods + ["HD"],
+                mod_options=osu_tool_mod_options,
+            )
+
+            calculator_ez = calculate_performance(
+                beatmap_path=_path,
+                mods=osu_tool_mods + ["EZ"],
+                mod_options=osu_tool_mod_options,
+            )
+            try:
+                ex_diff_attr_hr = next(calculator_hr)
+                ex_diff_attr_hd = next(calculator_hd)
+                ex_diff_attr_ez = next(calculator_ez)
+            finally:
+                calculator_hr.close()
+                calculator_hd.close()
+                calculator_ez.close()
+            processed[key + " (HR)"] = {NEEDED_ATTR_MAPPING[attr]: ex_diff_attr_hr[attr] for attr in NEEDED_ATTR_MAPPING}
+            skill_type_mapping[skill_type].append(key + " (HR)")
+            processed[key + " (HD)"] = {NEEDED_ATTR_MAPPING[attr]: ex_diff_attr_hd[attr] for attr in NEEDED_ATTR_MAPPING}
+            skill_type_mapping[skill_type].append(key + " (HD)")
+            processed[key + " (EZ)"] = {NEEDED_ATTR_MAPPING[attr]: ex_diff_attr_ez[attr] for attr in NEEDED_ATTR_MAPPING}
+            skill_type_mapping[skill_type].append(key + " (EZ)")
+    return processed, skill_type_mapping
+
+@st.fragment
+def show_statistics():
+    processed, skill_type_mapping = calc_attr(df)
+
+    df_for_stats = pd.DataFrame.from_dict(processed, orient="index").astype(float)
+    df_for_stats["skill_type"] = df_for_stats.index.str[:2]
+    stats_filter = st.multiselect(_("Slot Filter"), skill_type_mapping.keys(), default=skill_type_mapping.keys())
+    indexes_filter = st.multiselect(_("Index Filter"), NEEDED_ATTR_MAPPING.values(), default=("SR", "Aim", "Speed", "Reading"))
+    # apply filter
+    df_for_stats = df_for_stats[df_for_stats["skill_type"].isin(stats_filter)]
+    st.table(df_for_stats.drop(columns=["skill_type"]).mean().rename("Mean"))
+    df_for_stats = df_for_stats[indexes_filter]
+    fig = draw_clustered_bars(df_for_stats, title="Statistics of the data query", xaxis_title="Skill Type", yaxis_title="Values")
+    st.plotly_chart(fig)
 
 
 @st.fragment(run_every="15s")
@@ -608,6 +703,9 @@ if st.session_state.perm >= 1:
                         ),
                     )
                 st.toast(push_beatmap_task(beatmaps_to_delete))
+
+    with st.expander(_("Statistics")):
+        show_statistics()
 
 st.divider()
 

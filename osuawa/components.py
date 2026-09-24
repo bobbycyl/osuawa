@@ -11,6 +11,7 @@ from typing import Any, Literal, Never, Optional, TYPE_CHECKING, cast, overload
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import orjson
 import pandas as pd
 import plotly.express as px
@@ -657,6 +658,92 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
         trace.fillcolor = hex_to_rgba(trace.line.color, alpha=0.85)
 
     fig.update_xaxes(tickformat="%M:%S.%L")
+    return fig
+
+
+def draw_clustered_bars(
+    df: pd.DataFrame,
+    *,
+    title: str | None = None,
+    xaxis_title: str = "样本",
+    yaxis_title: str = "取值",
+    legend_title: str = "指标",
+    value_fmt: str = ".3f",
+    show_mean: bool = True,
+    mean_dash: str = "dash",
+    bargap: float = 0.25,
+    bargroupgap: float = 0.08,
+    template: str = "plotly_white",
+) -> Figure:
+    """画复合簇状柱状图 + 每个指标的均值横线。
+
+    :param df: 数据，格式为 {样本: {指标: 取值}}
+    :param title: 图表标题
+    :param xaxis_title:  X 轴标题
+    :param yaxis_title:  Y 轴标题
+    :param legend_title: 图例标题
+    :param value_fmt:  数值格式，如 ".2f" / ".0%" / ".3g"
+    :param show_mean:  是否画均值横线
+    :param mean_dash:  均值线型: "dash" / "dot" / "solid"
+    :param bargap:  样本组间距
+    :param bargroupgap:  组内柱间距
+    :param template:  图表模板
+    :return: 图表
+    """
+    samples = [str(s) for s in df.index]
+    indicators = list(df.columns)
+
+    palette = px.colors.qualitative.D3
+    colors = [palette[i % len(palette)] for i in range(len(indicators))]
+
+    fig = go.Figure()
+
+    # ---------- 1) 每个指标一根并排柱 ----------
+    for i, ind in enumerate(indicators):
+        fig.add_trace(go.Bar(
+            x=samples,
+            y=pd.to_numeric(df[ind], errors="coerce").tolist(),
+            name=str(ind),
+            marker_color=colors[i],
+            legendgroup=str(ind),
+            legendrank=2 * i + 1,
+            hovertemplate=(
+                f"{ind}<br>%{{x}}: %{{y:{value_fmt}}}<extra></extra>"
+            ),
+        ))
+
+    # ---------- 2) 每个指标的均值横线（图例里就是一根横线） ----------
+    if show_mean:
+        for i, ind in enumerate(indicators):
+            vals = pd.to_numeric(df[ind], errors="coerce").to_numpy(dtype=float)
+            if np.all(np.isnan(vals)):
+                continue
+            m = float(np.nanmean(vals))
+            fig.add_trace(go.Scatter(
+                x=[samples[0], samples[-1]],
+                y=[m, m],
+                mode="lines",
+                name=f"{ind} (mean): {format(m, value_fmt)}",
+                legendgroup=str(ind),
+                legendrank=2 * i + 2,
+                line=dict(color=colors[i], width=2, dash=mean_dash),
+                hovertemplate=(
+                    f"{ind} 均值: {format(m, value_fmt)}<extra></extra>"
+                ),
+            ))
+
+    # ---------- 3) 布局 ----------
+    fig.update_layout(
+        title=title,
+        barmode="group",  # 关键：并排而不是堆叠
+        bargap=bargap,
+        bargroupgap=bargroupgap,
+        xaxis_title=xaxis_title,
+        yaxis_title=yaxis_title,
+        legend_title_text=legend_title,
+        template=template,
+    )
+    fig.update_xaxes(range=[-0.6, len(samples) - 0.4])
     return fig
 
 
