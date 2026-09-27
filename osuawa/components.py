@@ -709,7 +709,7 @@ def draw_clustered_bars(
                 legendgroup=str(ind),
                 legendrank=2 * i + 1,
                 hovertemplate=(f"{ind}<br>%{{x}}: %{{y:{value_fmt}}}<extra></extra>"),
-            )
+            ),
         )
 
     # ---------- 2) 每个指标的均值横线（图例里就是一根横线） ----------
@@ -729,7 +729,7 @@ def draw_clustered_bars(
                     legendrank=2 * i + 2,
                     line=dict(color=colors[i], width=2, dash=mean_dash),
                     hovertemplate=(f"{ind} 均值: {format(m, value_fmt)}<extra></extra>"),
-                )
+                ),
             )
 
     # ---------- 3) 布局 ----------

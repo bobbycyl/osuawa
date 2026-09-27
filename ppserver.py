@@ -22,7 +22,8 @@ import contextlib
 import logging
 import os
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from functools import wraps
 from typing import Any, Literal, NamedTuple, get_type_hints
 
 import toml
@@ -233,32 +234,56 @@ def _run_calculation(bid: int, ruleset_id: int, params: Mapping[str, str], *, wi
             calculator.close()
 
 
-def _calculate(request: Request, *, with_performance: bool) -> Any:
+# 将 auth 过程做成装饰器
+def auth_required(func: Callable) -> Callable:
+    @wraps(func)
+    def wrapper(request: Request, *args, **kwargs):
+        params = dict(request.query_params)
+        try:
+            api_key = params.pop("k")
+        except KeyError:
+            return JSONResponse({"error": "invalid_api_key", "message": "api key missing"}, status_code=403)
+        if api_key not in ALLOWED_API_KEYS:
+            return JSONResponse({"error": "invalid_api_key", "message": "api key not allowed"}, status_code=403)
+
+        _logger.info("handling request from %s: %s" % (api_key, params))
+
+        return func(request, *args, _params=params, **kwargs)
+
+    return wrapper
+
+
+@auth_required
+def _calculate(_request: Request, *, with_performance: bool, _params: Mapping[str, str]) -> Any:
     """两个端点的公共流程：校验 key -> 记日志 -> 解析参数 -> 计算并映射异常"""
-    params = dict(request.query_params)
-
-    try:
-        api_key = params.pop("k")
-    except KeyError:
-        return JSONResponse({"error": "invalid_api_key", "message": "api key missing"}, status_code=403)
-    if api_key not in ALLOWED_API_KEYS:
-        return JSONResponse({"error": "invalid_api_key", "message": "api key not allowed"}, status_code=403)
-
-    _logger.info("handling request from %s: %s" % (api_key, params))
-
     try:
         try:
-            bid = int(params.get("b", ""))
-            ruleset_id = int(params.get("m", ""))
+            bid = int(_params.get("b", ""))
+            ruleset_id = int(_params.get("m", ""))
         except ValueError as e:
             raise ValueError("'b' and 'm' must be integers") from e
 
-        return _run_calculation(bid, ruleset_id, params, with_performance=with_performance)
+        return _run_calculation(bid, ruleset_id, _params, with_performance=with_performance)
     except BeatmapNotFoundError as e:
         return JSONResponse({"error": "beatmap_not_found", "message": str(e)}, status_code=404)
     except Exception as e:
-        _logger.exception("calculation failed with params %s" % params)
+        _logger.exception("calculation failed with params %s" % _params)
         return JSONResponse({"error": "calculation_failed", "message": str(e)}, status_code=500)
+
+
+@auth_required
+def _entries(_request: Request, *, _params: Mapping[str, str]) -> Any:
+    match _params:
+        case {"ruleset": "osu"}:
+            return osu_mod_entries
+        case {"ruleset": "taiko"}:
+            return taiko_mod_entries
+        case {"ruleset": "catch"}:
+            return catch_mod_entries
+        case {"ruleset": "mania"}:
+            return mania_mod_entries
+        case _:
+            return JSONResponse({"error": "ruleset_not_found", "message": "unknown ruleset"}, status_code=404)
 
 
 app = FastAPI(title="osuawa ppserver", description="A simple osupp Web API")
@@ -267,7 +292,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 
@@ -283,17 +308,7 @@ def performance(request: Request) -> Any:
 
 @app.get("/api/entries")
 def entries(request: Request) -> Any:
-    match request.query_params:
-        case {"ruleset": "osu"}:
-            return osu_mod_entries
-        case {"ruleset": "taiko"}:
-            return taiko_mod_entries
-        case {"ruleset": "catch"}:
-            return catch_mod_entries
-        case {"ruleset": "mania"}:
-            return mania_mod_entries
-        case _:
-            return JSONResponse({"error": "ruleset_not_found", "message": "unknown ruleset"}, status_code=404)
+    return _entries(request)
 
 
 if __name__ == "__main__":

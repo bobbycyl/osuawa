@@ -7,7 +7,6 @@ from uuid import uuid4
 
 import orjson
 import pandas as pd
-import requests
 import streamlit as st
 from clayutil.futil import compress_as_zip
 from clayutil.validator import validate_type
@@ -16,18 +15,7 @@ from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 
 from osuawa import C, OsuPlaylist
-from osuawa.components import (
-    awa_query as _awa_query,
-    get_session_id,
-    init_page,
-    load_value,
-    memorized_selectbox,
-    mods_generator,
-    push_task_with_session_state,
-    refresh,
-    save_value,
-    draw_clustered_bars,
-)
+from osuawa.components import awa_query as _awa_query, draw_clustered_bars, get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, refresh, save_value
 from osuawa.osuawa import Osuawa
 from osuawa.utils import (
     BeatmapSpec,
