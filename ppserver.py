@@ -44,7 +44,11 @@ from osuawa.utils import (
     TaikoRuleset,
     _download_osu,
     calculate_performance,
+    catch_mod_entries,
     make_unstandardized_mods_from_lines,
+    mania_mod_entries,
+    osu_mod_entries,
+    taiko_mod_entries,
 )
 
 OSU_MAGIC = b"osu file format"
@@ -267,6 +271,21 @@ def difficulty(request: Request) -> Any:
 @app.get("/api/performance")
 def performance(request: Request) -> Any:
     return _calculate(request, with_performance=True)
+
+
+@app.get("/api/entries")
+def entries(request: Request) -> Any:
+    match request.query_params:
+        case {"ruleset": "osu"}:
+            return osu_mod_entries
+        case {"ruleset": "taiko"}:
+            return taiko_mod_entries
+        case {"ruleset": "catch"}:
+            return catch_mod_entries
+        case {"ruleset": "mania"}:
+            return mania_mod_entries
+        case _:
+            return JSONResponse({"error": "ruleset_not_found", "message": "unknown ruleset"}, status_code=404)
 
 
 if __name__ == "__main__":

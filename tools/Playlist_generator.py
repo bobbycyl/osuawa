@@ -25,15 +25,18 @@ from osuawa.components import (
     mods_generator,
     push_task_with_session_state,
     refresh,
-    save_value, draw_clustered_bars,
+    save_value,
+    draw_clustered_bars,
 )
 from osuawa.osuawa import Osuawa
 from osuawa.utils import (
     BeatmapSpec,
     BeatmapToUpdate,
     RedisTaskId,
-    SimpleDifficultyAttribute, _create_tmp_playlist_p,
-    available_mods, get_playlist_lastupdate,
+    SimpleDifficultyAttribute,
+    _create_tmp_playlist_p,
+    available_mods,
+    get_playlist_lastupdate,
     make_unstandardized_mods_from_lines,
     read_injected_code,
     safe_norm,
@@ -155,9 +158,7 @@ def calc_attr(data) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
         _slot = row.SKILL_SLOT
         skill_type = _slot[:2]
         _path = os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % _bid)
-        _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(
-            _raw_mods, beatmap_path=_path
-        )
+        _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(_raw_mods, beatmap_path=_path)
         calculator = calculate_performance(
             beatmap_path=_path,
             mods=osu_tool_mods,
@@ -203,6 +204,7 @@ def calc_attr(data) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
             processed[key + " (EZ)"] = {NEEDED_ATTR_MAPPING[attr]: ex_diff_attr_ez[attr] for attr in NEEDED_ATTR_MAPPING}
             skill_type_mapping[skill_type].append(key + " (EZ)")
     return processed, skill_type_mapping
+
 
 @st.fragment
 def show_statistics():

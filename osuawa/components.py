@@ -700,17 +700,17 @@ def draw_clustered_bars(
 
     # ---------- 1) 每个指标一根并排柱 ----------
     for i, ind in enumerate(indicators):
-        fig.add_trace(go.Bar(
-            x=samples,
-            y=pd.to_numeric(df[ind], errors="coerce").tolist(),
-            name=str(ind),
-            marker_color=colors[i],
-            legendgroup=str(ind),
-            legendrank=2 * i + 1,
-            hovertemplate=(
-                f"{ind}<br>%{{x}}: %{{y:{value_fmt}}}<extra></extra>"
-            ),
-        ))
+        fig.add_trace(
+            go.Bar(
+                x=samples,
+                y=pd.to_numeric(df[ind], errors="coerce").tolist(),
+                name=str(ind),
+                marker_color=colors[i],
+                legendgroup=str(ind),
+                legendrank=2 * i + 1,
+                hovertemplate=(f"{ind}<br>%{{x}}: %{{y:{value_fmt}}}<extra></extra>"),
+            )
+        )
 
     # ---------- 2) 每个指标的均值横线（图例里就是一根横线） ----------
     if show_mean:
@@ -719,18 +719,18 @@ def draw_clustered_bars(
             if np.all(np.isnan(vals)):
                 continue
             m = float(np.nanmean(vals))
-            fig.add_trace(go.Scatter(
-                x=[samples[0], samples[-1]],
-                y=[m, m],
-                mode="lines",
-                name=f"{ind} (mean): {format(m, value_fmt)}",
-                legendgroup=str(ind),
-                legendrank=2 * i + 2,
-                line=dict(color=colors[i], width=2, dash=mean_dash),
-                hovertemplate=(
-                    f"{ind} 均值: {format(m, value_fmt)}<extra></extra>"
-                ),
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=[samples[0], samples[-1]],
+                    y=[m, m],
+                    mode="lines",
+                    name=f"{ind} (mean): {format(m, value_fmt)}",
+                    legendgroup=str(ind),
+                    legendrank=2 * i + 2,
+                    line=dict(color=colors[i], width=2, dash=mean_dash),
+                    hovertemplate=(f"{ind} 均值: {format(m, value_fmt)}<extra></extra>"),
+                )
+            )
 
     # ---------- 3) 布局 ----------
     fig.update_layout(
