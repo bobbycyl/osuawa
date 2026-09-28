@@ -44,7 +44,7 @@ from osuawa.db import (
     score_rows_query,
     score_users_query,
 )
-from osuawa.osuawa import CachedMixIn
+from osuawa.osuawa import CachedThrottledMixIn
 from osuawa.utils import (
     CompletedSimpleScoreInfo,
     RedisTaskId,
@@ -339,7 +339,7 @@ def commands():
             3,
             tail_log,
         ),
-        Command("apicache", "Show api cache", [], 3, CachedMixIn.get_cache),
+        Command("apicache", "Show api cache", [], 3, CachedThrottledMixIn.get_cache),
         Command(
             "where",
             _("Get user info"),

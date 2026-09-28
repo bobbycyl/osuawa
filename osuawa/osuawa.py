@@ -20,7 +20,7 @@ import json
 import os
 import os.path
 import platform
-from asyncio import AbstractEventLoop, Task
+from asyncio import AbstractEventLoop, Semaphore, Task
 from collections.abc import Coroutine, Sequence
 from dataclasses import fields
 from functools import cached_property
@@ -52,6 +52,8 @@ from ossapi.ossapiv2_async import (
     Score,
     User,
 )
+from throttled import RateLimiterType
+from throttled.asyncio import Throttled
 
 from .utils import (
     C,
@@ -110,10 +112,10 @@ def _make_cached_method_key(
     )
 
 
-def async_cached_method(isolated: bool = False):
+def async_cached_throttled_method(isolated: bool = False):
     def decorator(func):
         @functools.wraps(func)
-        async def wrapper(self: "CachedMixIn", *args: Any, **kwargs: Any):
+        async def wrapper(self: "CachedThrottledMixIn", *args: Any, **kwargs: Any):
             cache = self._isolated_cache if isolated else self._global_cache
 
             # isolated 缓存的 key 里有 self.identifier；__init__ 解析身份前它仍是 None，
@@ -142,7 +144,8 @@ def async_cached_method(isolated: bool = False):
             if key in cache:
                 return cache[key]
 
-            result = await func(self, *args, **kwargs)
+            async with self.sem, self.throttled:
+                result = await func(self, *args, **kwargs)
             cache[key] = result
             return result
 
@@ -151,9 +154,15 @@ def async_cached_method(isolated: bool = False):
     return decorator
 
 
-class CachedMixIn:
+class CachedThrottledMixIn:
     _global_cache: TTLCache[str, Any, int | float] = TTLCache(maxsize=1024, ttl=300)
     _isolated_cache: TTLCache[str, Any, int | float] = TTLCache(maxsize=256, ttl=120)
+    # 由于 osu!api v2 的 rate limit 为每分钟 60 个请求，因此这里设置为每分钟 60 个请求
+    # 同时已发现同一时刻过多的请求会返回 429 错误，需要限制并发请求数
+    # 经过测试，并发 4 不会触发 429 错误
+    # todo: 并发 4 可能太稳健了，可以稍稍放大？
+    sem = Semaphore(4)
+    throttled: Throttled = Throttled(key="awa", using=RateLimiterType.SLIDING_WINDOW.value, quota="60/m", timeout=60)
 
     def __init__(self):
         self.identifier: Optional[int] = None
@@ -162,8 +171,8 @@ class CachedMixIn:
     def get_cache(cls):
         return MappingProxyType(
             {
-                "global": dict(CachedMixIn._global_cache),
-                "isolated": dict(CachedMixIn._isolated_cache),
+                "global": dict(CachedThrottledMixIn._global_cache),
+                "isolated": dict(CachedThrottledMixIn._isolated_cache),
             },
         )
 
@@ -208,7 +217,7 @@ class Awapi(OssapiAsync):
         raise NotImplementedError("new authorization grant not allowed")
 
 
-class Osuawa(CachedMixIn):
+class Osuawa(CachedThrottledMixIn):
     tz = "Asia/Shanghai"
     common_mods = {
         "NM",
@@ -273,15 +282,15 @@ class Osuawa(CachedMixIn):
     # 以下为对原始 api 方法的包裹
     # 虽然后续许多数据都要转换为自定义类，但是为了代码清晰，`api_` 前缀表示原始 api 方法，并为了兼容性收窄了参数类型
 
-    @async_cached_method(True)
+    @async_cached_throttled_method(True)
     async def api_me(self):
         return await self.__api.get_me()
 
-    @async_cached_method(True)
+    @async_cached_throttled_method(True)
     async def api_friends(self):
         return await self.__api.friends()
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_user(
         self,
         user: int | str,
@@ -291,23 +300,23 @@ class Osuawa(CachedMixIn):
     ) -> User:
         return await self.__api.user(user, mode=mode, key=key)
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_beatmap(self, beatmap_id: int) -> Beatmap:
         return await self.__api.beatmap(beatmap_id)
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_beatmaps(self, beatmap_ids: list[int]) -> list[Beatmap]:
         return await self.__api.beatmaps(beatmap_ids)
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_score(self, score_id: int) -> Score:
         return await self.__api.score(score_id)
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_beatmap_user_scores(self, beatmap_id: int, user_id: int, *, mode: Optional[GameModeT] = None) -> list[Score]:
         return await self.__api.beatmap_user_scores(beatmap_id, user_id, mode=mode)
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_user_scores(
         self,
         user_id: int,
@@ -327,11 +336,11 @@ class Osuawa(CachedMixIn):
             offset=offset,
         )
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_room(self, room_id: int) -> Room:
         return await self.__api.room(room_id)
 
-    @async_cached_method()
+    @async_cached_throttled_method()
     async def api_multiplayer_scores(
         self,
         room_id: int,

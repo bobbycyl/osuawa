@@ -25,6 +25,7 @@ streamlit
 streamlit-ace
 streamlit-aggrid
 tabulate
+throttled-py
 typing-extensions
 uvicorn
 websockets
