@@ -1,23 +1,3 @@
-"""ppserver: 对外提供 osupp 计算结果的 Web API
-
-- ``/api/difficulty``：``next(calculator)``，即难度属性；另带出 strains_of_skills
-  与 timeline_of_skills 两个扩展数据，其余 ``__ek_*`` 扩展键丢弃
-- ``/api/performance``：在难度属性之后 ``send(<Performance>)``，即表现属性
-
-通用查询参数：
-
-- ``k``：API key，必须在 ``./.streamlit/secrets.toml`` 的 ``[ppserver].allowed`` 中
-- ``b``：bid（Beatmap ID）
-- ``m``：ruleset_id，0=osu 1=taiko 2=catch 3=mania
-- ``mods``：以分号分隔的模组，如 ``HD;DT;DT_speed_change=1.3``。分号会先换成换行，再交给
-  :func:`make_unstandardized_mods_from_lines` 宽松解析
-
-``/api/performance`` 除上述参数外的所有查询参数，一律用来构建对应 Ruleset 的 Performance
-NamedTuple（字段名见 ``osupp.performance``），如 ``accuracy_percent``、``misses``、``combo``。
-
-报错处理只有三类：API key 不允许、bid 未找到、计算错误（参数错误也归在这里）。
-"""
-
 import contextlib
 import logging
 import os
@@ -31,6 +11,8 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from throttled import Throttled
+from throttled.exceptions import LimitedError
 
 from osuawa.utils import (
     C,
@@ -248,7 +230,11 @@ def auth_required(func: Callable) -> Callable:
 
         _logger.info("handling request from %s: %s" % (api_key, params))
 
-        return func(request, *args, _params=params, **kwargs)
+        try:
+            with Throttled(key=api_key, quota="12/m"):
+                return func(request, *args, _params=params, **kwargs)
+        except LimitedError as e:
+            return JSONResponse({"error": "rate_limit_exceeded", "message": str(e)}, status_code=429)
 
     return wrapper
 
@@ -297,17 +283,17 @@ app.add_middleware(
 
 
 @app.get("/api/difficulty")
-def difficulty(request: Request) -> Any:
+async def difficulty(request: Request) -> Any:
     return _calculate(request, with_performance=False)
 
 
 @app.get("/api/performance")
-def performance(request: Request) -> Any:
+async def performance(request: Request) -> Any:
     return _calculate(request, with_performance=True)
 
 
 @app.get("/api/entries")
-def entries(request: Request) -> Any:
+async def entries(request: Request) -> Any:
     return _entries(request)
 
 

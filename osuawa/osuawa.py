@@ -52,7 +52,6 @@ from ossapi.ossapiv2_async import (
     Score,
     User,
 )
-from throttled import RateLimiterType
 from throttled.asyncio import Throttled
 
 from .utils import (
@@ -161,8 +160,8 @@ class CachedThrottledMixIn:
     # 同时已发现同一时刻过多的请求会返回 429 错误，需要限制并发请求数
     # 经过测试，并发 4 不会触发 429 错误
     # todo: 并发 4 可能太稳健了，可以稍稍放大？
-    sem = Semaphore(4)
-    throttled: Throttled = Throttled(key="awa", using=RateLimiterType.SLIDING_WINDOW.value, quota="60/m", timeout=60)
+    sem = Semaphore(6)
+    throttled: Throttled = Throttled(key="awa", quota="60/m", timeout=60)
 
     def __init__(self):
         self.identifier: Optional[int] = None
