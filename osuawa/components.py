@@ -78,13 +78,24 @@ if TYPE_CHECKING:
 type DatabaseName = Literal["BEATMAP", "SCORE", "USER_CACHE"]
 
 
+_conn = st.connection("osuawa", type="sql", ttl=60)
+# ban the built-in query method
+_conn.query = None  # type: ignore
+
+
 def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False, params: Optional[Any] = None, **kwargs) -> pd.DataFrame:
     if "ttl" in kwargs:
         raise ValueError("cannot specify ttl")
     if database not in sql:
         raise ValueError(f"database name {database} not found in SQL query")
-    _conn = st.connection("osuawa", type="sql", ttl=0)
-    df = _conn.query(sql, ttl=0, show_spinner=show_spinner, params=params, **kwargs)
+    _spinner_str = "Running query..."
+    if isinstance(show_spinner, str):
+        _spinner_str = show_spinner
+    if show_spinner:
+        with st.spinner(_spinner_str):
+            df = pd.read_sql(text(sql), _conn.connect(), params=params, **kwargs)
+    else:
+        df = pd.read_sql(text(sql), _conn.connect(), params=params, **kwargs)
     df.columns = df.columns.str.upper()
     return df
 
@@ -567,7 +578,6 @@ def register_commands(obj: Optional[dict] = None):
 
 def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = None) -> pd.DataFrame:
     """取某个用户的成绩表"""
-    _conn = st.connection("osuawa", type="sql", ttl=0)
     if date_range is None:
         where = "USER_ID = :user ORDER BY TS"
         params: dict[str, Any] = {"user": user}
@@ -759,7 +769,6 @@ def query_all_sessions() -> pd.DataFrame:
 
 
 def delete_user_cache(aid: str) -> None:
-    _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
         s.execute(
             text(
@@ -775,7 +784,6 @@ def delete_user_cache(aid: str) -> None:
 def invalidate_user_cache(user: Optional[int] = None) -> None:
     if user is None:
         user = st.session_state.user
-    _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
         # 首先查询所有 aid，删除本地缓存的 token pickle
         res = s.execute(
@@ -798,7 +806,6 @@ def invalidate_user_cache(user: Optional[int] = None) -> None:
 
 
 def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -> None:
-    _conn = st.connection("osuawa", type="sql", ttl=0)
     with _conn.session as s:
         # 方言与 daemon / 重算脚本走同一处解析（resolve_db_url），不要在页面里另写一套
         upsert_text = _build_upsert(
