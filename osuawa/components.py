@@ -30,6 +30,7 @@ from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
+from osupp.util import make_unstandardized_mods_from_lines
 from plotly.graph_objs import Figure
 from sqlalchemy import text
 from streamlit import logger
@@ -59,7 +60,6 @@ from osuawa.utils import (
     get_playlist_lastupdate,
     get_size_and_count,
     hex_to_rgba,
-    make_unstandardized_mods_from_lines,
     mania_mod_entries,
     mania_mod_indexes,
     osu_mod_entries,
@@ -76,7 +76,6 @@ if TYPE_CHECKING:
     st.session_state.awa = cast(Osuawa, st.session_state.awa)
 
 type DatabaseName = Literal["BEATMAP", "SCORE", "USER_CACHE"]
-
 
 _conn = st.connection("osuawa", type="sql", ttl=60)
 # ban the built-in query method
@@ -622,12 +621,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
             raise ValueError(_("invalid ruleset id"))
     download_osu(beatmap)
 
-    if mod_settings is not None:
-        mods = make_unstandardized_mods_from_lines("SP", mod_settings.replace(" ", "\n"))
-        # 剔除 SP
-        mods.remove({"acronym": "SP"})
-    else:
-        mods = []
+    mods = make_unstandardized_mods_from_lines(mods=mod_settings.split(" ")) if mod_settings is not None else []
     # 生成 osu_tools 所能接受的样式
     my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
     my_attr.set_mods(mods)
@@ -1006,8 +1000,7 @@ def mods_generator(ret_type=None):
         apply = st.button(_("Apply to the form"), width="stretch")
 
     with st.expander(_("Preview")):
-        mods = make_unstandardized_mods_from_lines("SP", "\n".join(lines))
-        mods.remove({"acronym": "SP"})
+        mods = make_unstandardized_mods_from_lines(mods=lines)
         mods, _mod_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(
             mods,
             cast(

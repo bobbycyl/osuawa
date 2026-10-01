@@ -11,6 +11,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from osupp.util import make_unstandardized_mods_from_lines
 from throttled import Throttled
 from throttled.exceptions import LimitedError
 
@@ -29,7 +30,6 @@ from osuawa.utils import (
     _download_osu,
     calculate_performance,
     catch_mod_entries,
-    make_unstandardized_mods_from_lines,
     mania_mod_entries,
     osu_mod_entries,
     taiko_mod_entries,
@@ -150,8 +150,7 @@ def _resolve_beatmap_path(bid: int) -> str:
 def _parse_mods(mods: str, ruleset_id: Literal[0, 1, 2, 3], beatmap_path: str) -> tuple[list[str], list[str]]:
     """把以分号分隔的 mods 解析成 osu-tools 需要的 ``(mods, mod_options)``"""
     # slot 参数只是用来给 mods 列表打头，这里用 "SP" 占位，解析完再剔除
-    unstandardized_mods = make_unstandardized_mods_from_lines("SP", mods.replace(";", "\n"))
-    unstandardized_mods.remove({"acronym": "SP"})
+    unstandardized_mods = make_unstandardized_mods_from_lines(mods=mods.split(";"))
     _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(
         unstandardized_mods,
         ruleset_id,

@@ -11,6 +11,7 @@ import streamlit as st
 from clayutil.futil import compress_as_zip
 from clayutil.validator import validate_type
 from osupp.performance import calculate_performance
+from osupp.util import make_unstandardized_mods_from_lines
 from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 from streamlit import logger
 
@@ -25,7 +26,6 @@ from osuawa.utils import (
     _create_tmp_playlist_p,
     available_mods,
     get_playlist_lastupdate,
-    make_unstandardized_mods_from_lines,
     read_injected_code,
     safe_norm,
 )
@@ -275,7 +275,7 @@ if st.session_state.perm >= 1:
                 # SLOTS 自动大写
                 slot_input = slot_input[:2].upper() + slot_input[2:]
                 urls_input_split = urls_input.split()
-                raw_mods_input = make_unstandardized_mods_from_lines(slot_input, st.session_state.gen_form_mod_settings or "")
+                raw_mods_input = make_unstandardized_mods_from_lines(slot=slot_input, lines=st.session_state.gen_form_mod_settings or "")
 
                 # 为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
                 for url_input in urls_input_split:

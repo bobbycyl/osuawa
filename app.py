@@ -334,7 +334,7 @@ pg_list = [
 ]
 if st.session_state.perm >= 2:
     pg_list.append(st.Page("tools/Easter_egg.py", title=_("Easter Egg")))
-pg = st.navigation(pg_list)
+pg = st.navigation(pg_list)  # ty: ignore[call-non-callable]
 
 if "immersive_active" not in st.session_state:
     st.session_state.immersive_active = False

@@ -979,11 +979,11 @@ def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> Complet
     # noinspection PyArgumentList
     perf100_attr = calculator.send(performance_type())
     # noinspection PyArgumentList
-    pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]
+    pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]  # type: ignore
     # noinspection PyArgumentList
-    pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]
+    pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]  # type: ignore
     # noinspection PyArgumentList
-    pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]
+    pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]  # type: ignore
 
     return _assemble_completed_score_info(
         beatmap,
@@ -1138,11 +1138,11 @@ def calc_beatmap_attributes_batch(
             # noinspection PyArgumentList
             perf100_attr = calculator.send(performance_type())
             # noinspection PyArgumentList
-            pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]
+            pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]  # type: ignore
             # noinspection PyArgumentList
-            pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]
+            pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]  # type: ignore
             # noinspection PyArgumentList
-            pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]
+            pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]  # type: ignore
             for score_id in score_ids:
                 score = scores_compact[score_id]
                 _, performance, _ = _get_ruleset_and_performance(score)
@@ -1237,51 +1237,6 @@ def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
 
     data[column] = data[column].apply(search_func)
     return data
-
-
-def _is_int_str(v: str) -> bool:
-    return v.isdecimal() or v[:1] == "-" and v[1:].isdecimal()
-
-
-def make_unstandardized_mods_from_lines(slot: str, lines: str) -> list[dict[str, str | dict[str, str | float | bool]]]:
-    """一个 Ruleset 不敏感、宽松的、自带 slot 的多行 mods 解析函数
-
-    :param slot: slot 名，如 NM1
-    :param lines: 多行文本，每一行的格式是 <acronym>_<mod_setting>=<value> 或 <acronym>
-    :return: 一个未经类型验证和标准化的 mods 列表
-    """
-    # slot 本身自带一个 mod
-    auto_recognized_mod = slot[:2]
-    # 最终期望得到：[{"acronym":<acronym>,"settings":{<mod_setting>:<value>}}]，如果不存在 settings，则不需要 settings 键
-    # 先转换为 {acronym: [{mod_setting: value}]}，最后检测如果 settings 为空则不要添加该键
-    mods_dict: dict[str, dict[str, Any]] = {auto_recognized_mod: {}}
-
-    for line in lines.splitlines():
-        if line.strip():
-            line_split = line.split("=", 1)
-            if len(line_split) == 1:  # mod only
-                mods_dict[line_split[0]] = mods_dict.get(line_split[0], {})
-            else:  # mod with settings
-                # 如果要设置 mod 参数，原则上要求 mod 本身已经加入
-                # 但是为了方便起见，如果 mod 不存在，但又要求设置参数，则自动添加该 mod
-                acronym_n_setting, value = line_split
-                acronym, mod_setting = acronym_n_setting.split("_", 1)
-                if acronym not in mods_dict:
-                    mods_dict[acronym] = {}
-                # 一个简单的类型推断与转换
-                if value == "true":
-                    value = True
-                elif value == "false":
-                    value = False
-                elif _is_int_str(value):
-                    value = int(value)
-                elif "." in value and _is_int_str(value.replace(".", "", 1)):
-                    value = float(value)
-                else:
-                    value = str(value)
-                mods_dict[acronym].update({mod_setting: value})
-
-    return [({"acronym": acronym, "settings": _settings} if _settings else {"acronym": acronym}) for acronym, _settings in mods_dict.items()]
 
 
 def safe_norm(value, type_: type = str):
