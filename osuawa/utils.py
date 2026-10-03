@@ -37,7 +37,7 @@ from osupp.performance import (
     TaikoPerformance,
     calculate_performance as calculate_performance,
 )
-from osupp.util import Result, validate_mod_setting_value
+from osupp.util import Result, processor_working_beatmap, validate_mod_setting_value
 from redis import Redis
 from sqlalchemy import RowMapping
 
@@ -288,7 +288,7 @@ class SimpleDifficultyAttribute(object):
         cls,
         mods: list[dict[str, Any]],
         ruleset_id: Optional[Literal[0, 1, 2, 3]] = None,
-        beatmap_path: Optional[str] = None,
+        beatmap_path: Optional[str | bytes] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str]]:
         """验证并转换标准 mods 列表
 
@@ -313,7 +313,7 @@ class SimpleDifficultyAttribute(object):
             case _:
                 if beatmap_path is None:
                     raise ValueError("cannot determine the ruleset")
-                working_beatmap = ProcessorWorkingBeatmap(beatmap_path)
+                working_beatmap = ProcessorWorkingBeatmap(beatmap_path) if isinstance(beatmap_path, str) else processor_working_beatmap(beatmap_path)
                 ruleset_id = cast(
                     Literal[0, 1, 2, 3],
                     working_beatmap.BeatmapInfo.Ruleset.OnlineID,
@@ -699,14 +699,29 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     b_aim_difficult_strain_count: Optional[float]
     b_speed_difficult_strain_count: Optional[float]
     b_reading_difficult_note_count: Optional[float]
+    b_ppplus_jump_rating: Optional[float]
+    b_ppplus_flow_rating: Optional[float]
+    b_ppplus_precision_rating: Optional[float]
+    b_ppplus_stamina_rating: Optional[float]
+    b_ppplus_rhythm_complexity_rating: Optional[float]
     pp_aim: Optional[float]
     pp_speed: Optional[float]
     pp_accuracy: Optional[float]
     pp_reading: Optional[float]
+    ppplus_jump: Optional[float]
+    ppplus_flow: Optional[float]
+    ppplus_precision: Optional[float]
+    ppplus_stamina: Optional[float]
+    ppplus_rhythm_complexity: Optional[float]
     b_pp_100if_aim: Optional[float]
     b_pp_100if_speed: Optional[float]
     b_pp_100if_accuracy: Optional[float]
     b_pp_100if_reading: Optional[float]
+    b_ppplus_100if_jump: Optional[float]
+    b_ppplus_100if_flow: Optional[float]
+    b_ppplus_100if_precision: Optional[float]
+    b_ppplus_100if_stamina: Optional[float]
+    b_ppplus_100if_rhythm_complexity: Optional[float]
     b_pp_100if: float
     b_pp_92if: float
     b_pp_81if: float
@@ -956,48 +971,6 @@ def _get_ruleset_and_performance(score: SimpleScoreInfo) -> tuple[Ruleset, Named
             raise ValueError("ruleset id %d not supported" % score.ruleset_id)
 
 
-def calc_beatmap_attributes(beatmap: Beatmap, score: SimpleScoreInfo) -> CompletedSimpleScoreInfo:
-    """完整计算所需属性，这会覆盖 score 原本的 pp
-
-    逐条计算，适合零散调用。
-    批量重算历史成绩请用 :func:`calc_beatmap_attributes_batch`，它会复用同一谱面的难度计算。
-    """
-    my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
-    my_attr.set_mods(score._mods)
-    download_osu(beatmap)
-    ruleset, performance, performance_type = _get_ruleset_and_performance(score)
-    calculator = calculate_performance(
-        beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
-        ruleset=ruleset,
-        mods=my_attr.osu_tool_mods,
-        mod_options=my_attr.osu_tool_mod_options,
-        # todo: 这里是否要不限制超时？
-        allow_cancel=False,
-    )
-    osupp_attr = next(calculator)
-    perf_got_attr = calculator.send(performance)
-    # noinspection PyArgumentList
-    perf100_attr = calculator.send(performance_type())
-    # noinspection PyArgumentList
-    pp92 = calculator.send(performance_type(accuracy_percent=92.0))["pp"]  # type: ignore
-    # noinspection PyArgumentList
-    pp81 = calculator.send(performance_type(accuracy_percent=81.0))["pp"]  # type: ignore
-    # noinspection PyArgumentList
-    pp67 = calculator.send(performance_type(accuracy_percent=67.0))["pp"]  # type: ignore
-
-    return _assemble_completed_score_info(
-        beatmap,
-        score,
-        my_attr,
-        osupp_attr,
-        perf_got_attr,
-        perf100_attr,
-        pp92,
-        pp81,
-        pp67,
-    )
-
-
 def _assemble_completed_score_info(
     beatmap: Beatmap,
     score: SimpleScoreInfo,
@@ -1019,11 +992,24 @@ def _assemble_completed_score_info(
     pp_got_speed = perf_got_attr["speed"]
     pp_got_accuracy = perf_got_attr["accuracy"]
     pp_got_reading = perf_got_attr["reading"]
+
+    pp_got_jump = perf_got_attr["__ek_jump"]
+    pp_got_flow = perf_got_attr["__ek_flow"]
+    pp_got_precision = perf_got_attr["__ek_precision"]
+    pp_got_stamina = perf_got_attr["__ek_stamina"]
+    pp_got_rhythm_complexity = perf_got_attr["__ek_rhythm_complexity"]
+
     pp100 = perf100_attr["pp"]
     pp100_aim = perf100_attr["aim"]
     pp100_speed = perf100_attr["speed"]
     pp100_accuracy = perf100_attr["accuracy"]
     pp100_reading = perf100_attr["reading"]
+
+    pp100_jump = perf100_attr["__ek_jump"]
+    pp100_flow = perf100_attr["__ek_flow"]
+    pp100_precision = perf100_attr["__ek_precision"]
+    pp100_stamina = perf100_attr["__ek_stamina"]
+    pp100_rhythm_complexity = perf100_attr["__ek_rhythm_complexity"]
 
     return CompletedSimpleScoreInfo(
         # 父类字段，除了 pp 全部照抄
@@ -1073,14 +1059,29 @@ def _assemble_completed_score_info(
         osupp_attr["aim_difficult_strain_count"],
         osupp_attr["speed_difficult_strain_count"],
         osupp_attr["reading_difficult_note_count"],
+        osupp_attr["__ek_jump"],
+        osupp_attr["__ek_flow"],
+        osupp_attr["__ek_precision"],
+        osupp_attr["__ek_stamina"],
+        osupp_attr["__ek_rhythm_complexity"],
         pp_got_aim,
         pp_got_speed,
         pp_got_accuracy,
         pp_got_reading,
+        pp_got_jump,
+        pp_got_flow,
+        pp_got_precision,
+        pp_got_stamina,
+        pp_got_rhythm_complexity,
         pp100_aim,
         pp100_speed,
         pp100_accuracy,
         pp100_reading,
+        pp100_jump,
+        pp100_flow,
+        pp100_precision,
+        pp100_stamina,
+        pp100_rhythm_complexity,
         pp100,
         pp92,
         pp81,
@@ -1125,8 +1126,10 @@ def calc_beatmap_attributes_batch(
             download_osu(beatmap)
             downloaded.add(bid)
         ruleset, _, performance_type = _get_ruleset_and_performance(scores_compact[score_ids[0]])
+        with open(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % bid), "rb") as fi_b:
+            beatmap_bytes = fi_b.read()
         calculator = calculate_performance(
-            beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % bid),
+            beatmap_path=beatmap_bytes,
             ruleset=ruleset,
             mods=list(osu_tool_mods),
             mod_options=list(osu_tool_mod_options),

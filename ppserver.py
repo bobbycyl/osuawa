@@ -147,7 +147,7 @@ def _resolve_beatmap_path(bid: int) -> str:
     return path
 
 
-def _parse_mods(mods: str, ruleset_id: Literal[0, 1, 2, 3], beatmap_path: str) -> tuple[list[str], list[str]]:
+def _parse_mods(mods: str, ruleset_id: Literal[0, 1, 2, 3], beatmap_path: str | bytes) -> tuple[list[str], list[str]]:
     """把以分号分隔的 mods 解析成 osu-tools 需要的 ``(mods, mod_options)``"""
     # slot 参数只是用来给 mods 列表打头，这里用 "SP" 占位，解析完再剔除
     unstandardized_mods = make_unstandardized_mods_from_lines(mods=mods.split(";"))
@@ -187,10 +187,11 @@ def _run_calculation(bid: int, ruleset_id: int, params: Mapping[str, str], *, wi
                 ruleset = ManiaRuleset()
             case _:
                 raise ValueError("ruleset id %d not supported" % ruleset_id)
-        beatmap_path = _resolve_beatmap_path(bid)
-        mods, mod_options = _parse_mods(params.get("mods", ""), ruleset_id, beatmap_path)
+        with open(_resolve_beatmap_path(bid), "rb") as fi_b:
+            beatmap_bytes = fi_b.read()
+        mods, mod_options = _parse_mods(params.get("mods", ""), ruleset_id, beatmap_bytes)
         calculator = calculate_performance(
-            beatmap_path=beatmap_path,
+            beatmap_path=beatmap_bytes,
             ruleset=ruleset,
             mods=mods,
             mod_options=mod_options,
@@ -272,6 +273,7 @@ def _entries(_request: Request, *, _params: Mapping[str, str]) -> Any:
 
 
 app = FastAPI(title="osuawa ppserver", description="A simple osupp Web API")
+# noinspection bad-argument-type
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
