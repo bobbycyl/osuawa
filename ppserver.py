@@ -68,6 +68,11 @@ DIFFICULTY_EXTRA_KEYS = (
     "drain_length_orig",
     "hit_length_adj",
     "drain_length_adj",
+    "jump",
+    "flow",
+    "precision",
+    "stamina",
+    "rhythm_complexity",
 )
 
 # ruleset_id -> Performance NamedTuple，用于构建 /api/performance 的载荷

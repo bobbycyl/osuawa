@@ -459,6 +459,7 @@ class SimpleDifficultyAttribute(object):
         self.is_very_low_ar = False
         self.is_speed_up = False
         self.is_speed_down = False
+        self.is_flashlight = False
         self.standardized_mods = []
         self.osu_tool_mods: list[str] = []  # [acronym]
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
@@ -517,6 +518,8 @@ class SimpleDifficultyAttribute(object):
             self.is_very_low_ar = True
         self.bpm *= self.magnitude
         self.hit_length = round(self.hit_length / self.magnitude)
+        if "FL" in mods_dict:
+            self.is_flashlight = True
 
 
 #: 数据类字段名 -> 数据库列名。几乎一一对应（字段名去下划线转大写），只有 USER_ID 是个例外
@@ -612,7 +615,6 @@ class SimpleScoreInfo(object):
                 "ok": score.statistics.ok or 0,
                 "meh": score.statistics.meh or 0,
                 "miss": score.statistics.miss or 0,
-                # 为了其他游戏模式的基本兼容性（暂时没有更进一步的计算支持计划）
                 "good": score.statistics.good or 0,
                 "perfect": score.statistics.perfect,
                 "small_tick_hit": score.statistics.small_tick_hit,
@@ -656,8 +658,47 @@ class SimpleScoreInfo(object):
             ruleset_id=int(data["RULESET_ID"]),
         )
 
+    @classmethod
+    def forge(cls, beatmap_id: int, ruleset_id: int):
+        return cls(
+            bid=beatmap_id,
+            user=-1,
+            score=1,
+            accuracy=0,
+            max_combo=1,
+            passed=False,
+            pp=None,
+            _mods=[],
+            ts=datetime(year=2024, month=1, day=1, hour=0, minute=0),
+            statistics=ScoreStatistics(miss=0, meh=0, ok=0, good=0, great=0, perfect=0, small_tick_hit=0, large_tick_hit=0, small_bonus=0, large_bonus=0, ignore_miss=0, ignore_hit=0, combo_break=0, slider_tail_hit=0),
+            st=datetime(year=2024, month=1, day=1, hour=0, minute=5),
+            ruleset_id=ruleset_id,
+        )
+
 
 _SCORE_BASE_FIELD_NAMES = frozenset(field.name for field in fields(SimpleScoreInfo))
+MASK_A = np.array([True, True, True, False, True, False, True, True, False, False])
+MASK_B = np.array([False, False, False, True, False, False, False, False, False, False])
+MASK_C = ~(MASK_A | MASK_B)
+FEATURE_EPSILON = np.load(os.path.join(assets_dir, "feature_epsilon.npy"))
+
+
+def calc_feature_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    a = np.maximum(a, 1e-9)
+    b = np.maximum(b, 1e-9)
+    d = np.empty_like(a)
+
+    # A 类：scale-aware
+    d[MASK_A] = np.abs(a[MASK_A] - b[MASK_A]) / (a[MASK_A] + b[MASK_A] + FEATURE_EPSILON[MASK_A])
+
+    # B 类：log + 归一
+    log_diff = np.abs(np.log(a[MASK_B]) - np.log(b[MASK_B]))
+    d[MASK_B] = log_diff / (1.0 + log_diff)
+
+    # C 类：Ruzicka（带全局防爆常量）
+    d[MASK_C] = np.abs(a[MASK_C] - b[MASK_C]) / (a[MASK_C] + b[MASK_C] + 1e-9)
+
+    return d
 
 
 @dataclass(slots=True)
@@ -684,6 +725,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     is_very_low_ar: bool
     is_speed_up: bool
     is_speed_down: bool
+    is_flashlight: bool
     info: str
     original_difficulty: float
     b_star_rating: float
@@ -726,6 +768,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     b_pp_92if: float
     b_pp_81if: float
     b_pp_67if: float
+    b_delta_time_median: Optional[float]
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any] | RowMapping):
@@ -749,6 +792,33 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
             kwargs[field.name] = value
         return cls(**kwargs)
 
+    def calc_feature(self) -> tuple[float, float, float, float, float, float, float, float, float, float]:
+        """计算特征，只支持 std 谱面"""
+        assert self.b_aim_difficulty is not None
+        assert self.b_speed_difficulty is not None
+        assert self.b_reading_difficulty is not None
+        assert self.b_ppplus_jump_rating is not None
+        assert self.b_ppplus_flow_rating is not None
+        assert self.b_slider_factor is not None
+        assert self.b_delta_time_median is not None
+        assert self.b_ppplus_rhythm_complexity_rating is not None
+        assert self.b_ppplus_precision_rating is not None
+        assert self.preempt is not None
+        assert self.b_max_combo is not None
+        assert self.hit_length is not None
+        return (
+            self.b_aim_difficulty**2,
+            self.b_speed_difficulty**2,
+            self.b_reading_difficulty**2,
+            self.b_ppplus_jump_rating / (self.b_ppplus_flow_rating + 1e-12),
+            self.b_slider_factor,
+            self.b_delta_time_median,
+            self.b_ppplus_rhythm_complexity_rating,
+            self.b_ppplus_precision_rating,
+            calc_ar(self.preempt),
+            self.b_max_combo / (self.hit_length + 1e-12),
+        )
+
 
 @dataclass(slots=True)
 class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
@@ -765,6 +835,11 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     pp_speed_pct: Optional[float]
     pp_accuracy_pct: Optional[float]
     pp_reading_pct: Optional[float]
+    pp_jump_pct: Optional[float]
+    pp_flow_pct: Optional[float]
+    pp_precision_pct: Optional[float]
+    pp_stamina_pct: Optional[float]
+    pp_rhythm_complexity_pct: Optional[float]
     pp_92pct: Optional[float]
     pp_81pct: Optional[float]
     pp_67pct: Optional[float]
@@ -773,6 +848,7 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     aim_density_ratio: Optional[float]
     speed_density_ratio: Optional[float]
     aim_speed_ratio: Optional[float]
+    jump_flow_ratio: Optional[float]
     score_nf: int
     mods: str
     only_common_mods: bool
@@ -1038,6 +1114,7 @@ def _assemble_completed_score_info(
         my_attr.is_very_low_ar,
         my_attr.is_speed_up,
         my_attr.is_speed_down,
+        my_attr.is_flashlight,
         "%s - %s (%s) [%s]"
         % (
             beatmap.beatmapset().artist,
@@ -1086,6 +1163,7 @@ def _assemble_completed_score_info(
         pp92,
         pp81,
         pp67,
+        osupp_attr["__ek_delta_time_median"] / my_attr.magnitude,
     )
 
 
@@ -1104,7 +1182,7 @@ def calc_beatmap_attributes_batch(
 
     :param beatmaps_dict: ``bid -> Beatmap``
     :param scores_compact: ``score_id -> SimpleScoreInfo``
-    :return: ``score_id -> CompletedSimpleScoreInfo``，**与入参一一对应**（顺序也一致）；
+    :return: ``score_id -> CompletedSimpleScoreInfo``，未排序；
         任何一条算不出来都直接抛错，不会静默少返回
     """
     # (bid, osu_tool_mods, osu_tool_mod_options, ruleset_id) -> [score_id, ...]
@@ -1126,10 +1204,8 @@ def calc_beatmap_attributes_batch(
             download_osu(beatmap)
             downloaded.add(bid)
         ruleset, _, performance_type = _get_ruleset_and_performance(scores_compact[score_ids[0]])
-        with open(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % bid), "rb") as fi_b:
-            beatmap_bytes = fi_b.read()
         calculator = calculate_performance(
-            beatmap_path=beatmap_bytes,
+            beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid),
             ruleset=ruleset,
             mods=list(osu_tool_mods),
             mod_options=list(osu_tool_mod_options),

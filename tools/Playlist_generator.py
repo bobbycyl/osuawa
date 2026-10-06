@@ -120,7 +120,7 @@ def export_filtered_playlist():
 
 NEEDED_ATTR_MAPPING = {
     "star_rating": "SR",
-    "max_combo": "MaxCb",
+    "max_combo": "MaxCombo",
     "aim_difficulty": "Aim",
     "speed_difficulty": "Speed",
     "reading_difficulty": "Reading",
@@ -129,12 +129,14 @@ NEEDED_ATTR_MAPPING = {
     "__ek_precision": "Precision",
     "__ek_stamina": "Stamina",
     "__ek_rhythm_complexity": "RhythmComplexity",
+    "slider_factor": "SliderFactor",
     "__ek_cs_adj": "CS",
     "__ek_ar_adj": "AR",
     "__ek_od_adj": "OD",
     "__ek_hp_adj": "HP",
     "__ek_most_common_bpm_adj": "BPM",
-    "__ek_hit_length_adj": "LEN",
+    "__ek_delta_time_median": "DeltaTimeMedian",
+    "__ek_hit_length_adj": "HitLength",
 }
 
 
@@ -196,7 +198,7 @@ def show_statistics():
     df_for_stats = pd.DataFrame.from_dict(processed, orient="index").astype(float)
     df_for_stats["skill_type"] = df_for_stats.index.str[:2]
     stats_filter = st.multiselect(_("Slot Filter"), skill_type_mapping.keys(), default=skill_type_mapping.keys())
-    indexes_filter = st.multiselect(_("Index Filter"), NEEDED_ATTR_MAPPING.values(), default=("Jump", "Flow", "Speed", "Reading", "Precision", "Stamina", "RhythmComplexity"))
+    indexes_filter = st.multiselect(_("Index Filter"), NEEDED_ATTR_MAPPING.values(), default=("Jump", "Flow", "Speed", "Reading"))
     # apply filter
     df_for_stats = df_for_stats[df_for_stats["skill_type"].isin(stats_filter)]
     st.table(df_for_stats.drop(columns=["skill_type"]).mean().rename("Mean"))

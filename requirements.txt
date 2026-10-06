@@ -19,7 +19,6 @@ pymysql
 redis
 schedule
 scipy
-slider
 statsmodels
 streamlit
 streamlit-ace

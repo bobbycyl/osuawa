@@ -423,7 +423,7 @@ st.button(_("Run"), width="stretch", type="primary", on_click=submit)
 
 if st.session_state.perm >= 1:
     st.divider()
-    with st.container(border=True):
+    with st.container(border=False):
         # 显示历史消息
         for message in st.session_state.llm_messages:
             if message["role"] == "system":

@@ -50,7 +50,11 @@ from osuawa.utils import (
     CompletedSimpleScoreInfo,
     RedisTaskId,
     SimpleDifficultyAttribute,
+    SimpleScoreInfo,
     _build_upsert,
+    assets_dir,
+    calc_beatmap_attributes_batch,
+    calc_feature_distance,
     calculate_performance,
     catch_mod_entries,
     catch_mod_indexes,
@@ -398,6 +402,20 @@ def commands():
             [Int("beatmap"), Str("mod_settings", True), Int("ruleset_id", True)],
             0,
             draw_strain_graph,
+        ),
+        Command(
+            "sim",
+            _("Calculate similarity of the two osu!standard beatmaps"),
+            [Int("beatmap1"), Int("beatmap2")],
+            0,
+            calc_feature_similarity,
+        ),
+        Command(
+            "epsilon",
+            _("Calculate feature epsilon"),
+            [],
+            4,
+            gen_epsilon,
         ),
         Command("sessions", _("Display all active sessions"), [], 0, query_all_sessions),
         Command("invalidate", _("Invalidate all sessions"), [], 0, invalidate_user_cache),
@@ -1087,3 +1105,64 @@ def task_board():
         tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "success"])
     with tab4:
         tasks_grid([(task_id, status_mapping) for task_id, status_mapping in tasks_to_show if status_mapping.get("status") == "error"])
+
+
+def gen_epsilon():
+    feature_rows: list[tuple[float, ...]] = []
+    row_bids: list[int] = []
+    with open(os.path.join(assets_dir, "bids.txt"), encoding="utf-8") as fi:
+        bids = [int(bid.strip()) for bid in fi.readlines() if bid.strip()]
+
+    beatmaps_dict: dict[int, Beatmap] = st.session_state.awa.run_coro(st.session_state.awa.async_get_beatmaps_dict(bids))
+    scores_compact: dict[str, SimpleScoreInfo] = {str(-i): SimpleScoreInfo.forge(bid, 0) for i, bid in enumerate(bids)}
+
+    computed = calc_beatmap_attributes_batch(beatmaps_dict, scores_compact)
+    for _score_id in scores_compact:
+        score = computed[_score_id]
+        feature_rows.append(
+            score.calc_feature(),
+        )
+        row_bids.append(score.bid)
+
+    df = pd.DataFrame(feature_rows, columns=["aim_sq", "speed_sq", "reading_sq", "jump_flow_ratio", "slider_factor", "delta_time_median", "rhythm_complexity", "precision", "approach_rate", "density"])
+    df.insert(0, "bid", row_bids)
+    df.to_parquet(os.path.join(assets_dir, "feature_matrix.parquet"), index=False)
+
+    # 计算各个属性的中位数
+    features = np.asarray(feature_rows, dtype=np.float64)
+    assert np.isfinite(features).all()
+    epsilon = np.median(features, axis=0)
+    np.save(os.path.join(assets_dir, "feature_epsilon.npy"), epsilon)
+    return epsilon
+
+
+def calc_feature_similarity(bid1: int, bid2: int) -> str:
+    beatmaps_dict: dict[int, Beatmap] = st.session_state.awa.run_coro(st.session_state.awa.async_get_beatmaps_dict((bid1, bid2)))
+    if beatmaps_dict[bid1].mode != GameMode.OSU or beatmaps_dict[bid2].mode != GameMode.OSU:
+        raise ValueError("both beatmaps must be osu!standard")
+    scores_compact: dict[str, SimpleScoreInfo] = {str(-i): SimpleScoreInfo.forge(bid, 0) for i, bid in enumerate((bid1, bid2))}
+
+    computed = calc_beatmap_attributes_batch(beatmaps_dict, scores_compact)
+    a = np.asarray(computed["0"].calc_feature())
+    b = np.asarray(computed["-1"].calc_feature())
+    d = calc_feature_distance(a, b)
+    ret = f"""## Similarity
+
+**{1.0 - float(np.max(d)):.3f}**
+
+## Details
+
+| Dim               | Value1     | Value2     | Distance   |
+| ----------------- | ---------- | ---------- | ---------- |
+| aim_sq            | {a[0]:.3f} | {b[0]:.3f} | {d[0]:.3f} |
+| speed_sq          | {a[1]:.3f} | {b[1]:.3f} | {d[1]:.3f} |
+| reading_sq        | {a[2]:.3f} | {b[2]:.3f} | {d[2]:.3f} |
+| jump_flow_ratio   | {a[3]:.3f} | {b[3]:.3f} | {d[3]:.3f} |
+| slider_factor     | {a[4]:.3f} | {b[4]:.3f} | {d[4]:.3f} |
+| delta_time_median | {a[5]:.3f} | {b[5]:.3f} | {d[5]:.3f} |
+| rhythm_complexity | {a[6]:.3f} | {b[6]:.3f} | {d[6]:.3f} |
+| precision         | {a[7]:.3f} | {b[7]:.3f} | {d[7]:.3f} |
+| ar                | {a[8]:.3f} | {b[8]:.3f} | {d[8]:.3f} |
+| density           | {a[9]:.3f} | {b[9]:.3f} | {d[9]:.3f} |
+"""
+    return ret

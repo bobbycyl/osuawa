@@ -406,17 +406,23 @@ class Osuawa(CachedThrottledMixIn):
         df[ec[3]] = df["pp_speed"] / df["b_pp_100if_speed"]
         df[ec[4]] = df["pp_accuracy"] / df["b_pp_100if_accuracy"]
         df[ec[5]] = df["pp_reading"] / df["b_pp_100if_reading"]
-        df[ec[6]] = df["pp"] / df["b_pp_92if"]
-        df[ec[7]] = df["pp"] / df["b_pp_81if"]
-        df[ec[8]] = df["pp"] / df["b_pp_67if"]
-        df[ec[9]] = df["max_combo"] / df["b_max_combo"]
-        df[ec[10]] = df["b_max_combo"] / df["hit_length"]
-        df[ec[11]] = df["b_aim_difficulty"] / np.log1p(df["density"])
-        df[ec[12]] = df["b_speed_difficulty"] / np.log1p(df["density"])
-        df[ec[13]] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
-        df[ec[14]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
-        df[ec[15]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
-        df[ec[16]] = df["_mods"].map(lambda mods: ({m["acronym"] for m in mods} <= self.common_mods))
+        df[ec[6]] = df["ppplus_jump"] / df["b_ppplus_100if_jump"]
+        df[ec[7]] = df["ppplus_flow"] / df["b_ppplus_100if_flow"]
+        df[ec[8]] = df["ppplus_precision"] / df["b_ppplus_100if_precision"]
+        df[ec[9]] = df["ppplus_stamina"] / df["b_ppplus_100if_stamina"]
+        df[ec[10]] = df["ppplus_rhythm_complexity"] / df["b_ppplus_100if_rhythm_complexity"]
+        df[ec[11]] = df["pp"] / df["b_pp_92if"]
+        df[ec[12]] = df["pp"] / df["b_pp_81if"]
+        df[ec[13]] = df["pp"] / df["b_pp_67if"]
+        df[ec[14]] = df["max_combo"] / df["b_max_combo"]
+        df[ec[15]] = df["b_max_combo"] / df["hit_length"]
+        df[ec[16]] = df["b_aim_difficulty"] / np.log1p(df["density"])
+        df[ec[17]] = df["b_speed_difficulty"] / np.log1p(df["density"])
+        df[ec[18]] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
+        df[ec[19]] = df["b_ppplus_jump_rating"] / df["b_ppplus_flow_rating"]
+        df[ec[20]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
+        df[ec[21]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
+        df[ec[22]] = df["_mods"].map(lambda mods: ({m["acronym"] for m in mods} <= self.common_mods))
         return df
 
     def get_user_info(self, username: str) -> dict[str, Any]:
