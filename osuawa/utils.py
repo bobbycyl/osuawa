@@ -669,34 +669,49 @@ class SimpleScoreInfo(object):
             passed=False,
             pp=None,
             _mods=[],
-            ts=datetime(year=2024, month=1, day=1, hour=0, minute=0),
+            ts=datetime(year=2024, month=1, day=1, hour=0, minute=0, tzinfo=timezone.utc),
             statistics=ScoreStatistics(miss=0, meh=0, ok=0, good=0, great=0, perfect=0, small_tick_hit=0, large_tick_hit=0, small_bonus=0, large_bonus=0, ignore_miss=0, ignore_hit=0, combo_break=0, slider_tail_hit=0),
-            st=datetime(year=2024, month=1, day=1, hour=0, minute=5),
+            st=datetime(year=2024, month=1, day=1, hour=0, minute=5, tzinfo=timezone.utc),
             ruleset_id=ruleset_id,
         )
 
 
 _SCORE_BASE_FIELD_NAMES = frozenset(field.name for field in fields(SimpleScoreInfo))
-MASK_A = np.array([True, True, True, False, True, False, True, True, False, False])
-MASK_B = np.array([False, False, False, True, False, False, False, False, False, False])
-MASK_C = ~(MASK_A | MASK_B)
-FEATURE_EPSILON = np.load(os.path.join(assets_dir, "feature_epsilon.npy"))
 
 
-def calc_feature_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+class BeatmapFeature(NamedTuple):
+    aim_sq: Optional[float]
+    speed_sq: Optional[float]
+    reading_sq: Optional[float]
+    jump_flow_ratio: Optional[float]
+    slider_factor: Optional[float]
+    delta_time_median: Optional[float]
+    rhythm_complexity: Optional[float]
+    precision: Optional[float]
+    approach_rate: Optional[float]
+    density: Optional[float]
+
+
+FEATURE_MASK_A = np.array([True, True, True, False, True, False, True, True, False, False])
+FEATURE_MASK_B = np.array([False, False, False, True, False, False, False, False, False, False])
+FEATURE_MASK_C = ~(FEATURE_MASK_A | FEATURE_MASK_B)
+FEATURE_EPSILON = np.load(os.path.join(assets_dir, "feature_epsilon.npy")) if os.path.exists(os.path.join(assets_dir, "feature_epsilon.npy")) else np.zeros(len(BeatmapFeature._fields))
+
+
+def calc_feature_distance(a: np.ndarray[tuple[int], np.dtype[np.float64]], b: np.ndarray[tuple[int], np.dtype[np.float64]]) -> np.ndarray[tuple[int], np.dtype[np.float64]]:
     a = np.maximum(a, 1e-9)
     b = np.maximum(b, 1e-9)
     d = np.empty_like(a)
 
     # A 类：scale-aware
-    d[MASK_A] = np.abs(a[MASK_A] - b[MASK_A]) / (a[MASK_A] + b[MASK_A] + FEATURE_EPSILON[MASK_A])
+    d[FEATURE_MASK_A] = np.abs(a[FEATURE_MASK_A] - b[FEATURE_MASK_A]) / (a[FEATURE_MASK_A] + b[FEATURE_MASK_A] + FEATURE_EPSILON[FEATURE_MASK_A])
 
     # B 类：log + 归一
-    log_diff = np.abs(np.log(a[MASK_B]) - np.log(b[MASK_B]))
-    d[MASK_B] = log_diff / (1.0 + log_diff)
+    log_diff = np.abs(np.log(a[FEATURE_MASK_B]) - np.log(b[FEATURE_MASK_B]))
+    d[FEATURE_MASK_B] = log_diff / (1.0 + log_diff)
 
     # C 类：Ruzicka（带全局防爆常量）
-    d[MASK_C] = np.abs(a[MASK_C] - b[MASK_C]) / (a[MASK_C] + b[MASK_C] + 1e-9)
+    d[FEATURE_MASK_C] = np.abs(a[FEATURE_MASK_C] - b[FEATURE_MASK_C]) / (a[FEATURE_MASK_C] + b[FEATURE_MASK_C] + 1e-9)
 
     return d
 
@@ -794,18 +809,19 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
 
     def calc_feature(self) -> tuple[float, float, float, float, float, float, float, float, float, float]:
         """计算特征，只支持 std 谱面"""
-        assert self.b_aim_difficulty is not None
-        assert self.b_speed_difficulty is not None
-        assert self.b_reading_difficulty is not None
-        assert self.b_ppplus_jump_rating is not None
-        assert self.b_ppplus_flow_rating is not None
-        assert self.b_slider_factor is not None
-        assert self.b_delta_time_median is not None
-        assert self.b_ppplus_rhythm_complexity_rating is not None
-        assert self.b_ppplus_precision_rating is not None
-        assert self.preempt is not None
-        assert self.b_max_combo is not None
-        assert self.hit_length is not None
+        if (
+            self.b_aim_difficulty is None
+            or self.b_speed_difficulty is None
+            or self.b_reading_difficulty is None
+            or self.b_ppplus_jump_rating is None
+            or self.b_ppplus_flow_rating is None
+            or self.b_slider_factor is None
+            or self.b_delta_time_median is None
+            or self.b_ppplus_rhythm_complexity_rating is None
+            or self.b_ppplus_precision_rating is None
+            or self.preempt is None
+        ):
+            raise ValueError("only osu!standard beatmap supported")
         return (
             self.b_aim_difficulty**2,
             self.b_speed_difficulty**2,
@@ -1190,7 +1206,7 @@ def calc_beatmap_attributes_batch(
     mod_attrs: dict[str, SimpleDifficultyAttribute] = {}
     for score_id, score in scores_compact.items():
         beatmap = beatmaps_dict[score.bid]
-        my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
+        my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length, cast(Literal[0, 1, 2, 3], score.ruleset_id))
         my_attr.set_mods(score._mods)
         key = (score.bid, tuple(my_attr.osu_tool_mods), tuple(my_attr.osu_tool_mod_options), score.ruleset_id)
         groups.setdefault(key, []).append(score_id)

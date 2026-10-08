@@ -886,7 +886,7 @@ class OsuPlaylist(object):
 
         # 下载谱面与计算难度
         download_osu(b)
-        my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length)
+        my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length, cast(Literal[0, 1, 2, 3], b.mode_int))
         my_attr.set_mods(mods)
         mods_ready: list[str] = to_readable_mods(my_attr.standardized_mods)  # 准备给用户看的 Mods 表现形式
         if is_fm:

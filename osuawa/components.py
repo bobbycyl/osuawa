@@ -47,6 +47,7 @@ from osuawa.db import (
 )
 from osuawa.osuawa import CachedThrottledMixIn
 from osuawa.utils import (
+    BeatmapFeature,
     CompletedSimpleScoreInfo,
     RedisTaskId,
     SimpleDifficultyAttribute,
@@ -641,7 +642,7 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
 
     mods = make_unstandardized_mods_from_lines(mods=mod_settings.split(" ")) if mod_settings is not None else []
     # 生成 osu_tools 所能接受的样式
-    my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length)
+    my_attr = SimpleDifficultyAttribute(beatmap.cs, beatmap.accuracy, beatmap.ar, beatmap.bpm or 0, beatmap.hit_length, cast(Literal[0, 1, 2, 3], ruleset.LegacyID))
     my_attr.set_mods(mods)
     calculator = calculate_performance(
         os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%s.osu" % beatmap.id),
@@ -1124,7 +1125,7 @@ def gen_epsilon():
         )
         row_bids.append(score.bid)
 
-    df = pd.DataFrame(feature_rows, columns=["aim_sq", "speed_sq", "reading_sq", "jump_flow_ratio", "slider_factor", "delta_time_median", "rhythm_complexity", "precision", "approach_rate", "density"])
+    df = pd.DataFrame(feature_rows, columns=BeatmapFeature._fields)
     df.insert(0, "bid", row_bids)
     df.to_parquet(os.path.join(assets_dir, "feature_matrix.parquet"), index=False)
 
@@ -1143,26 +1144,17 @@ def calc_feature_similarity(bid1: int, bid2: int) -> str:
     scores_compact: dict[str, SimpleScoreInfo] = {str(-i): SimpleScoreInfo.forge(bid, 0) for i, bid in enumerate((bid1, bid2))}
 
     computed = calc_beatmap_attributes_batch(beatmaps_dict, scores_compact)
-    a = np.asarray(computed["0"].calc_feature())
-    b = np.asarray(computed["-1"].calc_feature())
+    a = np.asarray(computed["0"].calc_feature(), dtype=np.float64)
+    b = np.asarray(computed["-1"].calc_feature(), dtype=np.float64)
     d = calc_feature_distance(a, b)
     ret = f"""## Similarity
 
 **{1.0 - float(np.max(d)):.3f}**
 
 ## Details
-
 | Dim               | Value1     | Value2     | Distance   |
 | ----------------- | ---------- | ---------- | ---------- |
-| aim_sq            | {a[0]:.3f} | {b[0]:.3f} | {d[0]:.3f} |
-| speed_sq          | {a[1]:.3f} | {b[1]:.3f} | {d[1]:.3f} |
-| reading_sq        | {a[2]:.3f} | {b[2]:.3f} | {d[2]:.3f} |
-| jump_flow_ratio   | {a[3]:.3f} | {b[3]:.3f} | {d[3]:.3f} |
-| slider_factor     | {a[4]:.3f} | {b[4]:.3f} | {d[4]:.3f} |
-| delta_time_median | {a[5]:.3f} | {b[5]:.3f} | {d[5]:.3f} |
-| rhythm_complexity | {a[6]:.3f} | {b[6]:.3f} | {d[6]:.3f} |
-| precision         | {a[7]:.3f} | {b[7]:.3f} | {d[7]:.3f} |
-| ar                | {a[8]:.3f} | {b[8]:.3f} | {d[8]:.3f} |
-| density           | {a[9]:.3f} | {b[9]:.3f} | {d[9]:.3f} |
 """
+    for i, dim in enumerate(BeatmapFeature._fields):
+        ret += f"| {dim} | {a[i]:.3f} | {b[i]:.3f} | {d[i]:.3f} |\n"
     return ret

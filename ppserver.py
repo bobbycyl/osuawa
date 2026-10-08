@@ -83,7 +83,7 @@ PERFORMANCE_TYPES: dict[int, type[NamedTuple]] = {
     3: ManiaPerformance,
 }
 
-ALLOWED_API_KEYS: list[str] = toml.load(ST_SECRETS_PATH)["ppserver"]["allowed"]
+ALLOWED_API_KEYS: frozenset[str] = frozenset(toml.load(ST_SECRETS_PATH)["ppserver"]["allowed"])
 
 formatter = logging.Formatter(toml.load(ST_CONFIG_PATH)["logger"]["messageFormat"])
 ch = logging.StreamHandler()
@@ -289,17 +289,17 @@ app.add_middleware(
 
 
 @app.get("/api/difficulty")
-async def difficulty(request: Request) -> Any:
+def difficulty(request: Request) -> Any:
     return _calculate(request, with_performance=False)
 
 
 @app.get("/api/performance")
-async def performance(request: Request) -> Any:
+def performance(request: Request) -> Any:
     return _calculate(request, with_performance=True)
 
 
 @app.get("/api/entries")
-async def entries(request: Request) -> Any:
+def entries(request: Request) -> Any:
     return _entries(request)
 
 

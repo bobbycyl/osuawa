@@ -135,7 +135,7 @@ def check_scores(engine: Engine, awa: Osuawa, expected_rows: int) -> None:
             if not diff:
                 continue
             columns.update(diff)
-    result_filename = "check_result_%s.json" % int(time.time())
+    result_filename = os.path.join(C.LOGS.value, "check_result_%s.json" % int(time.time()))
     logger.info("比对完成：共 %d 行（表里 %d 行），有差异的列与行数已写入 %s" % (total_rows, expected_rows, result_filename))
     with open(result_filename, "w", encoding="utf-8") as f:
         json.dump(columns, f, ensure_ascii=False, indent=4)
