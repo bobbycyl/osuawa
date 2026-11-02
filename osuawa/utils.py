@@ -108,7 +108,7 @@ def hex_to_rgba(hex_color, alpha=0.3):
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def get_mod_type_mapping(
+def get_mod_type_color(
     mod_type: Literal[
         "DifficultyReduction",
         "DifficultyIncrease",
@@ -738,11 +738,11 @@ class BeatmapFeature(NamedTuple):
     delta_time_median: Optional[float]
     rhythm_complexity: Optional[float]
     precision: Optional[float]
-    approach_rate: Optional[float]
+    stamina: Optional[float]
     density: Optional[float]
 
 
-FEATURE_MASK_A = np.array([True, True, True, False, True, False, True, True, False, False])
+FEATURE_MASK_A = np.array([True, True, True, False, True, False, True, True, True, False])
 FEATURE_MASK_B = np.array([False, False, False, True, False, False, False, False, False, False])
 FEATURE_MASK_C = ~(FEATURE_MASK_A | FEATURE_MASK_B)
 FEATURE_EPSILON = np.load(os.path.join(assets_dir, "feature_epsilon.npy")) if os.path.exists(os.path.join(assets_dir, "feature_epsilon.npy")) else np.zeros(len(BeatmapFeature._fields))
@@ -773,7 +773,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
 
     ⚠ 父类中的 pp 在重算时也需要考虑 ⚠
 
-    ``calc_beatmap_attributes`` 应该能够妥善处理这些情况
+    :func:`calc_beatmap_attributes_batch` 应该能够妥善处理这些情况
 
     注：该类是为 osu! standard 模式设计的，其他模式中目前只保证基本字段的兼容性
     """
@@ -869,9 +869,9 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
             or self.b_delta_time_median is None
             or self.b_ppplus_rhythm_complexity_rating is None
             or self.b_ppplus_precision_rating is None
-            or self.preempt is None
+            or self.b_ppplus_stamina_rating is None
         ):
-            raise ValueError("only osu!standard beatmap supported")
+            raise ValueError("部分特征值为空，可能传入非标准模式谱面")
         return (
             self.b_aim_difficulty**2,
             self.b_speed_difficulty**2,
@@ -881,7 +881,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
             self.b_delta_time_median,
             self.b_ppplus_rhythm_complexity_rating,
             self.b_ppplus_precision_rating,
-            calc_ar(self.preempt),
+            self.b_ppplus_stamina_rating,
             self.b_max_combo / (self.hit_length + 1e-12),
         )
 
@@ -997,18 +997,18 @@ class BeatmapSpec(NamedTuple):
     add_ts: float
 
 
-class BeatmapToUpdate(TypedDict):
+class BeatmapJob(TypedDict):
     """
     Attributes:
         action: 操作类型，可选值为 "add", "update0", "update1", "delete"
-        name: 标识谁在操作该谱面
+        operator: 标识谁在操作该谱面
         beatmap: 欲更新的谱面
         old_bid: 欲删除 BID
         old_mods: 欲删除 MODS
     """
 
     action: Literal["add", "update0", "update1", "delete"]
-    name: str
+    operator: str
     beatmap: Optional[BeatmapSpec]
     old_bid: Optional[int]
     old_mods: Optional[str]
@@ -1113,6 +1113,7 @@ def _get_ruleset_and_performance(score: SimpleScoreInfo) -> tuple[Ruleset, Named
             raise ValueError("ruleset id %d not supported" % score.ruleset_id)
 
 
+# noinspection DuplicatedCode
 def _assemble_completed_score_info(
     beatmap: Beatmap,
     score: SimpleScoreInfo,
@@ -1124,11 +1125,7 @@ def _assemble_completed_score_info(
     pp81: float,
     pp67: float,
 ) -> CompletedSimpleScoreInfo:
-    """把「谱面/模组属性 + 难度属性 + 各载荷的 pp」装配成 ``CompletedSimpleScoreInfo``
-
-    ``calc_beatmap_attributes`` 与 ``calc_beatmap_attributes_batch`` 共用这一处装配逻辑，
-    保证逐条与批量两条路径的字段来源完全一致。
-    """
+    """把「谱面/模组属性 + 难度属性 + 各载荷的 pp」装配成 ``CompletedSimpleScoreInfo``"""
     pp_got = perf_got_attr["pp"]
     pp_got_aim = perf_got_attr["aim"]
     pp_got_speed = perf_got_attr["speed"]

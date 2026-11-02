@@ -20,7 +20,7 @@ from osuawa.components import awa_query as _awa_query, draw_clustered_bars, get_
 from osuawa.osuawa import Osuawa
 from osuawa.utils import (
     BeatmapSpec,
-    BeatmapToUpdate,
+    BeatmapJob,
     RedisTaskId,
     SimpleDifficultyAttribute,
     _create_tmp_playlist_p,
@@ -81,7 +81,7 @@ def default(obj):
     raise TypeError
 
 
-def push_beatmap_task(_b: list[BeatmapToUpdate]) -> str:
+def push_beatmap_task(_b: list[BeatmapJob]) -> str:
     # todo: 由于 streamlit 的刷新机制，basic_interaction_enabled 在这里设置是无效的
     return push_task_with_session_state("beatmap %s" % orjson.dumps(_b, option=orjson.OPT_PASSTHROUGH_SUBCLASS, default=default).decode())
 
@@ -297,9 +297,9 @@ if st.session_state.perm >= 1:
                     st.toast(
                         push_beatmap_task(
                             [
-                                BeatmapToUpdate(
+                                BeatmapJob(
                                     action="add",
-                                    name=uid,
+                                    operator=uid,
                                     beatmap=spec_input,
                                     old_bid=None,
                                     old_mods=None,
@@ -638,13 +638,13 @@ if st.session_state.perm >= 1:
                 if len(specs_recalculate) == 0:
                     st.toast(_("no changes made"))
                 else:
-                    beatmaps_to_update: list[BeatmapToUpdate] = []
+                    beatmaps_to_update: list[BeatmapJob] = []
                     for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate, strict=True):
                         if old_to_drop[1]:
                             beatmaps_to_update.append(
-                                BeatmapToUpdate(
+                                BeatmapJob(
                                     action="update1",
-                                    name=uid,
+                                    operator=uid,
                                     beatmap=beatmap_to_upsert,
                                     old_bid=None,
                                     old_mods=old_to_drop[0],
@@ -652,9 +652,9 @@ if st.session_state.perm >= 1:
                             )
                         else:
                             beatmaps_to_update.append(
-                                BeatmapToUpdate(
+                                BeatmapJob(
                                     action="update0",
-                                    name=uid,
+                                    operator=uid,
                                     beatmap=beatmap_to_upsert,
                                     old_bid=None,
                                     old_mods=None,
@@ -677,12 +677,12 @@ if st.session_state.perm >= 1:
                 st.toast(_("no beatmaps selected"))
             else:
                 required_rows = selected_rows[["BID", "MODS"]]
-                beatmaps_to_delete: list[BeatmapToUpdate] = []
+                beatmaps_to_delete: list[BeatmapJob] = []
                 for row in required_rows.itertuples(index=False):
                     beatmaps_to_delete.append(
-                        BeatmapToUpdate(
+                        BeatmapJob(
                             action="delete",
-                            name=uid,
+                            operator=uid,
                             beatmap=None,
                             old_bid=int(row.BID),
                             old_mods=str(row.MODS),

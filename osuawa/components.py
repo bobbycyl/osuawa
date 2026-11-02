@@ -61,7 +61,7 @@ from osuawa.utils import (
     day_bounds_epoch,
     download_osu,
     format_size,
-    get_mod_type_mapping,
+    get_mod_type_color,
     get_playlist_lastupdate,
     get_size_and_count,
     hex_to_rgba,
@@ -325,6 +325,7 @@ def refresh(clear_func: Optional[CachedFunc] = None, *args, **kwargs) -> Never:
     :param kwargs: keyword arguments of the cached function
     :return:
     """
+    # 所有要重置的 session_state 应该都在这里写上
     st.session_state.aggrid_key = str(uuid4())
     st.session_state.playlist_lastupdate = get_playlist_lastupdate()
     if clear_func is not None:
@@ -626,8 +627,8 @@ def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = No
         }
     with _conn.session as s:
         rows = s.execute(text(score_rows_query(where)), params=params).fetchall()
-    completed_recent_scores_compact: dict[str, CompletedSimpleScoreInfo] = {str(row._mapping[SCORE_PRIMARY_KEY]): CompletedSimpleScoreInfo.from_row(row._mapping) for row in rows}
-    return st.session_state.awa.create_scores_dataframe(completed_recent_scores_compact)
+    scores_compact: dict[str, CompletedSimpleScoreInfo] = {str(row._mapping[SCORE_PRIMARY_KEY]): CompletedSimpleScoreInfo.from_row(row._mapping) for row in rows}
+    return st.session_state.awa.create_scores_dataframe(scores_compact)
 
 
 def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: Optional[int] = None) -> Figure:
@@ -894,7 +895,7 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
             label_visibility="collapsed",
             format_func=lambda acronym: "%s %-4s - %s"
             % (
-                get_mod_type_mapping(all_mod_indexes[acronym]["Type"], True),
+                get_mod_type_color(all_mod_indexes[acronym]["Type"], True),
                 acronym,
                 all_mod_indexes[acronym]["Name"],
             ),

@@ -268,12 +268,12 @@ class Osuawa(CachedThrottledMixIn):
         )
         if debugging_mode:
             self.__debugging_expose_api()
-        no_identify = True
+        identify_unaware = True
         for scope in scopes:
             if scope == Scope.IDENTIFY or scope == Scope.IDENTIFY.value:
-                no_identify = False
+                identify_unaware = False
                 break
-        self.identifier = -1 if no_identify else self.user[0]
+        self.identifier = -1 if identify_unaware else self.user[0]
 
     def __debugging_expose_api(self):
         self._api = self.__api
@@ -405,6 +405,8 @@ class Osuawa(CachedThrottledMixIn):
         # 库里是 UTC epoch，展示统一换到用户时区
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
+        # 剔除以 _ 开头的字段
+        df = df.loc[:, ~df.columns.str.startswith("_")].copy()
         # todo: ExtendedSimpleScoreInfo 在这里只起到了位置作用，设计存在问题
         ec = ExtendedSimpleScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
@@ -456,8 +458,7 @@ class Osuawa(CachedThrottledMixIn):
 
     async def async_get_score(self, score_id: int) -> dict[str, CompletedSimpleScoreInfo]:
         score = await self.api_score(score_id)
-        score_compact = {str(score.id): SimpleScoreInfo.from_score(score)}
-        return await self.complete_scores_compact(score_compact)
+        return await self.complete_scores_compact({str(score.id): SimpleScoreInfo.from_score(score)})
 
     def get_score(self, score_id: int) -> pd.DataFrame:
         return self.create_scores_dataframe(self.run_coro(self.async_get_score(score_id)))

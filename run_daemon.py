@@ -31,7 +31,7 @@ from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.db import build_score_insert_sql, create_db_engine, resolve_db_url, score_users_query, scores_compact_to_params, sync_score_columns
 from osuawa.utils import (
     BeatmapSpec,
-    BeatmapToUpdate,
+    BeatmapJob,
     C,
     CompletedPlaylistBeatmap,
     CompletedSimpleScoreInfo,
@@ -163,7 +163,7 @@ def commands():
 
 
 async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
-    """返回 (username, completed_recent_scores_compact)"""
+    """返回 (username, scores_compact)"""
     user_scores: list[Score] = await daemon_awa.async_get_recent_scores(user, include_fails)
     recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
     return await asyncio.gather(
@@ -187,10 +187,10 @@ SCORE_ON_CONFLICT: Literal["ignore", "update"] = "ignore"
 
 
 def save_recent_scores(user: int, include_fails: bool = True) -> str:
-    username, completed_recent_scores_compact = daemon_awa.run_coro(async_save_recent_scores(user, include_fails))
+    username, scores_compact = daemon_awa.run_coro(async_save_recent_scores(user, include_fails))
     with engine.begin() as conn:
         # 插入到表 SCORE，如果遇到冲突，则放弃（或按 SCORE_ON_CONFLICT 覆盖）
-        scores = [scores_compact_to_params(pk, _v) for pk, _v in completed_recent_scores_compact.items()]
+        scores = [scores_compact_to_params(pk, _v) for pk, _v in scores_compact.items()]
         if len(scores) > 0:
             res = conn.execute(
                 text(build_score_insert_sql(_dialect, SCORE_ON_CONFLICT)),
@@ -203,7 +203,7 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
     # noinspection PyStringFormat
     return "%s: got/diff: %d/%d" % (
         username,
-        len(completed_recent_scores_compact),
+        len(scores_compact),
         len_diff,
     )
 
@@ -447,25 +447,25 @@ def setup_scheduled_tasks():
     )
 
 
-def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
+def update_beatmaps(obj: Optional[list[BeatmapJob]] = None) -> str:
     if obj is None:
         obj = []
     beatmap_specs: list[BeatmapSpec] = []
-    name = ""
+    operator = ""
     has_spec_list: list[bool] = []
     add_list: list[tuple[int, str]] = []
     update_list: list[tuple[int, str]] = []
     delete_list: list[tuple[int, str]] = []
-    for beatmap_to_update in obj:
-        beatmap_spec: BeatmapSpec | list | None = beatmap_to_update.get("beatmap")  # JSON 反序列化时会自动转换为 list 类型，需要强制转换为 BeatmapSpec 类型
+    for beatmap_job in obj:
+        beatmap_spec: BeatmapSpec | list | None = beatmap_job.get("beatmap")  # JSON 反序列化时会自动转换为 list 类型，需要强制转换为 BeatmapSpec 类型
         if beatmap_spec is not None:
             has_spec_list.append(True)
             beatmap_specs.append(BeatmapSpec(*beatmap_spec))  # type: ignore[union-attr]
-            name = beatmap_to_update["name"]
+            operator = beatmap_job["operator"]
         else:
             has_spec_list.append(False)
     if beatmap_specs:
-        database_beatmaps = create_tmp_playlist(name, beatmap_specs)
+        database_beatmaps = create_tmp_playlist(operator, beatmap_specs)
         if len(database_beatmaps) != len(beatmap_specs):
             raise ValueError(
                 "unexpected database beatmaps count: %d != %d" % (len(database_beatmaps), len(beatmap_specs)),
@@ -476,18 +476,18 @@ def update_beatmaps(obj: Optional[list[BeatmapToUpdate]] = None) -> str:
     # beatmap_specs 只收集带 beatmap 的条目，其下标与 obj 的下标不同步，
     # 因此用一个只随 spec 推进的游标取值
     spec_index = 0
-    for i, beatmap_to_update in enumerate(obj):
+    for i, beatmap_job in enumerate(obj):
         if has_spec_list[i]:
             database_beatmap = database_beatmaps[spec_index]
             spec_index += 1
         else:
             database_beatmap = None
-        action = beatmap_to_update.get("action")
+        action = beatmap_job.get("action")
         new_bid, new_mods, old_bid, old_mods = _update_beatmap(
             action,
             database_beatmap,
-            beatmap_to_update.get("old_bid"),
-            beatmap_to_update.get("old_mods"),
+            beatmap_job.get("old_bid"),
+            beatmap_job.get("old_mods"),
         )
         match action:
             case "add":

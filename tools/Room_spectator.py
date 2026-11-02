@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 init_page(_("Room Spectator") + " - osuawa")
 
 
-async def create_multiplayer_scores_dataframe(
+async def get_multiplayer_scores(
     room_ids: list[int],
 ) -> dict[str, CompletedSimpleScoreInfo]:
     scores = await st.session_state.awa.async_get_rooms_scores(room_ids)
@@ -32,5 +32,5 @@ if st.session_state.mp_room_id is None or st.session_state.mp_room_id == "":
 else:
     room_ids = [int(room_id) for room_id in st.session_state.mp_room_id.split()]
 
-df = st.session_state.awa.create_scores_dataframe(st.session_state.awa.run_coro(create_multiplayer_scores_dataframe(room_ids)))
+df = st.session_state.awa.create_scores_dataframe(st.session_state.awa.run_coro(get_multiplayer_scores(room_ids)))
 st.dataframe(df)
