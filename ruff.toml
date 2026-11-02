@@ -10,6 +10,9 @@ select = [
     "B",
     # flake8-simplify
     "SIM",
+    # flake8-datetimez：禁掉会产生 naive datetime 的写法（否则时间会被按运行机器的本地时区解释，
+    # 服务器与用户不同区时会静默偏移）。时间相关逻辑请走 utils 中的相关函数
+    "DTZ",
 ]
 ignore = [
     "E402",

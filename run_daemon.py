@@ -184,12 +184,6 @@ def get_all_score_users() -> Sequence[int]:
         )
 
 
-# 历史成绩的派生列（reading 系列等）对旧行是 NULL，而 INSERT IGNORE 会直接跳过已存在的
-# SCORE_ID，所以光修 INSERT 也补不回来。需要一次性回填时，把这里改成 "update"、跑一次
-# `update .*`（会用重算结果覆盖旧行；所有字段都是「谱面 + 成绩 + osupp 版本」的纯函数，
-# 重算结果可信），回填完再改回 "ignore"。
-# 更大规模的回填请用 recompute_scores.py（先跑一遍检查比对看差异，再加 --write 重算）。
-# ⚠ 改成 "update" 后 MySQL 的 rowcount 是「更新一行记 2」，日志里的 got/diff 会失真。
 SCORE_ON_CONFLICT: Literal["ignore", "update"] = "ignore"
 
 

@@ -7,7 +7,7 @@ import orjson
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
-from .utils import CompletedSimpleScoreInfo, SCORE_COLUMN_OVERRIDES, SCORE_STATISTICS_DEFAULTS, ScoreStatistics, _build_update_ignore, _build_upsert, _unwrap_optional
+from .utils import CompletedSimpleScoreInfo, SCORE_COLUMN_OVERRIDES, SCORE_STATISTICS_DEFAULTS, ScoreStatistics, _build_update_ignore, _build_upsert, _unwrap_optional, to_epoch
 
 __all__ = (
     "SCORE_BIGINT_COLUMNS",
@@ -143,16 +143,32 @@ def sync_score_columns(engine: Engine, *, dry_run: bool = False) -> tuple[bool, 
     return False, missing, extra
 
 
+def _to_db_param(value: Any) -> Any:
+    """把数据类字段转成可以绑定的值
+
+    - ``datetime`` -> epoch 秒（naive 按 UTC 解释，见 :func:`osuawa.utils.as_utc`）
+    - ``bool`` -> int
+    - ``list`` / ``dict`` -> JSON 文本
+    - ``None`` 保持 None
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return to_epoch(value)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (list, dict)):
+        return orjson.dumps(value).decode("utf-8")
+    return value
+
+
 def scores_compact_to_params(score_id: str, info: CompletedSimpleScoreInfo) -> dict[str, Any]:
     """把数据类转成 executemany 需要的绑定参数字典
 
     转换规则与 daemon 写入时一致：``datetime`` → epoch 秒，``bool`` → int，
     ``list``/``dict`` → JSON 文本，``None`` 保持 None。
     """
-    params = asdict(
-        info,
-        dict_factory=lambda items: {k.lstrip("_"): (None if v is None else (v.timestamp() if isinstance(v, datetime) else (int(v) if isinstance(v, bool) else (orjson.dumps(v).decode("utf-8") if isinstance(v, (list, dict)) else v)))) for k, v in items},
-    )
+    params = asdict(info, dict_factory=lambda items: {k.lstrip("_"): _to_db_param(v) for k, v in items})
     params["score_id"] = score_id
     return params
 

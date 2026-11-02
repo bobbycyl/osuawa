@@ -256,7 +256,9 @@ if "awa" not in st.session_state:
             _refresh_token,
         )
         # set variables
-        awa.tz = st.context.timezone
+        # 浏览器没上报时区时保留 Osuawa 的默认值，避免下游 ZoneInfo(None) 报错；
+        # 所有「用户时区 -> UTC」的换算只在 utils 的边界函数里做
+        awa.tz = st.context.timezone or Osuawa.tz
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
         # save token

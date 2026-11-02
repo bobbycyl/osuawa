@@ -4,12 +4,11 @@ import re
 import shelve
 import shutil
 from collections import deque
-from datetime import date, datetime, time
+from datetime import date
 from secrets import token_hex
 from shutil import copyfile
 from typing import Any, Literal, Never, Optional, TYPE_CHECKING, cast, overload
 from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
 
 import numpy as np
 import orjson
@@ -59,6 +58,7 @@ from osuawa.utils import (
     calculate_performance,
     catch_mod_entries,
     catch_mod_indexes,
+    day_bounds_epoch,
     download_osu,
     format_size,
     get_mod_type_mapping,
@@ -72,6 +72,7 @@ from osuawa.utils import (
     push_task,
     taiko_mod_entries,
     taiko_mod_indexes,
+    to_user_tz,
 )
 
 if TYPE_CHECKING:
@@ -595,16 +596,20 @@ def register_commands(obj: Optional[dict] = None):
 
 
 def get_scores_dataframe(user: int, date_range: Optional[tuple[date, date]] = None) -> pd.DataFrame:
-    """取某个用户的成绩表"""
+    """取某个用户的成绩表
+
+    ``date_range`` 是用户日历上的两个日期，必须放进用户时区才能变成确定的瞬间
+    """
     if date_range is None:
         where = "USER_ID = :user ORDER BY TS"
         params: dict[str, Any] = {"user": user}
     else:
         where = "USER_ID = :user AND TS >= :begin_date AND TS <= :end_date ORDER BY TS"
+        begin_ts, end_ts = day_bounds_epoch(date_range[0], date_range[1], st.session_state.awa.tz)
         params = {
             "user": user,
-            "begin_date": datetime.combine(date_range[0], time.min).timestamp(),
-            "end_date": datetime.combine(date_range[1], time.max).timestamp(),
+            "begin_date": begin_ts,
+            "end_date": end_ts,
         }
     with _conn.session as s:
         rows = s.execute(text(score_rows_query(where)), params=params).fetchall()
@@ -772,7 +777,7 @@ def draw_clustered_bars(
 
 def query_all_sessions() -> pd.DataFrame:
     df = awa_query("USER_CACHE", "SELECT * FROM USER_CACHE WHERE USER_ID = %d" % st.session_state.user)
-    df["LAST_SEEN_TS"] = pd.to_datetime(df["LAST_SEEN_TS"], unit="s").dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz)  # type: ignore[union-attr]
+    df["LAST_SEEN_TS"] = pd.to_datetime(df["LAST_SEEN_TS"], unit="s", utc=True).dt.tz_convert(st.session_state.awa.tz)  # type: ignore[union-attr]
     df.rename(
         columns={"AID": "ajs_anonymous_id", "LAST_SEEN_TS": "last_seen_datetime"},
         inplace=True,
@@ -1059,7 +1064,7 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
             final = _result.get("final", "0")
             sub: list[str] = _result.get("sub", [])
             _time = status_mapping["time"]
-            dt = datetime.fromtimestamp(float(_time), tz=ZoneInfo(st.session_state.awa.tz))
+            dt = to_user_tz(float(_time), st.session_state.awa.tz)
             # todo: 遗留的颜色映射，当前逻辑中未支持颜色标记
             _color = status_color.get(status, "#808080")
 
@@ -1068,7 +1073,8 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
             # 状态显示
             match status:
                 case "pending":
-                    st.spinner(_("pending..."))
+                    with st.spinner(_("pending...")):
+                        pass
                 case "success":
                     st.json(sub)
                     st.success(_("%d sub-tasks done") % int(final))

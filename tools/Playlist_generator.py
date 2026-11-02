@@ -163,7 +163,7 @@ def calc_attr(data) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
             ex_diff_attr = next(calculator)
         finally:
             calculator.close()
-        key = "%s<br>(%d/l%d)" % (_slot, _bid, i)
+        key = "%s<br>(%d/R%d)" % (_slot, _bid, i)
         processed[key] = {NEEDED_ATTR_MAPPING[attr]: ex_diff_attr[attr] for attr in NEEDED_ATTR_MAPPING}
         skill_type_mapping.setdefault(skill_type, []).append(key)
 
@@ -422,7 +422,7 @@ if st.session_state.perm >= 1:
     # 创建 LINK 列
     df["LINK"] = "https://osu.ppy.sh/b/" + df["BID"].astype(str)
     # 创建 ADD_DATETIME 列，它是由 ADD_TS (来自于 time.time() 的 UTC 时间浮点数) 转换为含时区信息的 ISO Format（时区 = st.session_state.awa.tz）
-    df["ADD_DATETIME"] = pd.to_datetime(df["ADD_TS"], unit="s").dt.tz_localize("UTC").dt.tz_convert(st.session_state.awa.tz).dt.strftime("%Y-%m-%d %H:%M:%S %Z%z")
+    df["ADD_DATETIME"] = pd.to_datetime(df["ADD_TS"], unit="s", utc=True).dt.tz_convert(st.session_state.awa.tz).dt.strftime("%Y-%m-%d %H:%M:%S %Z%z")
     desired_col_order = [
         "BID",
         "SKILL_SLOT",
@@ -634,34 +634,33 @@ if st.session_state.perm >= 1:
                         break
                     olds_to_drop.append((str(orig["MODS"]), new_primary))
             # 同理，为了代码可读性和便于后续修改，这里没有直接生成 BeatmapToUpdate 列表，而是做了两次循环
-            if len(specs_recalculate) == 0:
-                st.toast(_("no changes made"))
-            elif not specs_recalculate_valid:
-                pass
-            else:
-                beatmaps_to_update: list[BeatmapToUpdate] = []
-                for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate, strict=True):
-                    if old_to_drop[1]:
-                        beatmaps_to_update.append(
-                            BeatmapToUpdate(
-                                action="update1",
-                                name=uid,
-                                beatmap=beatmap_to_upsert,
-                                old_bid=None,
-                                old_mods=old_to_drop[0],
-                            ),
-                        )
-                    else:
-                        beatmaps_to_update.append(
-                            BeatmapToUpdate(
-                                action="update0",
-                                name=uid,
-                                beatmap=beatmap_to_upsert,
-                                old_bid=None,
-                                old_mods=None,
-                            ),
-                        )
-                st.toast(push_beatmap_task(beatmaps_to_update))
+            if specs_recalculate_valid:
+                if len(specs_recalculate) == 0:
+                    st.toast(_("no changes made"))
+                else:
+                    beatmaps_to_update: list[BeatmapToUpdate] = []
+                    for old_to_drop, beatmap_to_upsert in zip(olds_to_drop, specs_recalculate, strict=True):
+                        if old_to_drop[1]:
+                            beatmaps_to_update.append(
+                                BeatmapToUpdate(
+                                    action="update1",
+                                    name=uid,
+                                    beatmap=beatmap_to_upsert,
+                                    old_bid=None,
+                                    old_mods=old_to_drop[0],
+                                ),
+                            )
+                        else:
+                            beatmaps_to_update.append(
+                                BeatmapToUpdate(
+                                    action="update0",
+                                    name=uid,
+                                    beatmap=beatmap_to_upsert,
+                                    old_bid=None,
+                                    old_mods=None,
+                                ),
+                            )
+                    st.toast(push_beatmap_task(beatmaps_to_update))
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
             refresh(beatmap_database_query)
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):

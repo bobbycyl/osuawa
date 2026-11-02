@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Optional, TYPE_CHECKING
 
 import numpy as np
@@ -16,7 +16,7 @@ from osuawa.components import (
     memorized_multiselect,
     memorized_selectbox,
 )
-from osuawa.utils import calc_bin_size, regex_search_column
+from osuawa.utils import calc_bin_size, regex_search_column, user_today
 
 if TYPE_CHECKING:
 
@@ -26,9 +26,11 @@ if TYPE_CHECKING:
 init_page(_("Score Visualizer") + " - osuawa")
 all_users = get_all_score_users()
 user = st.selectbox(_("User"), all_users)
+# 默认范围按「用户时区的今天」算，而不是服务器本地的今天
+_today = user_today(st.session_state.awa.tz)
 st.date_input(
     _("Date range"),
-    [date.today() - timedelta(days=30), date.today() + timedelta(days=1)],
+    [_today - timedelta(days=30), _today + timedelta(days=1)],
     key="cat_date_range",
 )
 

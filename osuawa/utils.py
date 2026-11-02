@@ -8,12 +8,13 @@ import types
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
 from time import sleep, time, time_ns
 from typing import Any, Literal, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import orjson
@@ -566,6 +567,51 @@ class ScoreStatistics(TypedDict):
     slider_tail_hit: Optional[int]
 
 
+# ---------------------------------------------------------------------------
+# 时间处理
+#
+# 全项目的约定只有两条：
+#
+# 1. 内部一律 UTC
+# 2. 只有展示边界才换时区：用户在哪个时区，由 ``Osuawa.tz`` 决定
+# ---------------------------------------------------------------------------
+
+
+def as_utc(value: datetime) -> datetime:
+    """把 datetime 归一成 timezone-aware UTC"""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def to_epoch(value: datetime) -> float:
+    """datetime -> epoch 秒"""
+    return as_utc(value).timestamp()
+
+
+def to_user_tz(value: datetime | float, tz: str) -> datetime:
+    """epoch 或 timezone-aware datetime -> 用户时区的 datetime（只用于展示与聚合）"""
+    zone = ZoneInfo(tz)
+    if isinstance(value, datetime):
+        return as_utc(value).astimezone(zone)
+    return datetime.fromtimestamp(value, tz=zone)
+
+
+def user_today(tz: str) -> date:
+    """用户时区里的「今天」，用于 UI 默认值（默认日期范围等）"""
+    return to_user_tz(time(), tz).date()
+
+
+def day_bounds_epoch(begin: date, end: date, tz: str) -> tuple[float, float]:
+    """把用户日历上的 [begin, end] 两整天解释成 UTC epoch 的闭区间
+
+    用户输入的日期本身没有时区含义，只有放进用户的时区才对应一个确定的瞬间。
+    """
+    zone = ZoneInfo(tz)
+    start = datetime(begin.year, begin.month, begin.day, tzinfo=zone)
+    # 用 23:59:59.999999 而不是次日 00:00，保持与 ``<= end_ts`` 这类闭区间查询一致
+    stop = datetime(end.year, end.month, end.day, 23, 59, 59, 999999, tzinfo=zone)
+    return start.timestamp(), stop.timestamp()
+
+
 @dataclass(slots=True)
 class SimpleScoreInfo(object):
     """
@@ -590,10 +636,10 @@ class SimpleScoreInfo(object):
     ruleset_id: int
 
     def __post_init__(self):
-        # ts 和 st 转换为 UTC
-        self.ts = self.ts.astimezone(timezone.utc)
+        # ts 和 st 归一为 aware UTC：naive 按 UTC 解释，而不是按运行机器的本地时区
+        self.ts = as_utc(self.ts)
         if self.st:
-            self.st = self.st.astimezone(timezone.utc)
+            self.st = as_utc(self.st)
 
     @classmethod
     def from_score(cls, score: Score | MultiplayerScore):
@@ -1318,15 +1364,18 @@ def format_size(size_bytes: float):
     return f"{size_bytes:.2f} PiB"
 
 
-def regex_search_column(data: pd.DataFrame, column: str, pattern: str):
-    """对某一列进行正则搜索，有匹配则输出匹配内容，无匹配输出 None"""
+def regex_search_column(data: pd.DataFrame, column: str, pattern: str) -> pd.DataFrame:
+    """对某一列进行正则搜索"""
 
     data = data.copy()
 
     def search_func(text):
         if pd.isna(text):
             return None
-        m = re.search(pattern, str(text))
+        try:
+            m = re.search(pattern, str(text))
+        except re.error:
+            return None
         # 这里改成 .group(0) 显示匹配内容，或者直接返回 text 显示原行
         return text if m else None
 

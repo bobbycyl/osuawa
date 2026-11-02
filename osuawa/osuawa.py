@@ -396,8 +396,10 @@ class Osuawa(CachedThrottledMixIn):
         )
         df.reset_index(inplace=True)
         df.rename(columns={"index": "score_id"}, inplace=True)
+        # 库里是 UTC epoch，展示统一换到用户时区
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
+        # todo: ExtendedSimpleScoreInfo 在这里只起到了位置作用，设计存在问题
         ec = ExtendedSimpleScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
         # todo: 这里要不要考虑除零问题？

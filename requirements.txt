@@ -26,6 +26,7 @@ streamlit-aggrid
 tabulate
 throttled-py
 typing-extensions
+tzdata
 uvicorn
 websockets
 zai-sdk
