@@ -9,7 +9,6 @@ import os
 import os.path
 import pickle
 from collections.abc import Sequence
-from shutil import rmtree
 from time import time, time_ns
 from typing import Literal, Optional, cast
 
@@ -272,10 +271,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
                 SERIES=beatmap_specs[i][3].split("-", 1)[0],
             ),
         )
-    # 删除临时文件
-    if os.path.exists(tmp_playlist_filename):
-        os.remove(tmp_playlist_filename)
-    rmtree(tmp_playlist.tmp_dir)
+    # todo: 是否要删除临时文件
     return playlist_beatmaps_db
 
 

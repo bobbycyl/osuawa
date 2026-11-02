@@ -352,13 +352,19 @@ class Osuawa(CachedThrottledMixIn):
 
     def run_coro[_T](self, coro: Coroutine[Any, Any, _T]) -> _T:
         """统一的协程执行方法"""
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is self.loop:
+            coro.close()  # 否则会抛 "coroutine was never awaited"
+            raise RuntimeError("run_coro 不可嵌套")
         if self.loop.is_running():
-            # 如果循环正在运行（比如在异步环境中）
-            # 使用 run_coroutine_threadsafe 或 create_task
+            # 如果循环正在运行
             future = asyncio.run_coroutine_threadsafe(coro, self.loop)
             return future.result()  # 这会阻塞直到完成
         else:
-            # 循环存在但未运行，直接使用 run_until_complete
+            # 循环存在但未运行
             return self.loop.run_until_complete(coro)
 
     @cached_property

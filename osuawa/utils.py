@@ -171,6 +171,10 @@ def strip_quotes(text: str) -> str:
 
 
 def create_unique_picker[_T](items: list[_T]):
+    if len(items) == 0:
+        raise ValueError("items is empty")
+    if len(items) == 1:
+        return lambda: items[0]
     pool = items.copy()
     shuffle(pool)
     cursor = 0

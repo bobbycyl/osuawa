@@ -317,7 +317,7 @@ if "awa" not in st.session_state:
         st.session_state.token = ""
         register_commands({"token": ""})
         st.session_state.perm = 4
-    if st.session_state.user in ops:
+    elif st.session_state.user in ops:
         st.session_state.token = ""
         register_commands({"token": ""})
         st.session_state.perm = 3

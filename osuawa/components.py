@@ -424,8 +424,21 @@ def commands():
     ]
 
 
+def _is_in_dir(filename: str, directory: str):
+    try:
+        return os.path.commonpath(
+            [
+                os.path.abspath(filename),
+                os.path.abspath(directory),
+            ],
+        ) == os.path.abspath(directory)
+    except ValueError:
+        # 不同盘符（Windows）会抛 ValueError
+        return False
+
+
 def files_action(action: Literal["show", "clean"], filename: Optional[str] = None) -> str:
-    if filename is not None and ".." in os.path.relpath(filename, os.path.abspath(".")):
+    if filename is not None and not _is_in_dir(filename, C.OUTPUT_DIRECTORY.value):
         raise ValueError("parent directory access is not allowed")
     ret_md = ""
     match action:
