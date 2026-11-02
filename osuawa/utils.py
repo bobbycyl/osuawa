@@ -128,9 +128,9 @@ def get_mod_type_mapping(
         case "Conversion":
             return "🔄" if alt else "#8b66fe"
         case "Fun":
-            return "🎈" if alt else "fe66aa"
+            return "🎈" if alt else "#fe66aa"
         case "System":
-            return "🧩" if alt else "fed866"
+            return "🧩" if alt else "#fed866"
 
 
 def read_injected_code(filename: str) -> str:
