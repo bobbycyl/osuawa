@@ -176,7 +176,7 @@ client = get_ai_client()
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "glm-4.7-flash"
 
-if "messages" not in st.session_state:
+if "llm_messages" not in st.session_state:
     st.session_state.llm_messages = [
         {
             "role": "system",
@@ -317,6 +317,7 @@ def process_streaming_with_tools():
                     result = execute_tool_call(tool_call)
                     st.success(f"工具调用 {i} 执行成功")
                 except Exception as e:
+                    result = f"错误：未知错误 {e}"
                     st.error(f"工具调用 {i} 执行失败: {str(e)}")
 
                 # 将结果加入消息历史
