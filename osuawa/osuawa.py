@@ -18,7 +18,6 @@ import functools
 import html
 import json
 import os
-import os.path
 import platform
 from asyncio import AbstractEventLoop, Semaphore, Task
 from collections.abc import Coroutine, Sequence
@@ -790,12 +789,12 @@ class OsuPlaylist(object):
 
     def __init__(
         self,
-        awa_instance: Osuawa,
+        awa: Osuawa,
         playlist_filename: str,
         suffix: str = "",
         css_style: Optional[int] = None,
     ):
-        self.__awa_instance = awa_instance  # 如果用 self.awa 的话 st.session_state.awa 的 IDE 类型推断会出错
+        self.__awa = awa
         p = Properties(playlist_filename)
         p.load()
         self.playlist_filename = playlist_filename
@@ -831,7 +830,7 @@ class OsuPlaylist(object):
                 parsed_beatmap_list.insert(0, current_parsed_beatmap)
                 current_parsed_beatmap = {"notes": ""}
 
-        beatmaps_dict = self.__awa_instance.run_coro(self.__awa_instance.async_get_beatmaps_dict([int(x["bid"]) for x in parsed_beatmap_list]))
+        beatmaps_dict = self.__awa.run_coro(self.__awa.async_get_beatmaps_dict([int(x["bid"]) for x in parsed_beatmap_list]))
 
         # post process for parsed beatmaps
         for element in parsed_beatmap_list:
@@ -1127,7 +1126,7 @@ class OsuPlaylist(object):
         return [task.result() for task in tasks]
 
     def generate(self) -> pd.DataFrame:
-        playlist = self.__awa_instance.run_coro(self.playlist_task())
+        playlist = self.__awa.run_coro(self.playlist_task())
         head_cols = ["#", "BID", "Beatmap Info (Click to View)"]
         head_standalone_cols = ["#", "BID", "SID", "Artist - Title (Creator) [Version]"]
         extra_cols = [c for c in self.custom_columns if c != "mods"]

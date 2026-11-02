@@ -1,6 +1,5 @@
 import contextlib
 import os
-import os.path
 import re
 import shelve
 import shutil

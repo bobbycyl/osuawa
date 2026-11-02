@@ -1,5 +1,5 @@
 import asyncio
-import os.path
+import os
 import threading
 from asyncio import Task
 from typing import Any, TYPE_CHECKING, cast

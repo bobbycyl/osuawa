@@ -6,7 +6,6 @@
 import asyncio
 import logging
 import os
-import os.path
 import pickle
 from collections.abc import Sequence
 from time import time, time_ns
@@ -77,7 +76,7 @@ r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True, socket
 logger.info("redis connected")
 
 # Daemon 使用 Client Credentials Grant
-daemon_awa = Osuawa(
+awa = Osuawa(
     loop,
     st_secrets["args"]["client_id"],
     st_secrets["args"]["client_secret"],
@@ -154,11 +153,11 @@ def commands():
 
 async def async_save_recent_scores(user: int, include_fails: bool) -> tuple[str, dict[str, CompletedSimpleScoreInfo]]:
     """返回 (username, scores_compact)"""
-    user_scores: list[Score] = await daemon_awa.async_get_recent_scores(user, include_fails)
+    user_scores: list[Score] = await awa.async_get_recent_scores(user, include_fails)
     recent_scores_compact: dict[str, SimpleScoreInfo] = {str(user_score.id): SimpleScoreInfo.from_score(user_score) for user_score in user_scores}
     return await asyncio.gather(
-        daemon_awa.async_get_username(user),
-        daemon_awa.complete_scores_compact(recent_scores_compact),
+        awa.async_get_username(user),
+        awa.complete_scores_compact(recent_scores_compact),
     )
 
 
@@ -177,7 +176,7 @@ SCORE_ON_CONFLICT: Literal["ignore", "update"] = "ignore"
 
 
 def save_recent_scores(user: int, include_fails: bool = True) -> str:
-    username, scores_compact = daemon_awa.run_coro(async_save_recent_scores(user, include_fails))
+    username, scores_compact = awa.run_coro(async_save_recent_scores(user, include_fails))
     with engine.begin() as conn:
         # 插入到表 SCORE，如果遇到冲突，则放弃（或按 SCORE_ON_CONFLICT 覆盖）
         scores = [scores_compact_to_params(pk, _v) for pk, _v in scores_compact.items()]
@@ -220,8 +219,8 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     tmp_playlist_filename = _create_tmp_playlist_p(name, beatmap_specs)
     # noinspection PyBroadException
     try:
-        tmp_playlist = OsuPlaylist(daemon_awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
-        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = daemon_awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
+        tmp_playlist = OsuPlaylist(awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
+        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
     except Exception as e:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup  # noqa: E722
         raise ValueError("failed to parse the spec(s): %s" % beatmap_specs) from e
     # playlist_beatmaps_raw 的顺序可能和传入的 specs 顺序不一致
