@@ -528,10 +528,6 @@ class SimpleDifficultyAttribute(object):
 
 
 #: 数据类字段名 -> 数据库列名。几乎一一对应（字段名去下划线转大写），只有 USER_ID 是个例外
-#:
-#: 这两个常量放在这里而不是 osuawa/db.py：``from_row`` 要用它们把一行还原成数据类，
-#: 而 db.py 是依赖 utils.py 的（建表、补列、upsert 全部从数据类推导），
-#: 反过来依赖就成了循环导入，整个包都进不来。
 SCORE_COLUMN_OVERRIDES = {"user": "USER_ID"}
 
 #: statistics 里那些「这个模式没有 / 这个版本不统计」的键的默认值，读到 NULL 或缺键时用它补齐

@@ -54,10 +54,6 @@ _SCORE_SQL_TYPES: dict[type, str] = {
 }
 
 
-#: ``SCORE_COLUMN_OVERRIDES`` / ``SCORE_STATISTICS_DEFAULTS`` 定义在 osuawa.utils（数据类旁边），
-#: 这里只是转出来给外部用：db.py 依赖 utils.py，utils.py 不能再反过来依赖 db.py。
-
-
 def get_score_column_types() -> list[tuple[str, str]]:
     """返回 SCORE 表的 [(列名, SQL 类型), ...]（含 SCORE_ID 主键列）
 

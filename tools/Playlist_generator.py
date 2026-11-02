@@ -1,6 +1,7 @@
 import os.path
 import shutil
 import time
+from collections.abc import Mapping
 from functools import partial
 from typing import Any, Optional, TYPE_CHECKING, cast
 from uuid import uuid4
@@ -18,17 +19,7 @@ from streamlit import logger
 from osuawa import C, OsuPlaylist
 from osuawa.components import awa_query as _awa_query, draw_clustered_bars, get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, refresh, save_value
 from osuawa.osuawa import Osuawa
-from osuawa.utils import (
-    BeatmapSpec,
-    BeatmapJob,
-    RedisTaskId,
-    SimpleDifficultyAttribute,
-    _create_tmp_playlist_p,
-    available_mods,
-    get_playlist_lastupdate,
-    read_injected_code,
-    safe_norm,
-)
+from osuawa.utils import BeatmapJob, BeatmapSpec, RedisTaskId, SimpleDifficultyAttribute, _create_tmp_playlist_p, available_mods, get_playlist_lastupdate, read_injected_code, safe_norm
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -70,9 +61,19 @@ monaco_editor = JsCode(read_injected_code("monaco_editor.js"))
 st.markdown(read_injected_code("st_aggrid_style.css"), unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=60)
-def beatmap_database_query(sql: str, show_spinner: bool | str = False, params: Optional[Any] = None, **kwargs) -> pd.DataFrame:
-    return _awa_query("BEATMAP", sql, show_spinner, params, **kwargs)
+@st.cache_data(ttl=None, max_entries=256, show_spinner=False)
+def _query_beatmap(sql: str, params_key: tuple[tuple[str, Any], ...], version: int) -> pd.DataFrame:
+    """BEATMAP 查询的缓存层
+
+    ``version`` 取 ``playlist_lastupdate``（daemon 每次写完 BEATMAP 都会更新它），
+    进了 key 就意味着「数据一变缓存自然失效」，不用再拿 ttl 去猜，也不需要跨进程清缓存。
+    """
+    return _awa_query("BEATMAP", sql, params=dict(params_key))
+
+
+def query_beatmap(sql: str, params: Optional[Mapping[str, Any]] = None) -> pd.DataFrame:
+    """带缓存的 BEATMAP 查询"""
+    return _query_beatmap(sql, tuple(sorted((params or {}).items())), get_playlist_lastupdate())
 
 
 def default(obj):
@@ -225,11 +226,10 @@ if st.session_state.perm >= 1:
     st.markdown(_("## Online Playlist Creator"))
     # online_playlist_slot = st.empty()
     check_playlist_lastupdate()
-    available_pools = beatmap_database_query(
+    available_pools = query_beatmap(
         """SELECT DISTINCT POOL
            FROM BEATMAP
            ORDER BY POOL""",
-        show_spinner=_("querying available pools"),
     )["POOL"].to_list()
     if len(available_pools) == 0:
         available_pools.append("_DEFAULT_POOL")
@@ -330,39 +330,35 @@ if st.session_state.perm >= 1:
     # U_ARTIST + U_TITLE 用于曲目识别
     if st.session_state.gen_filter_pool != "-":
         cur_series = st.session_state.gen_filter_pool.split("-")[0]
-        duplicate_bids = beatmap_database_query(
+        duplicate_bids = query_beatmap(
             """SELECT BID
                FROM BEATMAP
                WHERE SERIES = :series
                GROUP BY BID
                HAVING COUNT(*) > 1""",
             params={"series": cur_series},
-            show_spinner=_("querying duplicate BIDs"),
         )["BID"].to_list()
-        duplicate_songs_raw = beatmap_database_query(
+        duplicate_songs_raw = query_beatmap(
             """SELECT U_ARTIST, U_TITLE, COUNT(*)
                FROM BEATMAP
                WHERE SERIES = :series
                GROUP BY U_ARTIST, U_TITLE
                HAVING COUNT(*) > 1""",
             params={"series": cur_series},
-            show_spinner=_("querying duplicate song names"),
         )
     else:
         # 如果不指定 POOL，就回退到原始模式
-        duplicate_bids = beatmap_database_query(
+        duplicate_bids = query_beatmap(
             """SELECT BID
                FROM BEATMAP
                GROUP BY BID
                HAVING COUNT(*) > 1""",
-            show_spinner=_("querying duplicate BIDs"),
         )["BID"].to_list()
-        duplicate_songs_raw = beatmap_database_query(
+        duplicate_songs_raw = query_beatmap(
             """SELECT U_ARTIST, U_TITLE, COUNT(*)
                FROM BEATMAP
                GROUP BY U_ARTIST, U_TITLE
                HAVING COUNT(*) > 1""",
-            show_spinner=_("querying duplicate song names"),
         )
     duplicate_songs = (duplicate_songs_raw["U_ARTIST"] + " " + duplicate_songs_raw["U_TITLE"]).to_list()
 
@@ -378,7 +374,7 @@ if st.session_state.perm >= 1:
     if st.session_state.gen_filter_status != -1:
         filter_query += " AND STATUS = :status"
         filter_params["status"] = st.session_state.gen_filter_status
-    df: pd.DataFrame = beatmap_database_query(filter_query, show_spinner=_("querying the playlist"), params=filter_params)
+    df: pd.DataFrame = query_beatmap(filter_query, params=filter_params)
 
     # keywords 的筛选用 pandas 完成，从 bid、sid、info、slot、mods、notes 中查找包含输入内容的条目
     if st.session_state.gen_filter_search:
@@ -662,7 +658,7 @@ if st.session_state.perm >= 1:
                             )
                     st.toast(push_beatmap_task(beatmaps_to_update))
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
-            refresh(beatmap_database_query)
+            refresh(_query_beatmap)
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
             export_filtered_playlist()
 

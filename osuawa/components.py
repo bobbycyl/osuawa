@@ -1,9 +1,11 @@
+import contextlib
 import os
 import os.path
 import re
 import shelve
 import shutil
 from collections import deque
+from collections.abc import Mapping
 from datetime import date
 from secrets import token_hex
 from shutil import copyfile
@@ -87,20 +89,27 @@ _conn = st.connection("osuawa", type="sql", ttl=60)
 # ban the built-in query method
 _conn.query = None  # type: ignore
 
+#: SQL 注释。校验表名时先剥掉，否则「注释里提到表名」会让检查失去意义
+_SQL_COMMENT_RE = re.compile(r"/\*.*?\*/|--[^\n]*", re.DOTALL)
 
-def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False, params: Optional[Any] = None, **kwargs) -> pd.DataFrame:
-    if "ttl" in kwargs:
-        raise ValueError("cannot specify ttl")
-    if database not in sql:
+
+def _assert_touches(database: DatabaseName, sql: str) -> None:
+    """防呆：确认 SQL 里确实出现了预期的表名
+
+    只按「词边界 + 忽略大小写」匹配剥掉注释后的 SQL，所以 ``-- BEATMAP`` 之类的注释、
+    ``BEATMAP_ARCHIVE`` 之类的相似表名都不会误判，小写的 ``from beatmap`` 也能通过。
+
+    ⚠️ 这不是安全边界：它拦不住任何有意为之的查询。
+    """
+    if not re.search(r"\b%s\b" % re.escape(database), _SQL_COMMENT_RE.sub(" ", sql), re.IGNORECASE):
         raise ValueError(f"database name {database} not found in SQL query")
-    _spinner_str = "Running query..."
-    if isinstance(show_spinner, str):
-        _spinner_str = show_spinner
-    if show_spinner:
-        with st.spinner(_spinner_str):
-            df = pd.read_sql(text(sql), _conn.connect(), params=params, **kwargs)
-    else:
-        df = pd.read_sql(text(sql), _conn.connect(), params=params, **kwargs)
+
+
+def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False, params: Optional[Mapping[str, Any]] = None) -> pd.DataFrame:
+    _assert_touches(database, sql)
+    spinner_text = show_spinner if isinstance(show_spinner, str) else "Running query..."
+    with st.spinner(spinner_text) if show_spinner else contextlib.nullcontext():
+        df = pd.read_sql(text(sql), _conn.connect(), params=params)
     df.columns = df.columns.str.upper()
     return df
 

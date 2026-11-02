@@ -29,17 +29,7 @@ from sqlalchemy import text
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.db import build_score_insert_sql, create_db_engine, resolve_db_url, score_users_query, scores_compact_to_params, sync_score_columns
-from osuawa.utils import (
-    BeatmapSpec,
-    BeatmapJob,
-    C,
-    CompletedPlaylistBeatmap,
-    CompletedSimpleScoreInfo,
-    DatabasePlaylistBeatmap,
-    SimpleScoreInfo,
-    _create_tmp_playlist_p,
-    push_task,
-)
+from osuawa.utils import BeatmapJob, BeatmapSpec, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, RedisTaskId, SimpleScoreInfo, _create_tmp_playlist_p, push_task
 
 # streamlit settings
 st_config = toml.load("./.streamlit/config.toml")
@@ -537,7 +527,7 @@ while True:
         task_info = result[1]
         if task_info:
             # task_info 结构为 uuid hex + command 的字符串拼接
-            task_id = task_info[:32]
+            task_id = RedisTaskId(task_info[:32])
             task_cmd = task_info[32:]
             g = cmdparser.parse_command(task_cmd)
             logger.info(f"[{task_id}/started]: {task_cmd}")
