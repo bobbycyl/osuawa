@@ -240,7 +240,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
                 BID=playlist_beatmap_raw["BID"],
                 SID=playlist_beatmap_raw["SID"],
                 INFO=playlist_beatmap_raw["Artist - Title (Creator) [Version]"],
-                SKILL_SLOT=slot,
+                SKILL_SLOT=playlist_beatmap_raw.get("slot", spec.slot),
                 SR=playlist_beatmap_raw["SR"],  # 相比 Stars，SR 不依赖特殊字体
                 BPM=playlist_beatmap_raw["BPM"],
                 HIT_LENGTH=playlist_beatmap_raw["Hit Length"],
