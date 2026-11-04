@@ -404,8 +404,6 @@ class Osuawa(CachedThrottledMixIn):
         # 库里是 UTC epoch，展示统一换到用户时区
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(self.tz)
         df["st"] = pd.to_datetime(df["st"], utc=True).dt.tz_convert(self.tz)
-        # 剔除以 _ 开头的字段
-        df = df.loc[:, ~df.columns.str.startswith("_")].copy()
         # todo: ExtendedSimpleScoreInfo 在这里只起到了位置作用，设计存在问题
         ec = ExtendedSimpleScoreInfo.__slots__
         df[ec[0]] = df["ts"].dt.hour * 3600 + df["ts"].dt.minute * 60 + df["ts"].dt.second
@@ -432,7 +430,8 @@ class Osuawa(CachedThrottledMixIn):
         df[ec[20]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
         df[ec[21]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
         df[ec[22]] = df["_mods"].map(lambda mods: ({m["acronym"] for m in mods} <= self.common_mods))
-        return df
+        # 剔除以 _ 开头的字段
+        return df.drop(columns=[c for c in df.columns if c.startswith("_")])
 
     def get_user_info(self, username: str) -> dict[str, Any]:
         return self.run_coro(self.async_get_user_info(username))
