@@ -30,7 +30,8 @@ from osu.Game.Rulesets.Catch import CatchRuleset
 from osu.Game.Rulesets.Mania import ManiaRuleset
 from osu.Game.Rulesets.Osu import OsuRuleset
 from osu.Game.Rulesets.Taiko import TaikoRuleset
-from osupp.difficulty import calculate_difficulty as calculate_difficulty, get_all_mods
+from osupp.difficulty import calculate_difficulty as calculate_difficulty
+from osupp.mod import get_all_mods
 from osupp.performance import (
     CatchPerformance,
     ManiaPerformance,
@@ -1386,6 +1387,36 @@ def get_playlist_lastupdate() -> int:
             return int(fi.read())
     else:
         return -1
+
+
+def api_beatmap_from_local(bid: int) -> Beatmap:
+    calculator = calculate_performance(
+        beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid),
+        allow_cancel=False,
+    )
+    osupp_attr = next(calculator)
+    try:
+        calculator.send(None)
+    except StopIteration as e:
+        beatmap_info = e.value
+        # 这里仅写入必要的信息
+        return Beatmap(
+            total_length=beatmap_info["Length"],  # 大概率不准确
+            version=beatmap_info["DifficultyName"],
+            accuracy=float(osupp_attr["__ek_od_orig"]),
+            ar=float(osupp_attr["__ek_ar_orig"]),
+            bpm=float(osupp_attr["__ek_most_common_bpm_orig"]),
+            current_user_tag_ids=beatmap_info["Metadata"]["UserTags"],
+            convert=False,
+            count_circles=int(osupp_attr["__ek_count_circles"]),
+            count_sliders=int(osupp_attr["__ek_count_sliders"]),
+            count_spinners=int(osupp_attr["__ek_count_spinners"]),
+            cs=float(osupp_attr["__ek_cs_orig"]),
+            drain=float(osupp_attr["__ek_drain_length_orig"]),
+            hit_length=float(osupp_attr["__ek_hit_length_orig"]),
+            mode_int=beatmap_info["Ruleset"]["OnlineID"],
+        )
+    raise ValueError(f"failed to generate beatmap info for '{bid}'")
 
 
 def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
