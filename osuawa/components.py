@@ -534,9 +534,9 @@ def tail_log(n: int = 100, keyword: Optional[str] = None) -> str:
 
 
 def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
-    original_playlist_pattern = re.compile(r"O\.(.*)\.properties")
-    match_playlist_pattern = re.compile(r"M\.(.*)\.properties")
-    community_playlist_pattern = re.compile(r"C\.(.*)\.properties")
+    original_playlist_pattern = re.compile(r"O\.(.*)\.(?:playlist|properties)")
+    match_playlist_pattern = re.compile(r"M\.(.*)\.(?:playlist|properties)")
+    community_playlist_pattern = re.compile(r"C\.(.*)\.(?:playlist|properties)")
     original_playlist_beatmaps: dict[int, int] = {}
     for filename in os.listdir("./playlists/raw/"):
         if m := original_playlist_pattern.match(filename):
@@ -553,11 +553,11 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
         try:
             copyfile(
                 "./playlists/raw/%s" % m.group(0),
-                "./playlists/%s.properties" % m.group(1),
+                "./playlists/%s.playlist" % m.group(1),
             )
             o = OsuPlaylist(
                 st.session_state.awa,
-                "./playlists/%s.properties" % m.group(1),
+                "./playlists/%s.playlist" % m.group(1),
                 suffix,
                 1,
             )
@@ -572,7 +572,7 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
         else:
             st.write(_("generated '%s'") % m.group(1))
         finally:
-            os.remove("./playlists/%s.properties" % m.group(1))
+            os.remove("./playlists/%s.playlist" % m.group(1))
     # report duplicates
     st.write(["%s(%s) " % (k, v) for k, v in original_playlist_beatmaps.items() if v > 1])
 

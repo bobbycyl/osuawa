@@ -12,8 +12,8 @@ from datetime import date, datetime, timezone
 from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
-from time import sleep, time, time_ns
-from typing import Any, Literal, NamedTuple, NewType, Optional, TypedDict, Union, cast, get_args, get_origin
+from time import sleep, time
+from typing import Any, Literal, NamedTuple, NewType, Optional, Self, TypedDict, Union, cast, get_args, get_origin
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -21,7 +21,7 @@ import orjson
 import pandas as pd
 import typing_extensions
 from PerformanceCalculator import ProcessorWorkingBeatmap
-from clayutil.futil import Downloader, Properties, filelock
+from clayutil.futil import Downloader, filelock
 from clayutil.sutil import md5sum
 from ossapi.models import MultiplayerScore
 from ossapi.ossapiv2_async import Beatmap, Score, User, UserCompact
@@ -63,6 +63,10 @@ mania_mod_entries = get_all_mods(ManiaRuleset())
 mania_mod_indexes = {mod_entry["Acronym"]: mod_entry for mod_entry in mania_mod_entries}
 _mania_mod_settings_mapping = {mod_entry["Acronym"]: dict((s["Name"], s) for s in mod_entry["Settings"]) for mod_entry in mania_mod_entries}
 available_mods = set(osu_mod_indexes.keys()) | set(taiko_mod_indexes.keys()) | set(catch_mod_indexes.keys()) | set(mania_mod_indexes.keys())
+
+# 课题里的「slot mod」：只用来标记分组，不会真的作用在谱面上。NM 其实是官方 mod，
+# 但为了逻辑一致（可当 slot 用）以及符合惯例，也算在这里
+SLOT_MODS = frozenset({"NM", "TB", "FM", "F+", "SP"} | {"$%d" % index for index in range(10)})
 
 assets_dir: str = os.path.dirname(__file__)
 
@@ -643,7 +647,7 @@ class SimpleScoreInfo(object):
             self.st = as_utc(self.st)
 
     @classmethod
-    def from_score(cls, score: Score | MultiplayerScore):
+    def from_score(cls, score: Score | MultiplayerScore) -> Self:
         # print(score.mods)
         return cls(
             score.beatmap_id,
@@ -679,7 +683,7 @@ class SimpleScoreInfo(object):
 
     # noinspection bad-argument-type
     @classmethod
-    def from_row(cls, row: Mapping[str, Any] | RowMapping):
+    def from_row(cls, row: Mapping[str, Any] | RowMapping) -> Self:
         """把 SCORE 表的一行还原为 ``SimpleScoreInfo``
 
         按列名取值，因此不依赖 SELECT 的列顺序。``row`` 可以是 ``RowMapping``
@@ -707,7 +711,7 @@ class SimpleScoreInfo(object):
         )
 
     @classmethod
-    def forge(cls, beatmap_id: int, ruleset_id: int):
+    def forge(cls, beatmap_id: int, ruleset_id: int) -> Self:
         return cls(
             bid=beatmap_id,
             user=-1,
@@ -834,7 +838,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     b_delta_time_median: Optional[float]
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any] | RowMapping):
+    def from_row(cls, row: Mapping[str, Any] | RowMapping) -> Self:
         """把 SCORE 表的一行按列名还原为 ``CompletedSimpleScoreInfo``"""
         data = {str(key).upper(): value for key, value in row.items()}
         # 这里只能显式写基础类，super 的两种写法都不行
@@ -910,16 +914,6 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     score_nf: int
     mods: str
     only_common_mods: bool
-
-
-# noinspection PyTypedDict
-class ParsedPlaylistBeatmap(typing_extensions.TypedDict, total=False, extra_items=Any):
-    bid: int
-    mods: list[dict[str, Any]]
-    notes: str
-    beatmap: Beatmap
-    # 以下是低版本补丁
-    _: str
 
 
 # noinspection PyArgumentList
@@ -1418,37 +1412,6 @@ def api_beatmap_from_local(bid: int) -> Beatmap:
             mode_int=beatmap_info["Ruleset"]["OnlineID"],
         )
     raise ValueError(f"failed to generate beatmap info for '{bid}'")
-
-
-def _create_tmp_playlist_p(name: str, beatmap_specs: list[BeatmapSpec]) -> str:
-    # 暂时不考虑定制谱面/本地谱面需求，因为 playlist 要求是纯在线谱面
-    # 或许可以考虑提供一个 placeholder 选项，配合一个本地的谱面解析工具
-    # 然而，这个操作可能会需要完全重构 playlist 生成器的逻辑，因为其目前所使用的所有信息都是在线获取的
-    # 所有在线谱面共用一个文件夹，设计之初是给一个团队使用的
-
-    # 错误检查前置：预扫描 beatmap_specs，检查是否有重复的 bid
-    bid_set: set[int] = set()
-    for beatmap_spec in beatmap_specs:
-        if (_bid := beatmap_spec[0]) in bid_set:
-            raise ValueError(f"duplicated bid detected: {_bid}")
-        bid_set.add(_bid)
-
-    pool_path = os.path.join(C.UPLOADED_DIRECTORY.value, "online")
-    if not os.path.exists(pool_path):
-        os.mkdir(pool_path)
-    # 创建一个临时谱面文件，以 name + time 为谱面名
-    tmp_playlist_filename = str(os.path.join(pool_path, "%s_%d.properties" % (name, time_ns() // 1_000_000)))
-    tmp_playlist_p = Properties(tmp_playlist_filename)
-    tmp_playlist_p["custom_columns"] = '["mods", "slot"]'  # 一定要启用自定义列功能，不然不支持 slot
-    # playlist Properties 文件格式如下：
-    # bid = {"mods": mods, "slot": slot}
-    # # notes
-    # Properties 是一个 OrderedDict，往后依次添加内容即可。要注意 notes 必须以 \n 结尾，因为对于注释的解析是完整行
-    for i, a in enumerate(beatmap_specs, start=1):
-        tmp_playlist_p[str(a[0])] = orjson.dumps({"mods": a[1], "slot": a[2]}).decode()
-        tmp_playlist_p["#%i" % (i * 2 - 1)] = "# %s\n" % a[4]
-    tmp_playlist_p.dump()
-    return tmp_playlist_filename
 
 
 def _build_upsert(dialect: str, update_fields: list[str], primary_keys: list[str]) -> str:

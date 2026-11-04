@@ -25,16 +25,14 @@ from collections.abc import Coroutine, Sequence
 from dataclasses import fields
 from functools import cached_property
 from itertools import chain
-from shutil import rmtree
 from threading import Lock
 from types import MappingProxyType
 from typing import Any, Literal, Never, Optional, cast, override
 
 import numpy as np
-import orjson
 import pandas as pd
 from cachetools import TTLCache
-from clayutil.futil import Downloader, Properties
+from clayutil.futil import Downloader
 from clayutil.sutil import sha256sum
 from clayutil.validator import Integer
 from fontfallback import writing
@@ -54,12 +52,13 @@ from ossapi.ossapiv2_async import (
 )
 from throttled.asyncio import Throttled
 
+from .playlist import PlaylistSource
 from .utils import (
     C,
     CompletedPlaylistBeatmap,
     CompletedSimpleScoreInfo,
     ExtendedSimpleScoreInfo,
-    ParsedPlaylistBeatmap,
+    SLOT_MODS,
     SimpleDifficultyAttribute,
     SimpleScoreInfo,
     assets_dir,
@@ -72,7 +71,6 @@ from .utils import (
     download_beatmap,
     headers,
     simple_user_dict,
-    strip_quotes,
     to_readable_mods,
 )
 
@@ -757,23 +755,6 @@ class BeatmapCover(object):
 
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
-    custom_mods_acronym = {
-        "NM",
-        "TB",
-        "FM",
-        "F+",
-        "SP",
-        "$0",  # preserved 0
-        "$1",  # preserved 1
-        "$2",  # preserved 2
-        "$3",  # preserved 3
-        "$4",  # preserved 4
-        "$5",  # preserved 5
-        "$6",  # preserved 6
-        "$7",  # preserved 7
-        "$8",  # preserved 8
-        "$9",  # preserved 9
-    }  # NM 其实是官方的模组，但是为了逻辑便捷以及符合惯例，这里加上了
     mod_color = {
         "NM": "#107fb9",
         "HD": "#b97f10",
@@ -796,59 +777,43 @@ class OsuPlaylist(object):
         playlist_filename: str,
         suffix: str = "",
         css_style: Optional[int] = None,
+        *,
+        source: Optional[PlaylistSource] = None,
     ):
+        """读取课题源文件
+
+        ``source`` 非空时直接使用它、不读盘：daemon 只需要内存里的 spec，没必要先落盘再解析。
+        此时 ``playlist_filename`` 仅用来决定输出目录与课题名。
+        """
         self.__awa = awa
-        p = Properties(playlist_filename)
-        p.load()
         self.playlist_filename = playlist_filename
         self.suffix = suffix
         self.css_style = css_style
-        self.footer = strip_quotes(str(p.pop("footer"))) if "footer" in p else ""
+        self.source = source if source is not None else PlaylistSource.from_file(playlist_filename)
+
+        self.footer = self.source.footer
         self.banner = ""
-        if "banner" in p:
-            banner_img_src = strip_quotes(str(p.pop("banner")))
+        if self.source.banner:
             self.banner = """
     <div class="relative w-full h-[90] sm:h-[135] lg:h-[185] hover:h-1/2 bg-cover bg-no-repeat bg-center object-cover transition-all duration-300 transform" style="background-image: url(%s)"><div class="absolute inset-0 banner-mask"></div>
     </div>
-""" % banner_img_src
-        self.custom_columns: list[str] = orjson.loads(str(p.pop("custom_columns"))) if "custom_columns" in p else []
+""" % self.source.banner
+        # mods 固定算一列，其余列由条目里的附加字段推导（slot、pool……）
+        self.custom_columns: list[str] = ["mods"] + self.source.field_names
 
-        parsed_beatmap_list: list[ParsedPlaylistBeatmap] = []
-
-        # pop p from end until empty
-        current_parsed_beatmap: ParsedPlaylistBeatmap = {"notes": ""}
-        while p:
-            k, v = p.popitem()
-            if k[0] == "#":  # notes
-                current_parsed_beatmap["notes"] += str(v).lstrip("#").lstrip(" ")
-            else:
-                current_parsed_beatmap["bid"] = int(k)
-                obj_v = orjson.loads(str(v))
-                if self.custom_columns:
-                    for column in self.custom_columns:
-                        # noinspection PyTypedDict
-                        current_parsed_beatmap[column] = obj_v.get(column)
-                else:
-                    current_parsed_beatmap["mods"] = obj_v
-                parsed_beatmap_list.insert(0, current_parsed_beatmap)
-                current_parsed_beatmap = {"notes": ""}
-
-        beatmaps_dict = self.__awa.run_coro(self.__awa.async_get_beatmaps_dict([int(x["bid"]) for x in parsed_beatmap_list]))
-
-        # post process for parsed beatmaps
-        for element in parsed_beatmap_list:
+        self.beatmap_list: list[dict] = [{"bid": entry.bid, "mods": entry.mods, **entry.fields, "notes": entry.notes} for entry in self.source.entries]
+        beatmaps_dict = self.__awa.run_coro(self.__awa.async_get_beatmaps_dict([element["bid"] for element in self.beatmap_list]))
+        for element in self.beatmap_list:
             element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
             element["beatmap"] = beatmaps_dict[element["bid"]]
 
-        self.beatmap_list = parsed_beatmap_list
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
-        self.tmp_dir = os.path.splitext(playlist_filename)[0] + ".tmp"
         self.bg_dir = os.path.join(os.path.split(playlist_filename)[0], "darkened-backgrounds")
-        self.tmp_d = Downloader(self.tmp_dir)
-        if not os.path.exists(os.path.join(os.path.split(playlist_filename)[0], "images")):
-            os.mkdir(os.path.join(os.path.split(playlist_filename)[0], "images"))
+        _images_dir = os.path.join(os.path.split(playlist_filename)[0], "images")
+        if not os.path.exists(_images_dir):
+            os.makedirs(_images_dir, exist_ok=True)
             with open(
-                os.path.join(os.path.split(playlist_filename)[0], "images", "total_length.svg"),
+                os.path.join(_images_dir, "total_length.svg"),
                 "w",
             ) as fo:
                 fo.write(
@@ -856,7 +821,7 @@ class OsuPlaylist(object):
                     <svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 562.5 562.5" height="562.5" width="562.5" xml:space="preserve" version="1.1" id="svg4155"><metadata id="metadata4161"><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/><dc:title/></cc:Work></rdf:RDF></metadata><defs id="defs4159"/><g transform="matrix(1.25,0,0,-1.25,0,562.5)" id="g4163"><g id="g4165"/><g id="g4167"><path id="path4169" style="fill:#441188;fill-opacity:0;fill-rule:evenodd;stroke:none" d="m 410.8631,145.698 c 43.7972,43.7973 43.7972,114.8067 0,158.604 0,0 -106.5611,106.5611 -106.5611,106.5611 -43.7973,43.7972 -114.8067,43.7972 -158.604,0 0,0 -106.56109,-106.5611 -106.56109,-106.5611 -43.797259,-43.7973 -43.797259,-114.8067 0,-158.604 0,0 106.56109,-106.56109 106.56109,-106.56109 43.7973,-43.797259 114.8067,-43.797259 158.604,0 0,0 106.5611,106.56109 106.5611,106.56109 z"/><path id="path4171" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 250,293.75 c 0,3.5156 -2.7344,6.25 -6.25,6.25 0,0 -12.5,0 -12.5,0 -3.5156,0 -6.25,-2.7344 -6.25,-6.25 0,0 0,-68.75 0,-68.75 0,0 -43.75,0 -43.75,0 -3.5156,0 -6.25,-2.7344 -6.25,-6.25 0,0 0,-12.5 0,-12.5 0,-3.5156 2.7344,-6.25 6.25,-6.25 0,0 62.5,0 62.5,0 3.5156,0 6.25,2.7344 6.25,6.25 0,0 0,87.5 0,87.5 z M 331.25,225 c 0,-58.5938 -47.6563,-106.25 -106.25,-106.25 -58.5938,0 -106.25,47.6562 -106.25,106.25 0,58.5938 47.6562,106.25 106.25,106.25 58.5937,0 106.25,-47.6562 106.25,-106.25 z M 375,225 C 375,307.8125 307.8125,375 225,375 142.1875,375 75,307.8125 75,225 75,142.1875 142.1875,75 225,75 c 82.8125,0 150,67.1875 150,150 z"/></g></g></svg>""",
                 )
             with open(
-                os.path.join(os.path.split(playlist_filename)[0], "images", "bpm.svg"),
+                os.path.join(_images_dir, "bpm.svg"),
                 "w",
             ) as fo:
                 fo.write(
@@ -864,7 +829,7 @@ class OsuPlaylist(object):
                     <svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 562.5 562.5" height="562.5" width="562.5" xml:space="preserve" version="1.1" id="svg4155"><metadata id="metadata4161"><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/><dc:title/></cc:Work></rdf:RDF></metadata><defs id="defs4159"/><g transform="matrix(1.25,0,0,-1.25,0,562.5)" id="g4163"><g id="g4165"/><g id="g4167"><path id="path4169" style="fill:#441188;fill-opacity:0;fill-rule:evenodd;stroke:none" d="m 410.8631,145.698 c 43.7972,43.7973 43.7972,114.8067 0,158.604 0,0 -106.5611,106.5611 -106.5611,106.5611 -43.7973,43.7972 -114.8067,43.7972 -158.604,0 0,0 -106.56109,-106.5611 -106.56109,-106.5611 -43.797259,-43.7973 -43.797259,-114.8067 0,-158.604 0,0 106.56109,-106.56109 106.56109,-106.56109 43.7973,-43.797259 114.8067,-43.797259 158.604,0 0,0 106.5611,106.56109 106.5611,106.56109 z"/><path id="path4171" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 331.25,225 c 0,-58.5938 -47.6563,-106.25 -106.25,-106.25 -58.5938,0 -106.25,47.6562 -106.25,106.25 0,58.5938 47.6562,106.25 106.25,106.25 58.5937,0 106.25,-47.6562 106.25,-106.25 z M 375,225 C 375,307.8125 307.8125,375 225,375 142.1875,375 75,307.8125 75,225 75,142.1875 142.1875,75 225,75 c 82.8125,0 150,67.1875 150,150 z"/><path id="path4173" style="fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke:none" d="m 178.3058,157.4747 c 0,0 -0.9539,0.0227 -0.9539,0.0227 0,0 -0.9517,0.0683 -0.9517,0.0683 0,0 -0.9473,0.1135 -0.9473,0.1135 0,0 -0.9408,0.1586 -0.9408,0.1586 0,0 -0.9322,0.2033 -0.9322,0.2033 0,0 -0.9215,0.2475 -0.9215,0.2475 0,0 -0.9086,0.2911 -0.9086,0.2911 0,0 -0.8937,0.3342 -0.8937,0.3342 0,0 -0.8767,0.3764 -0.8767,0.3764 0,0 -0.8578,0.4178 -0.8578,0.4178 0,0 -0.8369,0.4582 -0.8369,0.4582 0,0 -0.814,0.4977 -0.814,0.4977 0,0 -0.7895,0.5358 -0.7895,0.5358 0,0 -0.7629,0.573 -0.7629,0.573 0,0 -0.7348,0.6086 -0.7348,0.6086 0,0 -0.7049,0.643 -0.7049,0.643 0,0 -0.6734,0.6759 -0.6734,0.6759 0,0 -0.6404,0.7072 -0.6404,0.7072 0,0 -0.606,0.737 -0.606,0.737 0,0 -0.5701,0.7651 -0.5701,0.7651 0,0 -0.533,0.7913 -0.533,0.7913 0,0 -0.4947,0.8159 -0.4947,0.8159 0,0 -0.4552,0.8385 -0.4552,0.8385 0,0 -0.4146,0.8593 -0.4146,0.8593 0,0 -0.3732,0.8781 -0.3732,0.8781 0,0 -0.331,0.8949 -0.331,0.8949 0,0 -0.2878,0.9097 -0.2878,0.9097 0,0 -0.2442,0.9223 -0.2442,0.9223 0,0 -0.1998,0.933 -0.1998,0.933 0,0 -0.1552,0.9414 -0.1552,0.9414 0,0 -0.1101,0.9477 -0.1101,0.9477 0,0 -0.0647,0.9519 -0.0647,0.9519 0,0 -0.0193,0.954 -0.0193,0.954 0,0 0.0262,0.9537 0.0262,0.9537 0,0 0.0717,0.9514 0.0717,0.9514 0,0 0.117,0.947 0.117,0.947 0,0 0.162,0.9402 0.162,0.9402 0,0 0.2067,0.9315 0.2067,0.9315 0,0 0.2508,0.9205 0.2508,0.9205 0,0 0.2945,0.9076 0.2945,0.9076 0,0 0.3374,0.8924 0.3374,0.8924 0,0 46.8116,115.4124 46.8116,115.4124 0,0 0.3771,0.8701 0.3771,0.8701 0,0 0.418,0.8512 0.418,0.8512 0,0 0.4579,0.8304 0.4579,0.8304 0,0 0.4967,0.8078 0.4967,0.8078 0,0 0.5344,0.7834 0.5344,0.7834 0,0 0.571,0.7571 0.571,0.7571 0,0 0.6062,0.7292 0.6062,0.7292 0,0 0.6401,0.6997 0.6401,0.6997 0,0 0.6725,0.6685 0.6725,0.6685 0,0 0.7035,0.6359 0.7035,0.6359 0,0 0.7328,0.6018 0.7328,0.6018 0,0 0.7606,0.5665 0.7606,0.5665 0,0 0.7865,0.5297 0.7865,0.5297 0,0 0.8107,0.4919 0.8107,0.4919 0,0 0.8332,0.4529 0.8332,0.4529 0,0 0.8537,0.4128 0.8537,0.4128 0,0 0.8723,0.372 0.8723,0.372 0,0 0.8889,0.3302 0.8889,0.3302 0,0 0.9036,0.2877 0.9036,0.2877 0,0 0.9162,0.2445 0.9162,0.2445 0,0 0.9268,0.2008 0.9268,0.2008 0,0 0.9353,0.1567 0.9353,0.1567 0,0 0.9416,0.1121 0.9416,0.1121 0,0 0.9459,0.0674 0.9459,0.0674 0,0 0.948,0.0225 0.948,0.0225 0,0 0.948,-0.0225 0.948,-0.0225 0,0 0.9459,-0.0674 0.9459,-0.0674 0,0 0.9416,-0.1121 0.9416,-0.1121 0,0 0.9353,-0.1567 0.9353,-0.1567 0,0 0.9268,-0.2008 0.9268,-0.2008 0,0 0.9162,-0.2445 0.9162,-0.2445 0,0 0.9036,-0.2877 0.9036,-0.2877 0,0 0.8889,-0.3302 0.8889,-0.3302 0,0 0.8723,-0.372 0.8723,-0.372 0,0 0.8537,-0.4128 0.8537,-0.4128 0,0 0.8332,-0.4529 0.8332,-0.4529 0,0 0.8107,-0.4919 0.8107,-0.4919 0,0 0.7866,-0.5297 0.7866,-0.5297 0,0 0.7605,-0.5665 0.7605,-0.5665 0,0 0.7328,-0.6018 0.7328,-0.6018 0,0 0.7035,-0.6359 0.7035,-0.6359 0,0 0.6725,-0.6685 0.6725,-0.6685 0,0 0.6401,-0.6997 0.6401,-0.6997 0,0 0.6062,-0.7292 0.6062,-0.7292 0,0 0.571,-0.7571 0.571,-0.7571 0,0 0.5344,-0.7834 0.5344,-0.7834 0,0 0.4967,-0.8078 0.4967,-0.8078 0,0 0.4579,-0.8304 0.4579,-0.8304 0,0 0.418,-0.8512 0.418,-0.8512 0,0 0.3771,-0.8701 0.3771,-0.8701 0,0 46.8116,-115.4124 46.8116,-115.4124 0,0 0.3374,-0.8924 0.3374,-0.8924 0,0 0.2945,-0.9076 0.2945,-0.9076 0,0 0.2508,-0.9205 0.2508,-0.9205 0,0 0.2067,-0.9315 0.2067,-0.9315 0,0 0.162,-0.9402 0.162,-0.9402 0,0 0.117,-0.947 0.117,-0.947 0,0 0.0717,-0.9514 0.0717,-0.9514 0,0 0.0262,-0.9537 0.0262,-0.9537 0,0 -0.0192,-0.954 -0.0192,-0.954 0,0 -0.0648,-0.9519 -0.0648,-0.9519 0,0 -0.1101,-0.9477 -0.1101,-0.9477 0,0 -0.1551,-0.9414 -0.1551,-0.9414 0,0 -0.1999,-0.933 -0.1999,-0.933 0,0 -0.2442,-0.9223 -0.2442,-0.9223 0,0 -0.2878,-0.9097 -0.2878,-0.9097 0,0 -0.3309,-0.8949 -0.3309,-0.8949 0,0 -0.3732,-0.8781 -0.3732,-0.8781 0,0 -0.4147,-0.8593 -0.4147,-0.8593 0,0 -0.4552,-0.8385 -0.4552,-0.8385 0,0 -0.4946,-0.8159 -0.4946,-0.8159 0,0 -0.533,-0.7913 -0.533,-0.7913 0,0 -0.5702,-0.7651 -0.5702,-0.7651 0,0 -0.6059,-0.737 -0.6059,-0.737 0,0 -0.6405,-0.7072 -0.6405,-0.7072 0,0 -0.6734,-0.6759 -0.6734,-0.6759 0,0 -0.7049,-0.643 -0.7049,-0.643 0,0 -0.7348,-0.6086 -0.7348,-0.6086 0,0 -0.7629,-0.573 -0.7629,-0.573 0,0 -0.7894,-0.5358 -0.7894,-0.5358 0,0 -0.8141,-0.4977 -0.8141,-0.4977 0,0 -0.8369,-0.4582 -0.8369,-0.4582 0,0 -0.8578,-0.4178 -0.8578,-0.4178 0,0 -0.8767,-0.3764 -0.8767,-0.3764 0,0 -0.8937,-0.3342 -0.8937,-0.3342 0,0 -0.9086,-0.2911 -0.9086,-0.2911 0,0 -0.9214,-0.2475 -0.9214,-0.2475 0,0 -0.9322,-0.2033 -0.9322,-0.2033 0,0 -0.9409,-0.1586 -0.9409,-0.1586 0,0 -0.9473,-0.1135 -0.9473,-0.1135 0,0 -0.9517,-0.0683 -0.9517,-0.0683 0,0 -0.9538,-0.0227 -0.9538,-0.0227 0,0 -93.6231,0 -93.6231,0 z m 0,20 c 0,0 93.6231,0 93.6231,0 0,0 -46.8116,115.4124 -46.8116,115.4124 0,0 -46.8115,-115.4124 -46.8115,-115.4124 z"/><g transform="matrix(0.75,0,0,-0.75,0,450)" id="g4175"><path id="path4177" style="fill:none;stroke:#ffffff;stroke-width:26.66666985;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.41421402;stroke-dasharray:none;stroke-opacity:1" d="m 307.0915,367.5999 c 0,0 -84.6338,-106.4347 -84.6338,-106.4347"/></g></g></g></svg>""",
                 )
             with open(
-                os.path.join(os.path.split(playlist_filename)[0], "images", "count_circles.svg"),
+                os.path.join(_images_dir, "count_circles.svg"),
                 "w",
             ) as fo:
                 fo.write(
@@ -892,7 +857,7 @@ class OsuPlaylist(object):
         mods = raw_mods.copy() if slot_mod in available_mods else raw_mods[1:].copy()
         for _mod in mods:
             # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 slot_mod 存在）
-            if _mod["acronym"] in self.custom_mods_acronym:
+            if _mod["acronym"] in SLOT_MODS:
                 raise ValueError("custom mod cannot be used other than slot_mod '%s'" % _mod["acronym"])
 
         # 下载谱面与计算难度
@@ -970,7 +935,7 @@ class OsuPlaylist(object):
                     continue
                 else:
                     column = cast(Literal["_"], column)
-                    extra_notes += "<br />%s: %s" % (column, element[column])
+                    extra_notes += "<br />%s: %s" % (column, element.get(column, ""))
 
             beatmap_info = (
                 """    </div>
@@ -991,7 +956,7 @@ class OsuPlaylist(object):
                 <div style="color: {cover.stars_text_color}; opacity: {'1' if cover.is_high_stars else '0.8'}; text-shadow: 0px 0.5px 1.5px rgba(185, 185, 185, 0.5)"><i class="fas fa-star" {'' if cover.is_high_stars else 'style="color: #0f172a"'}></i>{cover.stars.replace("󰓎", "")}</div>
               </div>
               <div class="flex gap-2 has-tooltip">
-                {"".join([f'<span class="card-main px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}{"<sup>*</sup>" if mod.get("settings") and mod["acronym"] not in self.custom_mods_acronym else ""}</span>' for mod in raw_mods])}
+                {"".join([f'<span class="card-main px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}{"<sup>*</sup>" if mod.get("settings") and mod["acronym"] not in SLOT_MODS else ""}</span>' for mod in raw_mods])}
                 <div class="tooltip flex">
                   <div class="flex-initial rounded text-xs shadow-xl mt-6 px-2 py-1 mx-4 w-auto h-auto break-all notes" style="opacity: 88%; white-space: pre-line">{";\n".join(mods_ready)}</div>
                 </div>
@@ -1118,7 +1083,7 @@ class OsuPlaylist(object):
                 continue
             else:
                 column = cast(Literal["_"], column)
-                completed_beatmap[column] = element[column]
+                completed_beatmap[column] = element.get(column, "")
         return completed_beatmap
 
     async def playlist_task(self) -> list[CompletedPlaylistBeatmap]:
@@ -1180,7 +1145,7 @@ class OsuPlaylist(object):
             html_footer,
         )
         with open(
-            self.playlist_filename.replace(".properties", ".html"),
+            os.path.splitext(self.playlist_filename)[0] + ".html",
             "w",
             encoding="utf-8",
         ) as fo:
@@ -1226,8 +1191,5 @@ class OsuPlaylist(object):
                         html_body_suffix="",
                     ),
                 )
-
-        # 清理临时文件夹
-        rmtree(self.tmp_dir)
 
         return df_standalone

@@ -18,7 +18,8 @@ from streamlit import logger
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import awa_query as _awa_query, draw_clustered_bars, get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, refresh, save_value
-from osuawa.utils import BeatmapJob, BeatmapSpec, SimpleDifficultyAttribute, _create_tmp_playlist_p, available_mods, get_playlist_lastupdate, read_injected_code, safe_norm
+from osuawa.playlist import PlaylistSource
+from osuawa.utils import BeatmapJob, BeatmapSpec, SimpleDifficultyAttribute, available_mods, get_playlist_lastupdate, read_injected_code, safe_norm
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -95,25 +96,23 @@ def export_filtered_playlist():
     if selected_rows is None or len(selected_rows) == 0:
         st.error(_("no beatmaps selected"))
         return
-    parsed_mods_list = [orjson.loads(x) for x in selected_rows["RAW_MODS"]]
     specs_x = [
-        BeatmapSpec(bid, mods, skill, "", note, 0, "", "", 0.0)
+        BeatmapSpec(bid, orjson.loads(mods), skill, "", note, 0, "", "", 0.0)
         for bid, mods, skill, note in zip(
             selected_rows["BID"],
-            parsed_mods_list,
+            selected_rows["RAW_MODS"],
             selected_rows["SKILL_SLOT"],
             selected_rows["NOTES"],
             strict=True,
         )
-    ]  # 直接用解析好的列表
+    ]
     try:
-        tmp_playlist_filename_x = _create_tmp_playlist_p(uid, specs_x)
-    except ValueError as e:
-        st.error(e)
+        playlist_text = PlaylistSource.from_specs(specs_x).dump()
+    except ValueError as error:
+        st.error(str(error))
         return
-    st.code("\n".join([str(bid) for bid in selected_rows["BID"]]))
-    with open(tmp_playlist_filename_x, "r", encoding="utf-8") as fi:
-        st.code(fi.read(), language="properties")
+    st.code(playlist_text, language="properties")
+    st.download_button(_("Download"), playlist_text, file_name="%s.playlist" % st.session_state.aggrid_key2)
 
 
 NEEDED_ATTR_MAPPING = {
@@ -691,7 +690,7 @@ if st.session_state.perm >= 1:
 st.divider()
 
 st.markdown(_("## Generate from a file"))
-uploaded_file = st.file_uploader(_("Choose a file"), type=["properties"])
+uploaded_file = st.file_uploader(_("Choose a file"), type=["playlist", "properties", "txt"])
 if uploaded_file is not None:
     if isinstance(uploaded_file, list):
         st.error(_("multiple files not allowed"))
@@ -700,7 +699,7 @@ if uploaded_file is not None:
     session_path = os.path.join(C.UPLOADED_DIRECTORY.value, uid)
     if not os.path.exists(session_path):
         os.mkdir(session_path)
-    playlist_filename = os.path.join(session_path, "%s.properties" % playlist_name)
+    playlist_filename = os.path.join(session_path, "%s.playlist" % playlist_name)
     html_filename = os.path.join(session_path, "%s.html" % playlist_name)
     covers_dir = os.path.join(session_path, "%s.covers" % playlist_name)
     csv_filename = os.path.join(session_path, "%s.csv" % playlist_name)

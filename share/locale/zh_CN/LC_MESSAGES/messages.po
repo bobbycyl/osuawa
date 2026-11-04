@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-04 20:33+0800\n"
+"POT-Creation-Date: 2026-11-04 23:11+0800\n"
 "PO-Revision-Date: 2026-11-04 20:33+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -79,7 +79,7 @@ msgstr "当前会话：%s"
 msgid "Score Visualizer"
 msgstr "查成分"
 
-#: app.py:128 pages/Playlist_generator.py:30
+#: app.py:128 pages/Playlist_generator.py:31
 msgid "Playlist Generator"
 msgstr "做课题"
 
@@ -456,22 +456,26 @@ msgstr "成功"
 msgid "error"
 msgstr "错误"
 
-#: pages/Playlist_generator.py:33 pages/Playlist_generator.py:39
+#: pages/Playlist_generator.py:34 pages/Playlist_generator.py:40
 #: pages/Playlist_generator.py:257
 msgid "Mod Generator"
 msgstr "模组选择"
 
-#: pages/Playlist_generator.py:45
+#: pages/Playlist_generator.py:46
 msgid "New Style"
 msgstr "新版样式"
 
-#: pages/Playlist_generator.py:93
+#: pages/Playlist_generator.py:94
 msgid "Export selection as a playlist"
 msgstr "将选中行导出为课题"
 
-#: pages/Playlist_generator.py:96 pages/Playlist_generator.py:672
+#: pages/Playlist_generator.py:97 pages/Playlist_generator.py:672
 msgid "no beatmaps selected"
 msgstr "未选中任何谱面"
+
+#: pages/Playlist_generator.py:116
+msgid "Download"
+msgstr "下载"
 
 #: pages/Playlist_generator.py:198
 msgid "Slot Filter"

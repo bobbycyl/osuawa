@@ -28,7 +28,8 @@ from sqlalchemy import text
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.db import build_score_insert_sql, create_db_engine, resolve_db_url, score_users_query, scores_compact_to_params, sync_score_columns
-from osuawa.utils import BeatmapJob, BeatmapSpec, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, RedisTaskId, SimpleScoreInfo, _create_tmp_playlist_p, push_task
+from osuawa.playlist import PlaylistSource
+from osuawa.utils import BeatmapJob, BeatmapSpec, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, RedisTaskId, SimpleScoreInfo, push_task
 
 # streamlit settings
 st_config = toml.load("./.streamlit/config.toml")
@@ -213,33 +214,33 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     ```
 
     :param name: 课题名（在线环境中建议直接用 UID）
-    :param beatmap_specs: bid, raw_mods, slot, pool, notes, status, comments, suggestor, add_ts
+    :param beatmap_specs: 每条 spec 依次提供 bid, raw_mods, slot, pool, notes, status, comments, suggestor, add_ts
     :return: 一个谱面列表，为数据库字段优化了键名
     """
-    tmp_playlist_filename = _create_tmp_playlist_p(name, beatmap_specs)
+    # 直接把 spec 交给 OsuPlaylist，不再先写一份临时源文件
+    source = PlaylistSource.from_specs(beatmap_specs)
+    playlist_filename = os.path.join(C.UPLOADED_DIRECTORY.value, "online", "%s_%d.playlist" % (name, time_ns() // 1_000_000))
     # noinspection PyBroadException
     try:
-        tmp_playlist = OsuPlaylist(awa, tmp_playlist_filename, css_style=1)  # 这里 css_style 不知道用哪一个好
-        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = awa.run_coro(tmp_playlist.playlist_task())  # 这里面每一个 dict 都表示一个 playlist beatmap
-    except Exception as e:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup  # noqa: E722
+        tmp_playlist = OsuPlaylist(awa, playlist_filename, css_style=1, source=source)
+        playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = awa.run_coro(tmp_playlist.playlist_task())
+    except Exception as e:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup
         raise ValueError("failed to parse the spec(s): %s" % beatmap_specs) from e
-    # playlist_beatmaps_raw 的顺序可能和传入的 specs 顺序不一致
-    # 原始 beatmap 的键应包含如下
-    # # BID, SID, Artist - Title (Creator) [Version], Stars, SR, BPM, Hit Length, Max Combo, CS, AR, OD, Mods, Notes, slot
-    # 根据 # 键对其进行排序是有必要的。# 从 1 开始递增，它与传入的 specs 顺序一致
+    # 根据 # 键对其进行排序。# 从 1 开始递增，它与传入的 specs 顺序一致
     playlist_beatmaps_raw.sort(key=lambda x: int(x["#"]))
     playlist_beatmaps_db = []
-    for i, playlist_beatmap_raw in enumerate(playlist_beatmaps_raw):
-        if len(playlist_beatmap_raw["slot"]) < 3:
-            raise ValueError("slot too short: '%s'" % playlist_beatmap_raw["slot"])
-        if len(playlist_beatmap_raw["slot"]) > int(C.SLOT_MAX_LEN.value):
-            raise ValueError("slot too long: '%s'" % playlist_beatmap_raw["slot"])
+    for playlist_beatmap_raw, spec in zip(playlist_beatmaps_raw, beatmap_specs, strict=True):
+        if "slot" in playlist_beatmap_raw:
+            if len(playlist_beatmap_raw["slot"]) < 3:
+                raise ValueError("slot too short: '%s'" % playlist_beatmap_raw["slot"])
+            if len(playlist_beatmap_raw["slot"]) > int(C.SLOT_MAX_LEN.value):
+                raise ValueError("slot too long: '%s'" % playlist_beatmap_raw["slot"])
         playlist_beatmaps_db.append(
             DatabasePlaylistBeatmap(
                 BID=playlist_beatmap_raw["BID"],
                 SID=playlist_beatmap_raw["SID"],
                 INFO=playlist_beatmap_raw["Artist - Title (Creator) [Version]"],
-                SKILL_SLOT=playlist_beatmap_raw["slot"],
+                SKILL_SLOT=slot,
                 SR=playlist_beatmap_raw["SR"],  # 相比 Stars，SR 不依赖特殊字体
                 BPM=playlist_beatmap_raw["BPM"],
                 HIT_LENGTH=playlist_beatmap_raw["Hit Length"],
@@ -249,18 +250,17 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
                 OD=playlist_beatmap_raw["OD"],
                 MODS=playlist_beatmap_raw["Mods"],
                 NOTES=playlist_beatmap_raw["Notes"],  # notes 在 OsuPlaylist 里有默认值处理
-                STATUS=beatmap_specs[i][5],
-                COMMENTS=beatmap_specs[i][6],
-                POOL=beatmap_specs[i][3],
-                SUGGESTOR=beatmap_specs[i][7],
-                RAW_MODS=orjson.dumps(beatmap_specs[i][1]).decode(),  # orjson 序列化时输出的是紧凑的字符串
-                ADD_TS=beatmap_specs[i][8],
+                STATUS=spec.status,
+                COMMENTS=spec.comments,
+                POOL=spec.pool,
+                SUGGESTOR=spec.suggestor,
+                RAW_MODS=orjson.dumps(spec.raw_mods).decode(),  # orjson 序列化时输出的是紧凑的字符串
+                ADD_TS=spec.add_ts,
                 U_ARTIST=playlist_beatmap_raw["_Artist"],
                 U_TITLE=playlist_beatmap_raw["_Title"],
-                SERIES=beatmap_specs[i][3].split("-", 1)[0],
+                SERIES=spec.pool.split("-", 1)[0],
             ),
         )
-    # todo: 是否要删除临时文件
     return playlist_beatmaps_db
 
 
