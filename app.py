@@ -4,10 +4,10 @@ import gettext
 import logging
 import os
 import pickle
-from html import escape as html_escape
 from threading import Lock
 from time import time
 from typing import Optional, TYPE_CHECKING, cast
+from urllib.parse import urlencode
 
 import requests
 import streamlit as st
@@ -28,7 +28,7 @@ from osuawa.components import (
     task_board,
     update_user_cache,
 )
-from osuawa.utils import create_unique_picker, read_injected_code
+from osuawa.utils import consume_oauth_state, create_unique_picker, is_safe_filename, generate_oauth_state, read_injected_code
 
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
@@ -87,6 +87,8 @@ def register_awa(
     dm,
     oauth_token: Optional[str] = None,
     oauth_refresh_token: Optional[str] = None,
+    *,
+    aid: str,
 ):
     # 在 session_state 中持久化事件循环
     if "async_loop" not in st.session_state:
@@ -101,7 +103,7 @@ def register_awa(
         ru,
         sc,
         dm,
-        st.context.cookies["ajs_anonymous_id"],
+        aid,
         oauth_token,
         oauth_refresh_token,
         debugging_mode=st.session_state._debugging_mode,
@@ -179,71 +181,85 @@ if "awa" not in st.session_state:
     prepare_bar.progress(35, text=get_an_osu_meme())
 
     # 由于刷新 token 的任务已经完全交由 daemon 处理，所以这里只需要读取 token 文件即可
+    aid = st.context.cookies.get("ajs_anonymous_id") or ""
     try:
-        if "code" not in st.query_params:
-            # check if oauth token is pickled
-            if "ajs_anonymous_id" in st.context.cookies and os.path.exists(
-                os.path.join(
-                    C.OAUTH_TOKEN_DIRECTORY.value,
-                    "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
-                ),
-            ):
-                with open(
-                    os.path.join(
-                        C.OAUTH_TOKEN_DIRECTORY.value,
-                        "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
-                    ),
-                    "rb",
-                ) as fi_b:
+        # aid 来自客户端 cookie，拼进任何路径之前先判定；不通过就终止
+        if not is_safe_filename(aid):
+            raise PermissionError("unsafe anonymous id cookie; enable cookies and refresh the page")
+        # 文件名就是 ossapi 的 token_key（这里为 aid），pickle 也是它的既有约定；
+        # 不要改成哈希名或换序列化格式，详见 C.OAUTH_TOKEN_DIRECTORY 处的说明
+        token_filename = "%s.pickle" % aid
+        token_path = os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, token_filename)
+        refresh_path = os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", token_filename)
+        _oauth_token: Optional[str] = None
+        _refresh_token: Optional[str] = None
+
+        if "code" in st.query_params:
+            # 回调：state 校验必须先于「拿 code 换 token」。授权按钮会在新标签页打开，
+            # 回调页的 session_state 是空的，只能靠同源 cookie 找回落盘的那份 state。
+            # 一次性参数无论成败都从 URL 里清掉，避免刷新时重复消费或误判。
+            code = st.query_params.code
+            state = st.query_params.get("state")
+            st.query_params.pop("code")
+            if "state" in st.query_params:
+                st.query_params.pop("state")
+            if not state or not consume_oauth_state(aid, state):
+                logger.get_logger("streamlit").warning("oauth state mismatch or expired for session %s" % get_session_id())
+            else:
+                prepare_bar.progress(50, text=get_an_osu_meme())
+                _response = requests.post(
+                    Awapi.TOKEN_URL.format(domain=domain),
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    data={
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "code": code,
+                        "grant_type": "authorization_code",
+                        "redirect_uri": redirect_url,
+                    },
+                    timeout=(5, 15),
+                )
+                _response.raise_for_status()
+                _oauth_r = _response.json()
+                if not isinstance(_oauth_r, dict):
+                    raise ValueError("unexpected oauth token response")
+                if _oauth_r.get("error"):
+                    raise PermissionError("oauth token request failed: '%s'" % _oauth_r.get("error_description"))
+                _oauth_token = _oauth_r.get("access_token")
+                _refresh_token = _oauth_r.get("refresh_token")
+                if not _oauth_token:
+                    raise ValueError("oauth token response has no access token")
+                prepare_bar.progress(67, text=get_an_osu_meme())
+
+        if _oauth_token is None:
+            # 没拿到新 token（首次访问，或 state 校验失败）就回落到此前保存的 token 文件；
+            # state 不匹配时绝不换 token，攻击者无法把受害者会话绑到自己的账号。
+            if os.path.exists(token_path) and os.path.exists(refresh_path):
+                with open(token_path, "rb") as fi_b:
                     _oauth_token = pickle.load(fi_b)
-                with open(
-                    os.path.join(
-                        C.OAUTH_TOKEN_DIRECTORY.value,
-                        "refresh",
-                        "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
-                    ),
-                    "rb",
-                ) as fi_b:
+                with open(refresh_path, "rb") as fi_b:
                     _refresh_token = pickle.load(fi_b)
                 prepare_bar.progress(67, text=get_an_osu_meme())
             else:
                 st.info(_("Please click the button below to authorize the app."))
-                st.link_button(
-                    _("OAuth2 URL"),
-                    "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s"
-                    % (
-                        Awapi.AUTH_CODE_URL.format(domain=domain),
-                        html_escape(str(client_id)),
-                        html_escape(redirect_url),
-                        "+".join(scopes),
+                auth_url = "%s?%s" % (
+                    Awapi.AUTH_CODE_URL.format(domain=domain),
+                    urlencode(
+                        {
+                            "client_id": client_id,
+                            "redirect_uri": redirect_url,
+                            "response_type": "code",
+                            "scope": " ".join(scopes),
+                            "state": generate_oauth_state(aid),
+                        },
                     ),
-                    icon=":material/login:",
                 )
+                st.link_button(_("OAuth2 URL"), auth_url, icon=":material/login:")
                 prepare_bar.empty()
                 st.stop()
-        else:
-            code = st.query_params.code
-            prepare_bar.progress(50, text=get_an_osu_meme())
-            _oauth_r = requests.post(
-                Awapi.TOKEN_URL.format(domain=domain),
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                data={
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": redirect_url,
-                },
-            ).json()
-            if _oauth_r.get("error"):
-                raise NotImplementedError(_oauth_r.get("error_description"))
-            st.query_params.pop("code")
-            _oauth_token = _oauth_r.get("access_token")
-            _refresh_token = _oauth_r.get("refresh_token")
-            prepare_bar.progress(67, text=get_an_osu_meme())
 
         awa = register_awa(
             client_id,
@@ -253,6 +269,7 @@ if "awa" not in st.session_state:
             domain,
             _oauth_token,
             _refresh_token,
+            aid=aid,
         )
         # set variables
         # 浏览器没上报时区时保留 Osuawa 的默认值，避免下游 ZoneInfo(None) 报错；
@@ -261,36 +278,25 @@ if "awa" not in st.session_state:
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
         # save token
-        with open(
-            os.path.join(
-                C.OAUTH_TOKEN_DIRECTORY.value,
-                "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
-            ),
-            "wb",
-        ) as fi_b:
+        with open(token_path, "wb") as fi_b:
             pickle.dump(_oauth_token, fi_b)
-        with open(
-            os.path.join(
-                C.OAUTH_TOKEN_DIRECTORY.value,
-                "refresh",
-                "%s.pickle" % st.context.cookies["ajs_anonymous_id"],
-            ),
-            "wb",
-        ) as fi_b:
+        with open(refresh_path, "wb") as fi_b:
             pickle.dump(_refresh_token, fi_b)
     except Exception as e:
         # 由于自动刷新功能由 daemon 承担，这里理论上不会触发
-        if not st.session_state._debugging_mode:
-            delete_user_cache(st.context.cookies["ajs_anonymous_id"])
+        if not st.session_state._debugging_mode and is_safe_filename(aid):
+            delete_user_cache(aid)
         st.error(str(e))
         prepare_bar.empty()
         if "code" in st.query_params:
             st.query_params.pop("code")
+        if "state" in st.query_params:
+            st.query_params.pop("state")
         st.stop()
     update_user_cache(
         st.session_state.user,
         st.session_state.username,
-        st.context.cookies["ajs_anonymous_id"],
+        aid,
         time(),
     )
 

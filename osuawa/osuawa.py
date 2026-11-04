@@ -244,6 +244,8 @@ class Osuawa(CachedThrottledMixIn):
         redirect_url,
         scopes,
         domain,
+        # 必须传原始 aid：它既是 ossapi 的 token_key（决定 <token_key>.pickle 文件名），
+        # 也是 USER_CACHE.AID；不能传哈希后的值。详见 C.OAUTH_TOKEN_DIRECTORY。
         token_key: str,
         oauth_token: Optional[str],
         oauth_refresh_token: Optional[str],

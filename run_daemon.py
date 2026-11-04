@@ -29,7 +29,7 @@ from sqlalchemy import text
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.db import build_score_insert_sql, create_db_engine, resolve_db_url, score_users_query, scores_compact_to_params, sync_score_columns
 from osuawa.playlist import PlaylistSource
-from osuawa.utils import BeatmapJob, BeatmapSpec, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, RedisTaskId, SimpleScoreInfo, push_task
+from osuawa.utils import BeatmapJob, BeatmapSpec, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, RedisTaskId, SimpleScoreInfo, is_safe_filename, push_task
 
 # streamlit settings
 st_config = toml.load("./.streamlit/config.toml")
@@ -41,10 +41,12 @@ for _path in [
     C.OUTPUT_DIRECTORY.value,
     C.STATIC_DIRECTORY.value,
     C.UPLOADED_DIRECTORY.value,
+    os.path.join(C.UPLOADED_DIRECTORY.value, "online"),
     C.BEATMAPS_CACHE_DIRECTORY.value,
     C.OAUTH_TOKEN_DIRECTORY.value,
     os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh"),
     C.COMPONENTS_SHELVES_DIRECTORY.value,
+    C.OAUTH_STATE_DIRECTORY.value,
 ]:
     if not os.path.exists(_path):
         os.mkdir(_path)
@@ -217,6 +219,9 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     :param beatmap_specs: 每条 spec 依次提供 bid, raw_mods, slot, pool, notes, status, comments, suggestor, add_ts
     :return: 一个谱面列表，为数据库字段优化了键名
     """
+    # name 来自 Redis 消息里的 operator，拼进输出路径之前先判定；不通过就终止
+    if not is_safe_filename(name):
+        raise ValueError("unsafe playlist name: '%s'" % name)
     # 直接把 spec 交给 OsuPlaylist，不再先写一份临时源文件
     source = PlaylistSource.from_specs(beatmap_specs)
     playlist_filename = os.path.join(C.UPLOADED_DIRECTORY.value, "online", "%s_%d.playlist" % (name, time_ns() // 1_000_000))
@@ -381,7 +386,14 @@ def cleanup_old_tasks_status():
 
 
 def refresh_oauth_token():
+    # aid 直接由文件名反推：它既是 ossapi 的 token_key，也是 USER_CACHE.AID，
+    # 还要和 .oauth/<aid>.pickle 对得上。文件名与 pickle 格式都不能改，
+    # 详见 C.OAUTH_TOKEN_DIRECTORY 处的说明。
     for filename in os.listdir(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh")):
+        # 目录内容也会被拼进路径，先判定；坏文件跳过而不拖垮整个守护进程
+        if not is_safe_filename(filename):
+            logger.error("skipping unsafe token filename: %s" % filename)
+            continue
         aid = os.path.splitext(filename)[0]
         with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", filename), "rb") as fi_b:
             refresh_token = pickle.load(fi_b)

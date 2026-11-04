@@ -66,6 +66,7 @@ from osuawa.utils import (
     get_playlist_lastupdate,
     get_size_and_count,
     hex_to_rgba,
+    is_safe_filename,
     mania_mod_entries,
     mania_mod_indexes,
     osu_mod_entries,
@@ -113,18 +114,25 @@ def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False
     return df
 
 
+def _shelve_path(aid: str) -> str:
+    """按 aid 拼半持久化 shelve 路径
+
+    aid 来自客户端 cookie，拼路径之前先判定；不通过就终止，绝不把可控字符串交给
+    shelve.open。文件名保持原始 aid（不要哈希），与 C.OAUTH_TOKEN_DIRECTORY 同理：
+    改了名字，用户此前保存的半持久化数据就全部失配。
+    """
+    if not is_safe_filename(aid):
+        raise ValueError("unsafe component storage key")
+    return os.path.join(C.COMPONENTS_SHELVES_DIRECTORY.value, aid)
+
+
 def save_value(key: str) -> None:
     # <key> <-> st.session_state._<key>_value
     with st.session_state.lck:
         st.session_state["_%s_value" % key] = st.session_state[key]
         # semi-persistent storage
         # ./.streamlit/.components/<ajs_anonymous_id>
-        with shelve.open(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                st.context.cookies["ajs_anonymous_id"],
-            ),
-        ) as db:
+        with shelve.open(_shelve_path(st.context.cookies["ajs_anonymous_id"])) as db:
             db[key] = st.session_state["_%s_value" % key]
 
 
@@ -134,12 +142,7 @@ def del_value(key: str, prefix_mode: bool = False) -> None:
 
     with (
         st.session_state.lck,
-        shelve.open(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                st.context.cookies["ajs_anonymous_id"],
-            ),
-        ) as db,
+        shelve.open(_shelve_path(st.context.cookies["ajs_anonymous_id"])) as db,
     ):
         for key in keys:
             if "_%s_value" % key in st.session_state:
@@ -151,38 +154,10 @@ def del_value(key: str, prefix_mode: bool = False) -> None:
 
 
 def check_shelve_exists() -> bool:
-    return "ajs_anonymous_id" in st.context.cookies and (
-        os.path.exists(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                st.context.cookies["ajs_anonymous_id"],
-            ),
-        )
-        or os.path.exists(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                "%s.bak" % st.context.cookies["ajs_anonymous_id"],
-            ),
-        )
-        or os.path.exists(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                "%s.dat" % st.context.cookies["ajs_anonymous_id"],
-            ),
-        )
-        or os.path.exists(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                "%s.dir" % st.context.cookies["ajs_anonymous_id"],
-            ),
-        )
-        or os.path.exists(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                "%s.db" % st.context.cookies["ajs_anonymous_id"],
-            ),
-        )
-    )
+    if "ajs_anonymous_id" not in st.context.cookies:
+        return False
+    base = _shelve_path(st.context.cookies["ajs_anonymous_id"])
+    return any(os.path.exists("%s%s" % (base, suffix)) for suffix in ("", ".bak", ".dat", ".dir", ".db"))
 
 
 def get_union_keys() -> set:
@@ -190,13 +165,7 @@ def get_union_keys() -> set:
     session_state_keys = set(st.session_state.keys())
     shelve_keys = set()
     if check_shelve_exists():
-        with shelve.open(
-            os.path.join(
-                C.COMPONENTS_SHELVES_DIRECTORY.value,
-                st.context.cookies["ajs_anonymous_id"],
-            ),
-            "r",
-        ) as db:
+        with shelve.open(_shelve_path(st.context.cookies["ajs_anonymous_id"]), "r") as db:
             shelve_keys = set(db.keys())
     return session_state_keys | shelve_keys
 
@@ -209,13 +178,7 @@ def load_value(key: str, default_value: Any) -> None:
             # ./.streamlit/.components/<ajs_anonymous_id>
             # 由于 load 可能发生在第一次访问（save 不会），所以还要检查 cookie 是否存在
             if check_shelve_exists():
-                with shelve.open(
-                    os.path.join(
-                        C.COMPONENTS_SHELVES_DIRECTORY.value,
-                        st.context.cookies["ajs_anonymous_id"],
-                    ),
-                    "r",
-                ) as db:
+                with shelve.open(_shelve_path(st.context.cookies["ajs_anonymous_id"]), "r") as db:
                     st.session_state["_%s_value" % key] = db.get(key, default_value)
             else:
                 st.session_state["_%s_value" % key] = default_value
@@ -810,6 +773,8 @@ def query_all_sessions() -> pd.DataFrame:
 
 
 def delete_user_cache(aid: str) -> None:
+    if not is_safe_filename(aid):
+        raise ValueError("unsafe token cache key")
     with _conn.session as s:
         s.execute(
             text(
@@ -835,6 +800,8 @@ def invalidate_user_cache(user: Optional[int] = None) -> None:
         )
         aids = [x[0] for x in res.fetchall()]
         for aid in aids:
+            if not is_safe_filename(aid):
+                raise ValueError("unsafe token cache key")
             if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid)):
                 os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid))
         s.execute(

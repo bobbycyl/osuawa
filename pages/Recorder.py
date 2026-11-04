@@ -137,8 +137,9 @@ user_scores_current = st.session_state.awa.run_coro(
     ),
 )
 st.write(user_scores_current)
+# 用户名来自 osu! api，用作输出文件名可能不安全，所以用 user_id
 with lck, open(
-    os.path.join(C.OUTPUT_DIRECTORY.value, "records_%s.txt") % st.session_state.username,
+    os.path.join(C.OUTPUT_DIRECTORY.value, "records_%d.txt") % st.session_state.user,
     "w",
     encoding="utf-8",
 ) as fo:

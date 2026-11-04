@@ -19,7 +19,7 @@ from streamlit import logger
 from osuawa import C, OsuPlaylist
 from osuawa.components import awa_query as _awa_query, draw_clustered_bars, get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, refresh, save_value
 from osuawa.playlist import PlaylistSource
-from osuawa.utils import BeatmapJob, BeatmapSpec, SimpleDifficultyAttribute, available_mods, get_playlist_lastupdate, read_injected_code, safe_norm
+from osuawa.utils import BeatmapJob, BeatmapSpec, SimpleDifficultyAttribute, available_mods, get_playlist_lastupdate, is_safe_filename, read_injected_code, safe_norm
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -695,7 +695,14 @@ if uploaded_file is not None:
     if isinstance(uploaded_file, list):
         st.error(_("multiple files not allowed"))
         st.stop()
+    # 浏览器上传的 name 可伪造，拼进 .playlist/.html/.csv/.covers 路径之前先判定；不通过就终止
+    if not is_safe_filename(uploaded_file.name):
+        st.error(_("invalid value: %s") % uploaded_file.name)
+        st.stop()
     playlist_name = os.path.splitext(uploaded_file.name)[0]
+    if not is_safe_filename(playlist_name):
+        st.error(_("invalid value: %s") % playlist_name)
+        st.stop()
     session_path = os.path.join(C.UPLOADED_DIRECTORY.value, uid)
     if not os.path.exists(session_path):
         os.mkdir(session_path)

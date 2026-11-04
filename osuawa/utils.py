@@ -2,9 +2,12 @@
 osuawa.py and utils.py should not contain i18n related text and streamlit related statement
 """
 
+import contextlib
+import hmac
 import os
 import re
 import types
+import unicodedata
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
@@ -12,6 +15,7 @@ from datetime import date, datetime, timezone
 from enum import Enum, unique
 from math import log10, sqrt
 from random import shuffle
+from secrets import token_urlsafe
 from time import sleep, time
 from typing import Any, Literal, NamedTuple, NewType, Optional, Self, TypedDict, Union, cast, get_args, get_origin
 from zoneinfo import ZoneInfo
@@ -80,13 +84,132 @@ class C(Enum):
     UPLOADED_DIRECTORY = "./static/uploaded/"
     BEATMAPS_CACHE_DIRECTORY = "./static/beatmaps/"
 
+    # ⚠️ token 文件是早期为对齐 ossapi 行为做的兼容性适配，三件事绑死、都不要改：
+    #   1. 目录：ossapi 的 OssapiAsync.__init__ 用 token_directory 拼 self.token_file；
+    #      Awapi 的默认值就是这个常量。
+    #   2. 文件名：ossapi 用 f"{token_key}.pickle"，而 Osuawa.__init__ 把 token_key
+    #      设成了 aid（由 app.py 的 register_awa 传入），所以项目自己也必须写
+    #      <aid>.pickle；app.py / run_daemon.py / components.py 四处都在按这个约定读写。
+    #      尤其不能改成哈希名、加前缀之类的「净化」，否则 ossapi 与本仓库会各读各的文件。
+    #      正确做法是在拼路径之前用 is_safe_filename(aid) 校验，不通过就终止。
+    #   3. 序列化格式：ossapi 内部是 pickle.load / pickle.dump，不能换 JSON。
+    #   另外 refresh/<aid>.pickle 是本项目额外维护的 refresh token，daemon 的
+    #   refresh_oauth_token() 靠 os.listdir("refresh") 的文件名反推 aid 去删 USER_CACHE，
+    #   所以文件名同时也是那张表的主键来源。
+    # todo: 若将来确实要重命名/迁移，必须一次性同步 ossapi 的 token_directory 与
+    #       token_key、上面四个调用点、USER_CACHE 里的 AID，并迁移磁盘上已有的
+    #       pickle 文件；单独改任何一处都会导致 token 丢失、重复授权或缓存删不掉。
     OAUTH_TOKEN_DIRECTORY = "./.streamlit/.oauth/"
+    # state 记录是本项目自己的、与 ossapi 无关的数据，同样先过 is_safe_filename 校验
+    OAUTH_STATE_DIRECTORY = "./.streamlit/.oauth/state/"
     COMPONENTS_SHELVES_DIRECTORY = "./.streamlit/.components/"
 
     TASK_QUEUE = "awatasks:queue"
     TASK_STATUS = "awatask:status:{task_id}"
 
     SLOT_MAX_LEN = 5
+
+
+#: 路径分隔符、Windows 保留字符、ASCII 控制字符，以及 Unicode 双向/零宽控制符
+#: （后者不改变可见内容，但能用于视觉欺骗或伪造日志行）
+_UNSAFE_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]')
+#: Windows 设备名；去掉扩展名后命中即非法（CON.txt 同样不行）
+_WINDOWS_DEVICE_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {"COM%d" % index for index in range(1, 10)}
+    | {"LPT%d" % index for index in range(1, 10)}
+)
+
+
+def is_safe_filename(name: str) -> bool:
+    """判断字符串能否安全地作为单个文件名使用"""
+    if not isinstance(name, str) or not name or len(name) > 255:
+        return False
+    if name in (".", "..") or name != name.strip():
+        return False
+    # 用 NFKC 而不是 NFC：只有兼容性分解才会把全角字符（／：＊ 等）折回 ASCII，
+    # NFC 对它们原样放行。原始串和规范化串都要过判定——前者是真正拼进路径的名字，
+    # 后者覆盖「下游某层做了 Unicode 规范化后才变成路径分隔符」的绕过。
+    checked = unicodedata.normalize("NFKC", name)
+    if _UNSAFE_FILENAME_CHARS.search(name) or _UNSAFE_FILENAME_CHARS.search(checked):
+        return False
+    if os.path.isabs(checked) or os.path.splitdrive(checked)[0]:
+        return False
+    if os.path.basename(checked) != checked:
+        return False
+    if not checked or checked[-1] in (" ", "."):  # Windows 会静默去掉尾部空格/点，可能撞名
+        return False
+    return checked.split(".", 1)[0].upper() not in _WINDOWS_DEVICE_NAMES
+
+
+# osu! api v2 用 state 防授权 CSRF，文档明确要求客户端自行校验这个值。
+# state 是一次性凭证，消费必须原子化：见 consume_oauth_state 里的 rename 抢占。
+OAUTH_STATE_TTL = 120.0  # state 有效期（秒），既容得下用户犹豫，又不给重放留长窗口
+
+
+def _oauth_state_path(aid: str) -> str:
+    return os.path.join(C.OAUTH_STATE_DIRECTORY.value, "%s.json" % aid)
+
+
+def generate_oauth_state(aid: str) -> str:
+    """为一次授权请求生成 state 并持久化，返回要放进授权 URL 的值
+
+    每个 aid 同时只保留一个 state：重复点击授权按钮会覆盖旧的，旧回调自然失效。
+    """
+    if not is_safe_filename(aid):
+        raise ValueError("unsafe oauth state key")
+    # 全新部署时 state 目录还不存在，下面的 listdir 与写入都依赖它
+    os.makedirs(C.OAUTH_STATE_DIRECTORY.value, exist_ok=True)
+    now = time()
+    # 顺手清理过期记录与消费失败的残留，避免用户反复点授权按钮留下垃圾文件
+    for filename in os.listdir(C.OAUTH_STATE_DIRECTORY.value):
+        state_path = os.path.join(C.OAUTH_STATE_DIRECTORY.value, filename)
+        try:
+            if now - os.path.getmtime(state_path) > OAUTH_STATE_TTL:
+                os.unlink(state_path)
+        except OSError:
+            continue
+    state = token_urlsafe(32)
+    state_path = _oauth_state_path(aid)
+    tmp_path = "%s.%s.tmp" % (state_path, uuid.uuid4().hex)
+    with open(tmp_path, "w", encoding="utf-8") as fo:
+        fo.write(orjson.dumps({"state": state, "ts": now}).decode())
+    os.replace(tmp_path, state_path)  # 原子替换，避免回调读到写了一半的文件
+    return state
+
+
+def consume_oauth_state(aid: str, state: str) -> bool:
+    """校验回调携带的 state，且保证只会被消费一次
+
+    用 os.rename 把记录原子地「抢走」：文件系统的 rename 是原子的，并发到达的多个
+    回调只有一个能成功，因此不可能出现同一 state 被校验通过两次。抢到之后再比对
+    state 与签发时间；记录不存在、坏记录、过期、state 不匹配一律返回 False。
+    """
+    if not is_safe_filename(aid) or not isinstance(state, str) or not state:
+        return False
+    state_path = _oauth_state_path(aid)
+    claimed = "%s.%s.claimed" % (state_path, uuid.uuid4().hex)
+    try:
+        os.rename(state_path, claimed)
+    except OSError:
+        return False
+    try:
+        with open(claimed, "r", encoding="utf-8") as fi:
+            payload = orjson.loads(fi.read())
+    except (OSError, orjson.JSONDecodeError):
+        return False
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(claimed)
+    if not isinstance(payload, dict):
+        return False
+    expected = payload.get("state")
+    issued_at = payload.get("ts")
+    if not isinstance(expected, str) or not isinstance(issued_at, (int, float)):
+        return False
+    if time() - issued_at > OAUTH_STATE_TTL:
+        return False
+    return hmac.compare_digest(expected.encode("utf-8"), state.encode("utf-8"))
 
 
 @unique
@@ -149,6 +272,8 @@ def read_injected_code(filename: str) -> str:
     :param filename: inject 文件名
     :return: 文件内容
     """
+    if not is_safe_filename(filename):
+        raise ValueError("unsafe injected code filename: '%s'" % filename)
     _path = os.path.join(assets_dir, "inject", filename)
     match os.path.splitext(filename)[1]:
         case ".css":
