@@ -60,7 +60,7 @@ from osuawa.utils import (
     catch_mod_entries,
     catch_mod_indexes,
     day_bounds_epoch,
-    download_osu,
+    download_beatmap,
     format_size,
     get_mod_type_color,
     get_playlist_lastupdate,
@@ -101,7 +101,7 @@ def _assert_touches(database: DatabaseName, sql: str) -> None:
     ⚠️ 这不是安全边界：它拦不住任何有意为之的查询。
     """
     if not re.search(r"\b%s\b" % re.escape(database), _SQL_COMMENT_RE.sub(" ", sql), re.IGNORECASE):
-        raise ValueError(f"database name {database} not found in SQL query")
+        raise ValueError("database name '%s' not found in SQL query" % database)
 
 
 def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False, params: Optional[Mapping[str, Any]] = None) -> pd.DataFrame:
@@ -220,7 +220,7 @@ def load_value(key: str, default_value: Any) -> None:
             else:
                 st.session_state["_%s_value" % key] = default_value
         else:
-            raise RuntimeError("the key of memorized component is used: %s" % key)
+            raise RuntimeError("the key of memorized component is used: '%s'" % key)
     st.session_state[key] = st.session_state["_%s_value" % key]
 
 
@@ -548,7 +548,7 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
         else:
             continue
         if os.path.exists("./playlists/%s.html" % m.group(1)) and fast_mode:
-            st.write(_("skipped %s") % m.group(1))
+            st.write(_("skipped '%s'") % m.group(1))
             continue
         try:
             copyfile(
@@ -567,9 +567,10 @@ def generate_all_playlists(fast_mode: bool = False, output_zip: bool = False):
             df = o.generate()
             df.to_csv("./playlists/%s.csv" % m.group(1), index=False)
         except Exception as e:
-            raise RuntimeError("%s (%s)" % (_("failed to generate %s") % m.group(1), str(e))) from e
+            st.error("%s (%s)" % (_("failed to generate '%s'") % m.group(1), str(e)))  # style: allow
+            st.stop()
         else:
-            st.write(_("generated %s") % m.group(1))
+            st.write(_("generated '%s'") % m.group(1))
         finally:
             os.remove("./playlists/%s.properties" % m.group(1))
     # report duplicates
@@ -586,7 +587,8 @@ def get_all_score_users() -> list[int]:
 
 def cat(user: int):
     if user not in get_all_score_users():
-        raise ValueError(_("user %d not found") % user)
+        st.error(_("user %d not found") % user)
+        st.stop()
     return get_scores_dataframe(user)
 
 
@@ -650,8 +652,6 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
             ruleset = CatchRuleset()
         case GameMode.MANIA:
             ruleset = ManiaRuleset()
-        case _:
-            raise ValueError(_("unknown ruleset"))
     match ruleset_id:
         case 0:
             ruleset = OsuRuleset()
@@ -664,8 +664,9 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
         case None:  # 不使用转谱
             pass
         case _:
-            raise ValueError(_("invalid ruleset id"))
-    download_osu(beatmap)
+            st.error(_("invalid ruleset id: '%d'" % ruleset_id))
+            st.stop()
+    download_beatmap(beatmap)
 
     mods = make_unstandardized_mods_from_lines(mods=mod_settings.split(" ")) if mod_settings is not None else []
     # 生成 osu_tools 所能接受的样式
@@ -695,12 +696,12 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
         x="time",
         y="strain",
         color="skill",
-        title="Difficulty Graph of %d" % beatmap.id,
+        title=_("Difficulty Graph of %d") % beatmap.id,
         color_discrete_sequence=px.colors.qualitative.D3,
     )
     fig.update_layout(
-        xaxis_title="Start Time",
-        yaxis_title="Strain",
+        xaxis_title=_("Start Time"),
+        yaxis_title=_("Strain"),
     )
     for trace in fig.data:
         trace = cast(go.Scatter, trace)
@@ -715,9 +716,9 @@ def draw_clustered_bars(
     df: pd.DataFrame,
     *,
     title: str | None = None,
-    xaxis_title: str = "样本",
-    yaxis_title: str = "取值",
-    legend_title: str = "指标",
+    xaxis_title: str | None = None,
+    yaxis_title: str | None = None,
+    legend_title: str | None = None,
     value_fmt: str = ".3f",
     show_mean: bool = True,
     mean_dash: str = "dash",
@@ -755,10 +756,10 @@ def draw_clustered_bars(
                 x=samples,
                 y=pd.to_numeric(df[ind], errors="coerce").tolist(),
                 name=str(ind),
-                marker_color=colors[i],
+                marker=dict(color=colors[i]),
                 legendgroup=str(ind),
                 legendrank=2 * i + 1,
-                hovertemplate=(f"{ind}<br>%{{x}}: %{{y:{value_fmt}}}<extra></extra>"),
+                hovertemplate=f"{ind}<br>%{{x}}: %{{y:{value_fmt}}}<extra></extra>",
             ),
         )
 
@@ -774,11 +775,11 @@ def draw_clustered_bars(
                     x=[samples[0], samples[-1]],
                     y=[m, m],
                     mode="lines",
-                    name=f"{ind} (mean): {format(m, value_fmt)}",
+                    name="%s (%s): %s" % (ind, _("mean"), format(m, value_fmt)),
                     legendgroup=str(ind),
                     legendrank=2 * i + 2,
                     line=dict(color=colors[i], width=2, dash=mean_dash),
-                    hovertemplate=(f"{ind} 均值: {format(m, value_fmt)}<extra></extra>"),
+                    hovertemplate=("%s %s: %s<extra></extra>" % (ind, _("mean"), format(m, value_fmt))),
                 ),
             )
 
@@ -788,9 +789,9 @@ def draw_clustered_bars(
         barmode="group",  # 关键：并排而不是堆叠
         bargap=bargap,
         bargroupgap=bargroupgap,
-        xaxis_title=xaxis_title,
-        yaxis_title=yaxis_title,
-        legend_title_text=legend_title,
+        xaxis_title=xaxis_title or _("Sample"),
+        yaxis_title=yaxis_title or _("Value"),
+        legend_title_text=legend_title or _("Metric"),
         template=template,
     )
     fig.update_xaxes(range=[-0.6, len(samples) - 0.4])
@@ -1106,7 +1107,7 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
                 case _:
                     st.json(_result, expanded=False)
 
-            st.caption(f"updated at: {dt.strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
+            st.caption(_("updated at: %s") % dt.strftime("%Y-%m-%d %H:%M:%S %Z%z"))
 
 
 def task_board():
@@ -1120,10 +1121,10 @@ def task_board():
     # 使用 tabs 分类显示
     tab1, tab2, tab3, tab4 = st.tabs(
         [
-            ":material/format_list_bulleted: all",
-            ":material/pending: pending",
-            ":material/check_circle: success",
-            ":material/error: error",
+            ":material/format_list_bulleted: " + _("all"),
+            ":material/pending: " + _("pending"),
+            ":material/check_circle: " + _("success"),
+            ":material/error: " + _("error"),
         ],
     )
     with tab1:

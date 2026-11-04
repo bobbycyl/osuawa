@@ -96,7 +96,7 @@ def iter_computed(engine: Engine, awa: Osuawa, expected_rows: int) -> Iterator[t
     bid_list = load_bids(engine)
     total = len(bid_list)
     if not bid_list and expected_rows:
-        raise RuntimeError("SCORE 表里有 %d 行成绩，却一个谱面都查不出来" % expected_rows)
+        raise RuntimeError("SCORE 表里有 %d 行成绩，但无任何谱面" % expected_rows)
     done_rows = 0
     logger.info("待重算 %d 个谱面 / %d 行成绩，每批 %d 个谱面" % (total, expected_rows, CHUNK_SIZE))
     for start in range(0, total, CHUNK_SIZE):

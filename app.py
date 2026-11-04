@@ -28,7 +28,7 @@ from osuawa.components import (
     task_board,
     update_user_cache,
 )
-from osuawa.utils import RedisTaskId, create_unique_picker, read_injected_code
+from osuawa.utils import create_unique_picker, read_injected_code
 
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins
@@ -124,13 +124,12 @@ builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  # 想要绕过 load_value、save_value 就必须使用这种方式
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
-pg_score_visualizer = st.Page("tools/Score_visualizer.py", title=_("Score Visualizer"))
-pg_playlist_generator = st.Page("tools/Playlist_generator.py", title=_("Playlist Generator"))
-pg_recorder = st.Page("tools/Recorder.py", title=_("Recorder"))
-pg_room_spectator = st.Page("tools/Room_spectator.py", title=_("Room Spectator"))
+pg_score_visualizer = st.Page("pages/Score_visualizer.py", title=_("Score Visualizer"))
+pg_playlist_generator = st.Page("pages/Playlist_generator.py", title=_("Playlist Generator"))
+pg_recorder = st.Page("pages/Recorder.py", title=_("Recorder"))
+pg_room_spectator = st.Page("pages/Room_spectator.py", title=_("Room Spectator"))
 
 load_value("redis_tasks", [])
-st.session_state.redis_tasks = cast(list[RedisTaskId], st.session_state.redis_tasks)
 if "cmdparser" not in st.session_state:
     st.session_state.cmdparser = CommandParser()
 
@@ -335,7 +334,7 @@ pg_list = [
     pg_room_spectator,
 ]
 if st.session_state.perm >= 2:
-    pg_list.append(st.Page("tools/Easter_egg.py", title=_("Easter Egg")))
+    pg_list.append(st.Page("pages/Easter_egg.py", title=_("Easter Egg")))
 pg = st.navigation(pg_list)  # ty: ignore[call-non-callable]
 
 if "immersive_active" not in st.session_state:

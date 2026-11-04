@@ -71,7 +71,7 @@ def get_score_column_types() -> list[tuple[str, str]]:
             columns.append((name, _SCORE_SQL_TYPES[origin]))
         except KeyError:
             raise RuntimeError(
-                "字段 %s（类型 %s）没有对应的 SQL 类型，请在 osuawa/db.py 的 _SCORE_SQL_TYPES 里显式补上" % (field.name, field_type),
+                "field '%s' (type %s) has no sql type mapping" % (field.name, field_type),
             ) from None
     return columns
 

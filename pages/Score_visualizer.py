@@ -39,10 +39,10 @@ CC = "#4C95D9"
 
 
 def calc_pp_overall_main(data: pd.DataFrame, tag: Optional[str] = None) -> str:
-    df_tag = data if tag is None else data[data[tag]]
+    df_tagged = data if tag is None else data[data[tag]]
     return "%.2f (%.2f%%)" % (
-        df_tag["pp"].sum(),
-        df_tag["pp"].sum() / data["pp"].sum() * 100,
+        df_tagged["pp"].sum(),
+        df_tagged["pp"].sum() / data["pp"].sum() * 100,
     )
 
 
@@ -78,7 +78,7 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
         try:
             df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
         except Exception as e:
-            st.error(_("invalid filter: ") + str(e))
+            st.error(_("invalid filter: %s") % e)
             df3 = pd.DataFrame()
     else:
         df3 = df2
@@ -190,23 +190,36 @@ st.link_button(_("User profile"), f"https://osu.ppy.sh/users/{user}")
 
 with st.container(border=True):
     st.markdown(_("## PP Overall"))
-    st.markdown(
-        f"""based on {len(df)} ({len(dfp)} passed) score(s)
-
-got/100/92/81/67 {dfp["pp"].sum():.2f}/{dfp["b_pp_100if"].sum():.2f}/{dfp["b_pp_92if"].sum():.2f}/{dfp["b_pp_81if"].sum():.2f}/{dfp["b_pp_67if"].sum():.2f}pp
-
-| tag         | got (passed)                                  | if (passed)                                 | count (total)                                 |
-| ----------- | --------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
-| hd          | {calc_pp_overall_main(dfp, "is_hd")}          | {calc_pp_overall_if(dfp, "is_hd")}          | {calc_pp_overall_count(df, "is_hd")}          |
-| high_ar     | {calc_pp_overall_main(dfp, "is_high_ar")}     | {calc_pp_overall_if(dfp, "is_high_ar")}     | {calc_pp_overall_count(df, "is_high_ar")}     |
-| low_ar      | {calc_pp_overall_main(dfp, "is_low_ar")}      | {calc_pp_overall_if(dfp, "is_low_ar")}      | {calc_pp_overall_count(df, "is_low_ar")}      |
-| very_low_ar | {calc_pp_overall_main(dfp, "is_very_low_ar")} | {calc_pp_overall_if(dfp, "is_very_low_ar")} | {calc_pp_overall_count(df, "is_very_low_ar")} |
-| speed_up    | {calc_pp_overall_main(dfp, "is_speed_up")}    | {calc_pp_overall_if(dfp, "is_speed_up")}    | {calc_pp_overall_count(df, "is_speed_up")}    |
-| speed_down  | {calc_pp_overall_main(dfp, "is_speed_down")}  | {calc_pp_overall_if(dfp, "is_speed_down")}  | {calc_pp_overall_count(df, "is_speed_down")}  |
-| total       | {calc_pp_overall_main(dfp)}                   | {calc_pp_overall_if(dfp)}                   | {calc_pp_overall_count(df)}                   |
-
-""",
+    _tag_rows = (
+        (_("hd"), "is_hd"),
+        (_("high_ar"), "is_high_ar"),
+        (_("low_ar"), "is_low_ar"),
+        (_("very_low_ar"), "is_very_low_ar"),
+        (_("speed_up"), "is_speed_up"),
+        (_("speed_down"), "is_speed_down"),
+        (_("fl"), "is_fl"),
     )
+    _pp_table = [
+        _("based on %d (%d passed) score(s)") % (len(df), len(dfp)),
+        "",
+        _("got/100/92/81/67 %s/%s/%s/%s/%spp")
+        % (
+            "%.2f" % dfp["pp"].sum(),
+            "%.2f" % dfp["b_pp_100if"].sum(),
+            "%.2f" % dfp["b_pp_92if"].sum(),
+            "%.2f" % dfp["b_pp_81if"].sum(),
+            "%.2f" % dfp["b_pp_67if"].sum(),
+        ),
+        "",
+        "| %s | %s | %s | %s |" % (_("tag"), _("got (passed)"), _("if (passed)"), _("count (total)")),
+        "| --- | --- | --- | --- |",
+    ]
+    for _label, _tag in _tag_rows:
+        _pp_table.append(
+            "| %s | %s | %s | %s |" % (_label, calc_pp_overall_main(dfp, _tag), calc_pp_overall_if(dfp, _tag), calc_pp_overall_count(df, _tag)),
+        )
+    _pp_table.append("| %s | %s | %s | %s |" % (_("total"), calc_pp_overall_main(dfp), calc_pp_overall_if(dfp), calc_pp_overall_count(df)))
+    st.markdown("\n".join(_pp_table))
 
 with st.expander(_("Filtering")):
     st.text_input(_("Mods filter (regex)"), key="cat_mods")
@@ -270,10 +283,9 @@ def create_distplot(
         data = np.asarray(data, dtype=float).ravel()
         data = data[np.isfinite(data)]  # 去 NaN / inf
         if data.size == 0:
-            st.warning(_("no valid data for %s") % label)
+            st.warning(_("no valid data for '%s'") % label)
             continue
-        # 不给颜色时取 plotly 的默认定性调色板；不能像以前那样退化成 []
-        # （Scatter.line.color 收到空列表会直接 ValueError
+        # 不给颜色时取 plotly 的默认定性调色板
         color = colors[i % len(colors)] if colors is not None else px.colors.qualitative.D3[i % len(px.colors.qualitative.D3)]
 
         # 直方图
@@ -284,7 +296,7 @@ def create_distplot(
                 go.Histogram(
                     x=data,
                     name=label,
-                    marker_color=color,
+                    marker=dict(color=color),
                     opacity=0.7,
                     histnorm=histnorm,
                     xbins=xbins,
@@ -417,7 +429,7 @@ with st.container(border=True):
     can_show_chart_pr = True
     if df_o_stats.at[st.session_state.cat_comp_index, "std"] == 0:
         st.error(
-            _("%s of user %s is constant (%s)")
+            _("'%s' of user %d is constant (%s)")
             % (
                 st.session_state.cat_comp_index,
                 user,
@@ -427,7 +439,7 @@ with st.container(border=True):
         can_show_chart_pr = False
     if df_c_stats.at[st.session_state.cat_comp_index, "std"] == 0:
         st.error(
-            _("%s of user %s is constant (%s)")
+            _("'%s' of user %d is constant (%s)")
             % (
                 st.session_state.cat_comp_index,
                 comp_user,

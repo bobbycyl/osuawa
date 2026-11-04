@@ -106,7 +106,7 @@ def tosu_main() -> None:
 
 
 st.markdown(_("## tosu Panel"))
-st.text_input("tosu URL", value="ws://127.0.0.1:24050/", key="rec_tosu_url")
+st.text_input(_("tosu URL"), value="ws://127.0.0.1:24050/", key="rec_tosu_url")
 with st.expander(_("Table options")):
     st.text_input(_("Mods filter (regex)"), key="rec_tosu_mods")
     st.checkbox(_("Best only"), key="rec_tosu_best")

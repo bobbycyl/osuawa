@@ -27,7 +27,7 @@ from osuawa.utils import (
     SimpleDifficultyAttribute,
     TaikoPerformance,
     TaikoRuleset,
-    _download_osu,
+    _download_beatmap,
     calculate_performance,
     catch_mod_entries,
     mania_mod_entries,
@@ -144,7 +144,7 @@ def _resolve_beatmap_path(bid: int) -> str:
         if not _is_basically_valid_beatmap_file(path):
             _remove_file(path)
             # 这里只有 bid、没有 ossapi 的 Beatmap 对象（也就没有 checksum），所以直接走下载入口
-            _download_osu(OSU_DOWNLOAD_LCK, bid)
+            _download_beatmap(OSU_DOWNLOAD_LCK, bid)
             if not _is_basically_valid_beatmap_file(path):
                 # 同样的位置可能是 404 的错误页，别留着
                 _remove_file(path)
@@ -233,9 +233,11 @@ def auth_required(func: Callable) -> Callable:
         if api_key not in ALLOWED_API_KEYS:
             return JSONResponse({"error": "invalid_api_key", "message": "api key not allowed"}, status_code=403)
 
+        #: 这里的 api_key 只用于身份识别，泄露不会造成安全风险，所以直接写入日志
         _logger.info("handling request from %s: %s" % (api_key, params))
 
         try:
+            # noinspection argument-list
             with Throttled(key=api_key, quota="12/m"):
                 return func(request, *args, _params=params, **kwargs)
         except LimitedError as e:

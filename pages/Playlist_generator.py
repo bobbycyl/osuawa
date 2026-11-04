@@ -3,7 +3,7 @@ import shutil
 import time
 from collections.abc import Mapping
 from functools import partial
-from typing import Any, Optional, TYPE_CHECKING, cast
+from typing import Any, Optional, TYPE_CHECKING
 from uuid import uuid4
 
 import orjson
@@ -18,8 +18,7 @@ from streamlit import logger
 
 from osuawa import C, OsuPlaylist
 from osuawa.components import awa_query as _awa_query, draw_clustered_bars, get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, refresh, save_value
-from osuawa.osuawa import Osuawa
-from osuawa.utils import BeatmapJob, BeatmapSpec, RedisTaskId, SimpleDifficultyAttribute, _create_tmp_playlist_p, available_mods, get_playlist_lastupdate, read_injected_code, safe_norm
+from osuawa.utils import BeatmapJob, BeatmapSpec, SimpleDifficultyAttribute, _create_tmp_playlist_p, available_mods, get_playlist_lastupdate, read_injected_code, safe_norm
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -27,8 +26,6 @@ if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
 
-    st.session_state.awa = cast(Osuawa, st.session_state.awa)
-    st.session_state.redis_tasks = cast(list[RedisTaskId], st.session_state.redis_tasks)
 
 init_page(_("Playlist Generator") + " - osuawa")
 with st.sidebar:
@@ -204,7 +201,7 @@ def show_statistics():
     df_for_stats = df_for_stats[df_for_stats["skill_type"].isin(stats_filter)]
     st.table(df_for_stats.drop(columns=["skill_type"]).mean().rename("Mean"))
     df_for_stats = df_for_stats[indexes_filter]
-    fig = draw_clustered_bars(df_for_stats, title="Statistics of the data query", xaxis_title="Skill Type", yaxis_title="Values")
+    fig = draw_clustered_bars(df_for_stats, title=_("Statistics of the data query"), xaxis_title=_("Skill Type"), yaxis_title=_("Value"))
     st.plotly_chart(fig)
 
 
@@ -234,7 +231,8 @@ if st.session_state.perm >= 1:
     if len(available_pools) == 0:
         available_pools.append("_DEFAULT_POOL")
 
-    with st.form(_("Add beatmap")):
+    # st.form 的第一个参数是 key 而不是标题：用译文当 key 会在切语言时重置表单内组件状态
+    with st.form("add_beatmap"):
         col1, col2 = st.columns(2)
         with col1:
             urls_input = st.text_input(_("Beatmap URLs or IDs, separated by spaces"))
@@ -256,7 +254,7 @@ if st.session_state.perm >= 1:
                 _("Mod Settings"),
                 height="stretch",
                 key="gen_form_mod_settings",
-                placeholder="Tip: You can use %s to set mods." % _("Mod Generator"),
+                placeholder=_("Tip: You can use '%s' to set mods.") % _("Mod Generator"),
             )
             # status_input = st.slider(_("Status"), 0, 2, 0)
         submitted = st.form_submit_button(_("Add"), use_container_width=True)
@@ -319,7 +317,7 @@ if st.session_state.perm >= 1:
             st.text_input(
                 _("Search"),
                 key="gen_filter_search",
-                placeholder=_("Search in BID, slot, notes etc."),
+                placeholder=_("Search..."),
             )
         with ctrl_col1:
             highlight_dup = st.checkbox(_("Highlight duplicates"), value=True)
@@ -592,7 +590,7 @@ if st.session_state.perm >= 1:
                 # 由于 MODS 在这里尚未更改，因此还是可以根据 BID + MODS 的组合定位原始表格中的对应行
                 orig = orig_indexed.get((edited_bid, edited_mods))
                 if orig is None:
-                    st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_mods))
+                    st.toast(_("(%d %s) not found, skipped") % (edited_bid, edited_mods))  # style: allow
                     continue
                 # 在可修改列中如果有任意一项被修改了，那么就添加到重算列表中
                 if (
@@ -658,6 +656,7 @@ if st.session_state.perm >= 1:
                             )
                     st.toast(push_beatmap_task(beatmaps_to_update))
         if st.button(_("Refresh"), use_container_width=True, icon=":material/refresh:"):
+            # noinspection bad-argument-type
             refresh(_query_beatmap)
         if st.button(_("Export"), use_container_width=True, icon=":material/file_export:"):
             export_filtered_playlist()
@@ -695,7 +694,7 @@ st.markdown(_("## Generate from a file"))
 uploaded_file = st.file_uploader(_("Choose a file"), type=["properties"])
 if uploaded_file is not None:
     if isinstance(uploaded_file, list):
-        st.error("multiple files not allowed")
+        st.error(_("multiple files not allowed"))
         st.stop()
     playlist_name = os.path.splitext(uploaded_file.name)[0]
     session_path = os.path.join(C.UPLOADED_DIRECTORY.value, uid)

@@ -4,6 +4,7 @@ osuawa.py and utils.py should not contain i18n related text and streamlit relate
 
 __all__ = (
     "C",
+    "CachedThrottledMixIn",
     "assets_dir",
     "Awapi",
     "Osuawa",
@@ -68,7 +69,7 @@ from .utils import (
     calc_positive_percent,
     calc_star_rating_color,
     calculate_difficulty,
-    download_osu,
+    download_beatmap,
     headers,
     simple_user_dict,
     strip_quotes,
@@ -160,6 +161,7 @@ class CachedThrottledMixIn:
     # 经过测试，并发 4 不会触发 429 错误
     # todo: 并发 4 可能太稳健了，可以稍稍放大？
     sem = Semaphore(6)
+    # noinspection argument-list
     throttled: Throttled = Throttled(key="awa", quota="60/m", timeout=60)
 
     def __init__(self):
@@ -357,7 +359,7 @@ class Osuawa(CachedThrottledMixIn):
             running = None
         if running is self.loop:
             coro.close()  # 否则会抛 "coroutine was never awaited"
-            raise RuntimeError("run_coro 不可嵌套")
+            raise RuntimeError("run_coro() cannot be nested inside its own event loop")
         if self.loop.is_running():
             # 如果循环正在运行
             future = asyncio.run_coroutine_threadsafe(coro, self.loop)
@@ -787,6 +789,7 @@ class OsuPlaylist(object):
 
     # osz_type = OneOf("full", "novideo", "mini")
 
+    # noinspection HttpUrlsUsage
     def __init__(
         self,
         awa: Osuawa,
@@ -890,10 +893,10 @@ class OsuPlaylist(object):
         for _mod in mods:
             # 如果非官方 Mods 缩写在列表中，则报错（自定义 mod 只能作为 slot_mod 存在）
             if _mod["acronym"] in self.custom_mods_acronym:
-                raise ValueError("custom mod cannot be used other than slot_mod %s" % _mod["acronym"])
+                raise ValueError("custom mod cannot be used other than slot_mod '%s'" % _mod["acronym"])
 
         # 下载谱面与计算难度
-        download_osu(b)
+        download_beatmap(b)
         my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length, cast(Literal[0, 1, 2, 3], b.mode_int))
         my_attr.set_mods(mods)
         mods_ready: list[str] = to_readable_mods(my_attr.standardized_mods)  # 准备给用户看的 Mods 表现形式

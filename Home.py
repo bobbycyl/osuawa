@@ -275,7 +275,7 @@ def process_streaming_with_tools():
                             if tool_call_chunk.function.arguments:
                                 tool_calls[idx]["function"]["arguments"] += tool_call_chunk.function.arguments
                         else:
-                            raise ValueError(f"工具调用 {idx} 缺少函数信息")
+                            raise ValueError(f"工具调用 {idx} 缺少函数信息")  # style: allow — AI chat 保留中文原文
 
             # 清除光标，显示最终内容
             if content:
@@ -294,7 +294,7 @@ def process_streaming_with_tools():
             return
 
         # 有工具调用
-        st.info(f"正在执行 {len(tool_calls)} 个工具调用...", icon=":material/build:")
+        st.info(f"正在执行 {len(tool_calls)} 个工具调用...", icon=":material/build:")  # style: allow — AI chat 保留中文原文
 
         # 将助手消息加入历史（用于下一轮调用）
         messages.append(
@@ -306,7 +306,7 @@ def process_streaming_with_tools():
         )
 
         # 执行所有工具调用
-        with st.expander("工具调用详情", icon=":material/details:"):
+        with st.expander("工具调用详情", icon=":material/details:"):  # style: allow — AI chat 保留中文原文
             for i, tool_call in enumerate(tool_calls, 1):
                 func_name = tool_call["function"]["name"]
                 func_args = tool_call["function"]["arguments"]
@@ -315,10 +315,10 @@ def process_streaming_with_tools():
 
                 try:
                     result = execute_tool_call(tool_call)
-                    st.success(f"工具调用 {i} 执行成功")
+                    st.success(f"工具调用 {i} 执行成功")  # style: allow — AI chat 保留中文原文
                 except Exception as e:
                     result = f"错误：未知错误 {e}"
-                    st.error(f"工具调用 {i} 执行失败: {str(e)}")
+                    st.error(f"工具调用 {i} 执行失败: {str(e)}")  # style: allow — AI chat 保留中文原文
 
                 # 将结果加入消息历史
                 messages.append(
@@ -433,11 +433,11 @@ if st.session_state.perm >= 1:
                 st.markdown(message.get("content", ""))
 
         # 用户输入
-        # todo: chat_input 会导致 scroll 不平滑，text_input 会导致 rerun 残留
-        if prompt := st.chat_input(_("How can I help you?")):
+        if prompt := cast(str | object, st.chat_input(_("How can I help you?"))):
             # 当前仅支持文本输入
             if not isinstance(prompt, str):
-                raise ValueError(_("unsupported input type"))
+                st.error(_("unsupported input type"))
+                st.stop()
             # 添加用户消息
             st.session_state.llm_messages.append({"role": "user", "content": prompt})
 

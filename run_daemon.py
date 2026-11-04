@@ -69,7 +69,7 @@ logger.info("starting osuawa daemon...")
 # 连接参数（含 pool_pre_ping / pool_recycle 的踩坑说明）见 osuawa.db.create_db_engine
 _url, _dialect, _ca_path = resolve_db_url(st_secrets)
 engine = create_db_engine(_url, _ca_path)
-logger.info("sql connected: %s" % _url)
+logger.info("sql connected: %s" % _url.split("@")[-1])
 
 # socket_timeout 需明显大于下方 brpop 的阻塞时长：redis-py 8.x 起该值默认为 5s，与 brpop timeout 相同时 recv 会先于服务端返回 nil 而超时
 r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True, socket_timeout=15)
@@ -113,9 +113,9 @@ _SCORE_CREATED, _SCORE_ADDED, _SCORE_EXTRA = sync_score_columns(engine)
 if _SCORE_CREATED:
     logger.info("SCORE table created")
 if _SCORE_ADDED:
-    logger.warning("SCORE 表自动补列: %s（旧行该列为 NULL，需要重算填充）" % ", ".join("%s %s" % column for column in _SCORE_ADDED))
+    logger.warning("added missing SCORE column(s): %s (existing rows are NULL there; run a recompute to fill them)" % ", ".join("%s %s" % column for column in _SCORE_ADDED))
 if _SCORE_EXTRA:
-    logger.warning("SCORE 表存在数据类中已没有的列（未做删除）: %s" % ", ".join(_SCORE_EXTRA))
+    logger.warning("SCORE table has column(s) the dataclass no longer defines (left untouched): %s" % ", ".join(_SCORE_EXTRA))
 
 
 def commands():
@@ -231,9 +231,9 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     playlist_beatmaps_db = []
     for i, playlist_beatmap_raw in enumerate(playlist_beatmaps_raw):
         if len(playlist_beatmap_raw["slot"]) < 3:
-            raise ValueError("slot too short: %s" % playlist_beatmap_raw["slot"])
+            raise ValueError("slot too short: '%s'" % playlist_beatmap_raw["slot"])
         if len(playlist_beatmap_raw["slot"]) > int(C.SLOT_MAX_LEN.value):
-            raise ValueError("slot too long: %s" % playlist_beatmap_raw["slot"])
+            raise ValueError("slot too long: '%s'" % playlist_beatmap_raw["slot"])
         playlist_beatmaps_db.append(
             DatabasePlaylistBeatmap(
                 BID=playlist_beatmap_raw["BID"],

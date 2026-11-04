@@ -159,7 +159,7 @@ def read_injected_code(filename: str) -> str:
                     first_line = "function(event) {"
                 return first_line + "\n" + fi.read()
         case _:
-            raise ValueError("unsupported injected code type: %s" % filename)
+            raise ValueError("unsupported injected code type: '%s'" % filename)
 
 
 def strip_quotes(text: str) -> str:
@@ -293,7 +293,7 @@ class SimpleDifficultyAttribute(object):
     def validate_and_transform_mods(
         cls,
         mods: list[dict[str, Any]],
-        ruleset_id: Optional[Literal[0, 1, 2, 3]] = None,
+        ruleset_id: Optional[int] = None,
         beatmap_path: Optional[str | bytes] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str]]:
         """验证并转换标准 mods 列表
@@ -368,7 +368,7 @@ class SimpleDifficultyAttribute(object):
                         ),
                     )
                 if expected_type == "boolean":
-                    setting_value = "true" if setting_value else "false"  # if bool(a) is True, then a is "true"
+                    setting_value = "true" if setting_value else "false"  # if `bool(a)` is True, then `a` is "true"
                 elif expected_type == "enum":
                     # 强制要求枚举型用字符串整型表示
                     enum_values = ruleset_mod_settings_mapping[acronym][setting_name]["EnumValues"]
@@ -385,7 +385,7 @@ class SimpleDifficultyAttribute(object):
                         _check_index_range(setting_value, len(enum_values), setting_name, acronym)  # 检查是否越界
                         setting_value = str(setting_value)
                     elif isinstance(setting_value, (float, bool)):
-                        raise ValueError("unexpected enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                        raise ValueError("unexpected enum value '%s' for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
                     else:
                         if setting_value in enum_values:
                             setting_value = str(enum_values.index(setting_value))
@@ -401,7 +401,7 @@ class SimpleDifficultyAttribute(object):
                                 )
                                 setting_value = str(int_setting_value)
                             else:
-                                raise ValueError("unknown enum value %s for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                                raise ValueError("unknown enum value '%s' for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
 
                 # 当且仅当 setting_value 与默认值不同，才会添加到 cleaned_settings
                 _default = ruleset_mod_settings_mapping[acronym][setting_name]["Default"]
@@ -465,7 +465,7 @@ class SimpleDifficultyAttribute(object):
         self.is_very_low_ar = False
         self.is_speed_up = False
         self.is_speed_down = False
-        self.is_flashlight = False
+        self.is_fl = False
         self.standardized_mods = []
         self.osu_tool_mods: list[str] = []  # [acronym]
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
@@ -525,7 +525,7 @@ class SimpleDifficultyAttribute(object):
         self.bpm *= self.magnitude
         self.hit_length = round(self.hit_length / self.magnitude)
         if "FL" in mods_dict:
-            self.is_flashlight = True
+            self.is_fl = True
 
 
 #: 数据类字段名 -> 数据库列名。几乎一一对应（字段名去下划线转大写），只有 USER_ID 是个例外
@@ -677,6 +677,7 @@ class SimpleScoreInfo(object):
             score.ruleset_id,
         )
 
+    # noinspection bad-argument-type
     @classmethod
     def from_row(cls, row: Mapping[str, Any] | RowMapping):
         """把 SCORE 表的一行还原为 ``SimpleScoreInfo``
@@ -787,7 +788,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
     is_very_low_ar: bool
     is_speed_up: bool
     is_speed_down: bool
-    is_flashlight: bool
+    is_fl: bool
     info: str
     original_difficulty: float
     b_star_rating: float
@@ -862,7 +863,7 @@ class CompletedSimpleScoreInfo(SimpleScoreInfo):
             or self.b_ppplus_precision_rating is None
             or self.b_ppplus_stamina_rating is None
         ):
-            raise ValueError("部分特征值为空，可能传入非标准模式谱面")
+            raise ValueError("some features are empty; the beatmap may not be osu!standard")
         return (
             self.b_aim_difficulty**2,
             self.b_speed_difficulty**2,
@@ -1028,7 +1029,7 @@ OSU_DOWNLOAD_LCK = "beatmap_down_0"
 
 
 @filelock(0)
-def _download_osu(_lck_key: str, bid: int, checksum: Optional[str] = None) -> None:
+def _download_beatmap(_lck_key: str, bid: int, checksum: Optional[str] = None) -> None:
     """真正下载谱面的函数，也是全局唯一的下载入口
 
     :param _lck_key: 锁文件名，固定传 :data:`OSU_DOWNLOAD_LCK`（即 ``beatmap_down_0.LCK``）
@@ -1047,9 +1048,9 @@ def _download_osu(_lck_key: str, bid: int, checksum: Optional[str] = None) -> No
     sleep(0.5)
 
 
-def download_osu(beatmap: Beatmap) -> None:
+def download_beatmap(beatmap: Beatmap) -> None:
     """下载 beatmap 对应的谱面文件；缓存里已有且 md5 一致就直接返回"""
-    _download_osu(OSU_DOWNLOAD_LCK, beatmap.id, beatmap.checksum)
+    _download_beatmap(OSU_DOWNLOAD_LCK, beatmap.id, beatmap.checksum)
 
 
 def _get_ruleset_and_performance(score: SimpleScoreInfo) -> tuple[Ruleset, NamedTuple, type[NamedTuple]]:
@@ -1168,7 +1169,7 @@ def _assemble_completed_score_info(
         my_attr.is_very_low_ar,
         my_attr.is_speed_up,
         my_attr.is_speed_down,
-        my_attr.is_flashlight,
+        my_attr.is_fl,
         "%s - %s (%s) [%s]"
         % (
             beatmap.beatmapset().artist,
@@ -1255,7 +1256,7 @@ def calc_beatmap_attributes_batch(
     for (bid, osu_tool_mods, osu_tool_mod_options, _ruleset_id), score_ids in groups.items():
         beatmap = beatmaps_dict[bid]
         if bid not in downloaded:
-            download_osu(beatmap)
+            download_beatmap(beatmap)
             downloaded.add(bid)
         ruleset, _, performance_type = _get_ruleset_and_performance(scores_compact[score_ids[0]])
         calculator = calculate_performance(
