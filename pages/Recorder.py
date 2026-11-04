@@ -142,4 +142,4 @@ with lck, open(
     "w",
     encoding="utf-8",
 ) as fo:
-    fo.write("\n".join([f"{score.bid}" for score in user_scores_current]))
+    fo.write("\n".join([f"{score.beatmap_id}" for score in user_scores_current]))
