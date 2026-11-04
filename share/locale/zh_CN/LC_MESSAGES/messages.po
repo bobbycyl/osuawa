@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-04 23:11+0800\n"
-"PO-Revision-Date: 2026-11-04 20:33+0800\n"
+"POT-Creation-Date: 2026-11-04 23:42+0800\n"
+"PO-Revision-Date: 2026-11-04 23:41+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -386,7 +386,7 @@ msgstr "均值"
 msgid "Sample"
 msgstr "样本"
 
-#: osuawa/components.py:793 pages/Playlist_generator.py:204
+#: osuawa/components.py:793 pages/Playlist_generator.py:203
 msgid "Value"
 msgstr "值"
 
@@ -406,11 +406,11 @@ msgstr "选择一个模组"
 msgid "Ruleset"
 msgstr "游戏模式"
 
-#: osuawa/components.py:1033 pages/Playlist_generator.py:666
+#: osuawa/components.py:1033 pages/Playlist_generator.py:665
 msgid "Delete"
 msgstr "删除"
 
-#: osuawa/components.py:1043 pages/Playlist_generator.py:260
+#: osuawa/components.py:1043 pages/Playlist_generator.py:259
 msgid "Add"
 msgstr "添加"
 
@@ -457,7 +457,7 @@ msgid "error"
 msgstr "错误"
 
 #: pages/Playlist_generator.py:34 pages/Playlist_generator.py:40
-#: pages/Playlist_generator.py:257
+#: pages/Playlist_generator.py:256
 msgid "Mod Generator"
 msgstr "模组选择"
 
@@ -469,154 +469,154 @@ msgstr "新版样式"
 msgid "Export selection as a playlist"
 msgstr "将选中行导出为课题"
 
-#: pages/Playlist_generator.py:97 pages/Playlist_generator.py:672
+#: pages/Playlist_generator.py:97 pages/Playlist_generator.py:671
 msgid "no beatmaps selected"
 msgstr "未选中任何谱面"
 
-#: pages/Playlist_generator.py:116
+#: pages/Playlist_generator.py:115
 msgid "Download"
 msgstr "下载"
 
-#: pages/Playlist_generator.py:198
+#: pages/Playlist_generator.py:197
 msgid "Slot Filter"
 msgstr "图池位筛选"
 
-#: pages/Playlist_generator.py:199
+#: pages/Playlist_generator.py:198
 msgid "Index Filter"
 msgstr "指标筛选"
 
-#: pages/Playlist_generator.py:204
+#: pages/Playlist_generator.py:203
 msgid "Statistics of the data query"
 msgstr "查询结果的统计数据"
 
-#: pages/Playlist_generator.py:204
+#: pages/Playlist_generator.py:203
 msgid "Skill Type"
 msgstr "技能类型"
 
-#: pages/Playlist_generator.py:215
+#: pages/Playlist_generator.py:214
 msgid "Playlist had been updated. Shall we refresh?"
 msgstr "课题已更新，不妨刷新？"
 
-#: pages/Playlist_generator.py:220
+#: pages/Playlist_generator.py:219
 #, python-format
 msgid ""
 "Auto refresh is disabled on this page. Click the `%s` button to refresh "
 "manually."
 msgstr "此页面已禁用自动刷新。你可以点击 `%s` 按钮手动刷新课题。"
 
-#: pages/Playlist_generator.py:220 pages/Playlist_generator.py:658
+#: pages/Playlist_generator.py:219 pages/Playlist_generator.py:657
 msgid "Refresh"
 msgstr "刷新"
 
-#: pages/Playlist_generator.py:223
+#: pages/Playlist_generator.py:222
 msgid "## Online Playlist Creator"
 msgstr "## 在线课题制作器"
 
-#: pages/Playlist_generator.py:238
+#: pages/Playlist_generator.py:237
 msgid "Beatmap URLs or IDs, separated by spaces"
 msgstr "谱面链接或 BID，用空格分隔"
 
-#: pages/Playlist_generator.py:239
+#: pages/Playlist_generator.py:238
 msgid "Slot"
 msgstr "图池位"
 
-#: pages/Playlist_generator.py:240
+#: pages/Playlist_generator.py:239
 msgid "Notes"
 msgstr "备注"
 
-#: pages/Playlist_generator.py:250
+#: pages/Playlist_generator.py:249
 msgid "Pool (text before '-' is considered series)"
 msgstr "图池（“-”前的视为系列）"
 
-#: pages/Playlist_generator.py:254
+#: pages/Playlist_generator.py:253
 msgid "Mod Settings"
 msgstr "模组设置"
 
-#: pages/Playlist_generator.py:257
+#: pages/Playlist_generator.py:256
 #, python-format
 msgid "Tip: You can use '%s' to set mods."
 msgstr "提示：可以用 %s 设置模组。"
 
-#: pages/Playlist_generator.py:266
+#: pages/Playlist_generator.py:265
 msgid "blank slot not allowed"
 msgstr "不允许空图池位"
 
-#: pages/Playlist_generator.py:268
+#: pages/Playlist_generator.py:267
 msgid "blank beatmap not allowed"
 msgstr "不允许空谱面"
 
-#: pages/Playlist_generator.py:293
+#: pages/Playlist_generator.py:292
 msgid "no beatmaps input"
 msgstr "未键入谱面"
 
-#: pages/Playlist_generator.py:313
+#: pages/Playlist_generator.py:312
 msgid "Pool"
 msgstr "图池"
 
-#: pages/Playlist_generator.py:315
+#: pages/Playlist_generator.py:314
 msgid "Status"
 msgstr "状态"
 
-#: pages/Playlist_generator.py:318
+#: pages/Playlist_generator.py:317
 msgid "Search"
 msgstr "搜索"
 
-#: pages/Playlist_generator.py:320
+#: pages/Playlist_generator.py:319
 msgid "Search..."
 msgstr "搜索……"
 
-#: pages/Playlist_generator.py:323
+#: pages/Playlist_generator.py:322
 msgid "Highlight duplicates"
 msgstr "高亮重复项"
 
-#: pages/Playlist_generator.py:324
+#: pages/Playlist_generator.py:323
 msgid "Match sorting"
 msgstr "赛图排序"
 
-#: pages/Playlist_generator.py:578
+#: pages/Playlist_generator.py:577
 msgid "Commit"
 msgstr "提交"
 
-#: pages/Playlist_generator.py:593
+#: pages/Playlist_generator.py:592
 #, python-format
 msgid "(%d %s) not found, skipped"
 msgstr "(%d %s) 未找到，已跳过"
 
-#: pages/Playlist_generator.py:622
+#: pages/Playlist_generator.py:621
 #, python-format
 msgid "invalid JSON: %s"
 msgstr "无效 JSON：%s"
 
-#: pages/Playlist_generator.py:626
+#: pages/Playlist_generator.py:625
 #, python-format
 msgid "invalid value: %s"
 msgstr "值无效：%s"
 
-#: pages/Playlist_generator.py:633
+#: pages/Playlist_generator.py:632
 msgid "no changes made"
 msgstr "未做改动"
 
-#: pages/Playlist_generator.py:661
+#: pages/Playlist_generator.py:660
 msgid "Export"
 msgstr "导出"
 
-#: pages/Playlist_generator.py:688 pages/Score_visualizer.py:389
+#: pages/Playlist_generator.py:687 pages/Score_visualizer.py:389
 msgid "Statistics"
 msgstr "统计数据"
 
-#: pages/Playlist_generator.py:693
+#: pages/Playlist_generator.py:692
 msgid "## Generate from a file"
 msgstr "## 使用课题源文件生成"
 
-#: pages/Playlist_generator.py:694
+#: pages/Playlist_generator.py:693
 msgid "Choose a file"
 msgstr "选择文件"
 
-#: pages/Playlist_generator.py:697
+#: pages/Playlist_generator.py:696
 msgid "multiple files not allowed"
 msgstr "不允许同时上传多个文件"
 
-#: pages/Playlist_generator.py:733
+#: pages/Playlist_generator.py:732
 msgid "Download the resources"
 msgstr "下载资源"
 
@@ -830,17 +830,11 @@ msgstr "使用复杂图表"
 msgid "## Filtered Data"
 msgstr "## 目前筛选数据"
 
-#~ msgid "Values"
-#~ msgstr "值"
-
 #~ msgid "unknown ruleset"
 #~ msgstr "未知游戏模式"
 
 #~ msgid "querying available pools"
 #~ msgstr "请求可用图池"
-
-#~ msgid "Search in BID, slot, notes etc."
-#~ msgstr "在全库中搜索……"
 
 #~ msgid "querying duplicate BIDs"
 #~ msgstr "正在请求重复 BID"
@@ -850,21 +844,6 @@ msgstr "## 目前筛选数据"
 
 #~ msgid "querying the playlist"
 #~ msgstr "正在请求课题"
-
-#, python-format
-#~ msgid "%d tool call(s) running..."
-#~ msgstr "正在执行 %d 个工具调用..."
-
-#~ msgid "Tool call details"
-#~ msgstr "工具调用详情"
-
-#, python-format
-#~ msgid "tool call %d succeeded"
-#~ msgstr "工具调用 %d 执行成功"
-
-#, python-format
-#~ msgid "tool call %d failed: %s"
-#~ msgstr "工具调用 %d 执行失败：%s"
 
 #~ msgid "only osu!standard beatmap supported"
 #~ msgstr "仅支持 osu! 标准模式谱面"
