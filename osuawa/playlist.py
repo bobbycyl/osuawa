@@ -56,7 +56,7 @@ class PlaylistSource:
         return list(dict.fromkeys(name for entry in self.entries for name in entry.fields))
 
     @classmethod
-    def load(cls, text: str) -> Self:
+    def loads(cls, text: str) -> Self:
         """解析课题源文件内容"""
         entries: list[PlaylistEntry] = []
         banner = ""
@@ -108,7 +108,7 @@ class PlaylistSource:
     @classmethod
     def from_file(cls, filename: str) -> Self:
         with open(filename, "r", encoding="utf-8") as fi:
-            return cls.load(fi.read())
+            return cls.loads(fi.read())
 
     @classmethod
     def from_specs(cls, specs: Iterable[BeatmapSpec]) -> Self:
@@ -125,7 +125,7 @@ class PlaylistSource:
             ],
         )
 
-    def dump(self) -> str:
+    def dumps(self) -> str:
         """导出为课题源文件内容：custom_columns + 每行一个 entry"""
         lines: list[str] = []
         if self.banner:
@@ -141,7 +141,7 @@ class PlaylistSource:
 
 def parse_entry_value(value: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if value.startswith("{"):  # {"mods":[...],"slot":"HD1"}
-        obj = _loads(value)
+        obj = orjson.loads(value)
         if not isinstance(obj, dict) or "mods" not in obj:
             raise ValueError("entry object must have a 'mods' key")
         return _normalize_mods(obj["mods"]), {name: item for name, item in obj.items() if name != "mods"}
@@ -153,7 +153,7 @@ def parse_mods(value: str) -> list[dict[str, Any]]:
     if not value:
         raise ValueError("mods is empty")
     if value.startswith("["):  # [{"acronym":"DT","settings":{"speed_change":1.1}}]
-        return _normalize_mods(_loads(value))
+        return _normalize_mods(orjson.loads(value))
     # 简写：只接受长度为 2 的 mod 缩写
     value = value.upper()
     return [{"acronym": value[index : index + 2]} for index in range(0, len(value), 2)]
@@ -169,13 +169,6 @@ def _normalize_mods(obj: Any) -> list[dict[str, Any]]:
         settings = item.get("settings") or {}
         mods.append({"acronym": str(item["acronym"]), "settings": settings} if settings else {"acronym": str(item["acronym"])})
     return mods
-
-
-def _loads(text: str) -> Any:
-    try:
-        return orjson.loads(text)
-    except orjson.JSONDecodeError as e:
-        raise ValueError("invalid json '%s': %s" % (shorten(text, width=100, placeholder="..."), e)) from e
 
 
 def _parse_option(line: str, lineno: int) -> tuple[str, str]:

@@ -158,8 +158,6 @@ def generate_oauth_state(aid: str) -> str:
     """
     if not is_safe_filename(aid):
         raise ValueError("unsafe oauth state key")
-    # 全新部署时 state 目录还不存在，下面的 listdir 与写入都依赖它
-    os.makedirs(C.OAUTH_STATE_DIRECTORY.value, exist_ok=True)
     now = time()
     # 顺手清理过期记录与消费失败的残留，避免用户反复点授权按钮留下垃圾文件
     for filename in os.listdir(C.OAUTH_STATE_DIRECTORY.value):
@@ -172,8 +170,8 @@ def generate_oauth_state(aid: str) -> str:
     state = token_urlsafe(32)
     state_path = _oauth_state_path(aid)
     tmp_path = "%s.%s.tmp" % (state_path, uuid.uuid4().hex)
-    with open(tmp_path, "w", encoding="utf-8") as fo:
-        fo.write(orjson.dumps({"state": state, "ts": now}).decode())
+    with open(tmp_path, "wb") as fo_b:
+        fo_b.write(orjson.dumps({"state": state, "ts": now}))
     os.replace(tmp_path, state_path)  # 原子替换，避免回调读到写了一半的文件
     return state
 
@@ -194,8 +192,8 @@ def consume_oauth_state(aid: str, state: str) -> bool:
     except OSError:
         return False
     try:
-        with open(claimed, "r", encoding="utf-8") as fi:
-            payload = orjson.loads(fi.read())
+        with open(claimed, "rb") as fi_b:
+            payload = orjson.loads(fi_b.read())
     except (OSError, orjson.JSONDecodeError):
         return False
     finally:

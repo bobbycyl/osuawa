@@ -107,7 +107,7 @@ def export_filtered_playlist():
         )
     ]
     try:
-        playlist_text = PlaylistSource.from_specs(specs_x).dump()
+        playlist_text = PlaylistSource.from_specs(specs_x).dumps()
     except ValueError as error:
         st.error(str(error))
         return
