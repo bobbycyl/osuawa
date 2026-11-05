@@ -126,10 +126,10 @@ builtins.__dict__["_"] = gettext_translate
 st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  # 想要绕过 load_value、save_value 就必须使用这种方式
 
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
-pg_score_visualizer = st.Page("pages/Score_visualizer.py", title=_("Score Visualizer"))
-pg_playlist_generator = st.Page("pages/Playlist_generator.py", title=_("Playlist Generator"))
-pg_recorder = st.Page("pages/Recorder.py", title=_("Recorder"))
-pg_room_spectator = st.Page("pages/Room_spectator.py", title=_("Room Spectator"))
+pg_score_visualizer = st.Page("awatools/Score_visualizer.py", title=_("Score Visualizer"))
+pg_playlist_generator = st.Page("awatools/Playlist_generator.py", title=_("Playlist Generator"))
+pg_recorder = st.Page("awatools/Recorder.py", title=_("Recorder"))
+pg_room_spectator = st.Page("awatools/Room_spectator.py", title=_("Room Spectator"))
 
 load_value("redis_tasks", [])
 if "cmdparser" not in st.session_state:
@@ -340,7 +340,7 @@ pg_list = [
     pg_room_spectator,
 ]
 if st.session_state.perm >= 2:
-    pg_list.append(st.Page("pages/Easter_egg.py", title=_("Easter Egg")))
+    pg_list.append(st.Page("awatools/Easter_egg.py", title=_("Easter Egg")))
 pg = st.navigation(pg_list)  # ty: ignore[call-non-callable]
 
 if "immersive_active" not in st.session_state:

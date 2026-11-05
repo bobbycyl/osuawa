@@ -24,7 +24,7 @@ AgGrid 的 header_name 不检查：BID / SR / AR / OD / Drain / Combo 是 osu! �
 
 用法：
     python check_style.py                # 检查整个仓库，有问题 exit 1
-    python check_style.py pages/         # 只检查某个目录或文件
+    python check_style.py awatools/         # 只检查某个目录或文件
 """
 
 from __future__ import annotations
