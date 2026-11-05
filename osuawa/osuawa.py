@@ -1105,8 +1105,8 @@ class OsuPlaylist(object):
             </div>
           </div>
         </div>
-        <div class="absolute py-2 z-10 w-full rounded-b-xl p-4 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-10 notes">
-          <p class="text-sm flex justify-between items-end">
+        <div class="absolute py-2 px-4 z-10 w-full rounded-b-md shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 top-full -mt-10 notes">
+          <p class="text-md flex justify-between items-end">
             <span class="w-fit pr-2">{notes}{extra_notes}</span>
             <span class="w-12 justify-end items-end space-x-2">
               <a href="https://osu.ppy.sh/b/{b.id}"
