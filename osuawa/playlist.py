@@ -25,7 +25,6 @@
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from textwrap import shorten
 from typing import Any, Self
 
 import orjson

@@ -20,6 +20,7 @@ from time import sleep, time
 from typing import Any, Literal, NamedTuple, NewType, Optional, Self, TypedDict, Union, cast, get_args, get_origin
 from zoneinfo import ZoneInfo
 
+import nh3
 import numpy as np
 import orjson
 import pandas as pd
@@ -140,6 +141,29 @@ def is_safe_filename(name: str) -> bool:
     if not checked or checked[-1] in (" ", "."):  # Windows 会静默去掉尾部空格/点，可能撞名
         return False
     return checked.split(".", 1)[0].upper() not in _WINDOWS_DEVICE_NAMES
+
+
+#: footer / notes 里允许保留的标签
+_PLAYLIST_HTML_TAGS = frozenset({"a", "b", "br", "code", "em", "i", "small", "span", "strong"})
+#: 每个标签允许的属性；href 还会被 nh3 按 url_schemes 再过滤一层
+_PLAYLIST_HTML_ATTRIBUTES = {"a": {"href", "title"}}
+#: 这些标签连同内容一起丢弃，而不是只剥标签、把脚本文本留在页面上
+_PLAYLIST_DROP_TAGS = frozenset({"script", "style", "iframe", "object", "embed", "svg", "math", "template"})
+
+
+def clean_playlist_html(text: str, *, tags: Optional[frozenset[str]] = None) -> str:
+    """按白名单清理课题文件里的富文本（footer / notes）
+
+    ``tags`` 传 ``frozenset({"br"})`` 可用于 notes：只保留我们生成的换行标签。
+    生成物只返回给上传者下载，不在服务端渲染，所以这里不做渲染侧的安全承诺。
+    """
+    return nh3.clean(
+        text,
+        tags=set(tags if tags is not None else _PLAYLIST_HTML_TAGS),
+        attributes=_PLAYLIST_HTML_ATTRIBUTES,
+        clean_content_tags=set(_PLAYLIST_DROP_TAGS),
+        strip_comments=True,
+    )
 
 
 # osu! api v2 用 state 防授权 CSRF，文档明确要求客户端自行校验这个值。

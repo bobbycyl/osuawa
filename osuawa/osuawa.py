@@ -25,6 +25,7 @@ from collections.abc import Coroutine, Sequence
 from dataclasses import fields
 from functools import cached_property
 from itertools import chain
+from string import Template
 from threading import Lock
 from types import MappingProxyType
 from typing import Any, Literal, Never, Optional, cast, override
@@ -68,6 +69,7 @@ from .utils import (
     calc_positive_percent,
     calc_star_rating_color,
     calculate_difficulty,
+    clean_playlist_html,
     download_beatmap,
     headers,
     simple_user_dict,
@@ -754,6 +756,66 @@ class BeatmapCover(object):
         return cover_filename
 
 
+# 用 string.Template 而不是 str.format：占位符是 $name，substitute 的参数值不会被
+# 二次解析，用户值里的 { } $ 都无害，模板里出现 CSS/JS 花括号也不会被当成占位符。
+# 所有动态值一律作参数传入，绝不先用 % 拼进模板字符串。
+_HTML_TEMPLATE = Template("""<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  $html_head
+  <title>$title</title>
+  <link rel="stylesheet" type="text/css" href="style.css" />
+</head>
+
+<body>${html_body_prefix}${html_body}${html_body_suffix}${html_footer}</body>
+
+</html>
+""")
+
+_HTML_BODY_PREFIX_TEMPLATE = Template("""
+  <header class="mb-2">
+    $banner
+    <h1 class="relative text-2xl font-bold text-center pt-8">
+      $playlist_name
+    </h1>
+  </header>
+  <div class="min-h-screen p-4 sm:px-8 lg:px-12 xl:px-20 2xl:px-32">
+    <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
+""")
+
+
+def _cell_text(value: Any) -> str:
+    """DataFrame 单元格转文本；缺失值显示为空"""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value)
+
+
+def _html_table(df: pd.DataFrame) -> str:
+    """渲染成表，只放行内部生成的卡片列
+
+    pandas 的 formatters 输出仍会被 escape=True 转义，没法逐列豁免，所以先把其余
+    单元格和表头转义好，再统一关掉 escape。Notes 列保留 <br />（换行），其余标签
+    交给 nh3 白名单清掉。
+    """
+    card_column = "Beatmap Info (Click to View)"
+    table = df.copy()
+    table.columns = [column if column == card_column else html.escape(str(column), quote=True) for column in table.columns]
+    for column in table.columns:
+        if column == card_column:
+            continue
+        if column == "Notes":
+            table[column] = table[column].map(lambda value: clean_playlist_html(_cell_text(value), tags=frozenset({"br"})))
+        else:
+            table[column] = table[column].map(lambda value: html.escape(_cell_text(value), quote=True))
+    return table.to_html(index=False, escape=False, classes="pd")
+
+
 class OsuPlaylist(object):
     css_style = Integer(1, 2, True)
     mod_color = {
@@ -792,20 +854,26 @@ class OsuPlaylist(object):
         self.css_style = css_style
         self.source = source if source is not None else PlaylistSource.from_file(playlist_filename)
 
-        self.footer = self.source.footer
+        self.footer = clean_playlist_html(self.source.footer)
         self.banner = ""
         if self.source.banner:
+            # 生成物不在程序内渲染、只返回给用户下载，所以这里只做属性转义以免破坏
+            # HTML 结构，不限制 banner 的协议或域名（相对路径、自建图床都要能用）
             self.banner = """
     <div class="relative w-full h-[90] sm:h-[135] lg:h-[185] hover:h-1/2 bg-cover bg-no-repeat bg-center object-cover transition-all duration-300 transform" style="background-image: url(%s)"><div class="absolute inset-0 banner-mask"></div>
     </div>
-""" % self.source.banner
+""" % html.escape(self.source.banner, quote=True)
         # mods 固定算一列，其余列由条目里的附加字段推导（slot、pool……）
         self.custom_columns: list[str] = ["mods"] + self.source.field_names
 
         self.beatmap_list: list[dict] = [{"bid": entry.bid, "mods": entry.mods, **entry.fields, "notes": entry.notes} for entry in self.source.entries]
         beatmaps_dict = self.__awa.run_coro(self.__awa.async_get_beatmaps_dict([element["bid"] for element in self.beatmap_list]))
         for element in self.beatmap_list:
-            element["notes"] = element["notes"].rstrip("\n").replace("\n", "<br />")
+            # 换行是我们自己转成的 <br />，其余夹带的 HTML 交给白名单清理
+            element["notes"] = clean_playlist_html(
+                element["notes"].rstrip("\n").replace("\n", "<br />"),
+                tags=frozenset({"br"}),
+            )
             element["beatmap"] = beatmaps_dict[element["bid"]]
 
         self.covers_dir = os.path.splitext(playlist_filename)[0] + ".covers"
@@ -934,9 +1002,20 @@ class OsuPlaylist(object):
             for column in self.custom_columns:
                 if column == "mods":
                     continue
-                else:
-                    column = cast(Literal["_"], column)
-                    extra_notes += "<br />%s: %s" % (column, element.get(column, ""))
+                extra_notes += "<br />%s: %s" % (
+                    html.escape(str(column), quote=True),
+                    html.escape(str(element.get(column, "")), quote=True),
+                )
+            mod_badges = "".join(
+                '<span class="card-main px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: %s">%s%s</span>'
+                % (
+                    self.mod_color.get(mod["acronym"], "#eb50eb"),
+                    html.escape(str(mod["acronym"]), quote=True),
+                    "<sup>*</sup>" if mod.get("settings") and mod["acronym"] not in SLOT_MODS else "",
+                )
+                for mod in raw_mods
+            )
+            mods_text = html.escape(";\n".join(mods_ready), quote=True)
 
             beatmap_info = (
                 """    </div>
@@ -957,9 +1036,9 @@ class OsuPlaylist(object):
                 <div style="color: {cover.stars_text_color}; opacity: {'1' if cover.is_high_stars else '0.8'}; text-shadow: 0px 0.5px 1.5px rgba(185, 185, 185, 0.5)"><i class="fas fa-star" {'' if cover.is_high_stars else 'style="color: #0f172a"'}></i>{cover.stars.replace("󰓎", "")}</div>
               </div>
               <div class="flex gap-2 has-tooltip">
-                {"".join([f'<span class="card-main px-2 py-1 rounded text-white text-sm font-semibold shadow" style="background-color: {self.mod_color.get(mod["acronym"], "#eb50eb")}">{mod["acronym"]}{"<sup>*</sup>" if mod.get("settings") and mod["acronym"] not in SLOT_MODS else ""}</span>' for mod in raw_mods])}
+                {mod_badges}
                 <div class="tooltip flex">
-                  <div class="flex-initial rounded text-xs shadow-xl mt-6 px-2 py-1 mx-4 w-auto h-auto break-all notes" style="opacity: 88%; white-space: pre-line">{";\n".join(mods_ready)}</div>
+                  <div class="flex-initial rounded text-xs shadow-xl mt-6 px-2 py-1 mx-4 w-auto h-auto break-all notes" style="opacity: 88%; white-space: pre-line">{mods_text}</div>
                 </div>
               </div>
             </div>
@@ -1127,24 +1206,8 @@ class OsuPlaylist(object):
         df.sort_values(by=["#"], inplace=True)
         df_standalone.sort_values(by=["#"], inplace=True)
         pd.set_option("colheader_justify", "center")
+        title = html.escape(self.playlist_name + self.suffix, quote=True)
         html_footer = "" if self.footer == "" else '<footer class="footer">%s</footer>' % self.footer
-        html_string = """<html>
-
-<head>
-  <meta charset="UTF-8" />
-  {html_head}
-  <title>%s%s</title>
-</head>
-<link rel="stylesheet" type="text/css" href="style.css" />
-
-<body>{html_body_prefix}{html_body}{html_body_suffix}</body>%s
-
-</html>
-""" % (
-            self.playlist_name,
-            self.suffix,
-            html_footer,
-        )
         with open(
             os.path.splitext(self.playlist_filename)[0] + ".html",
             "w",
@@ -1159,38 +1222,28 @@ class OsuPlaylist(object):
   <script src="https://ai-public.mastergo.com/gen_page/tailwind-config.min.js" data-color="#A0C8C8"
     data-border-radius="medium"></script>
 """
-                html_body_prefix = """
-  <header class="mb-2">
-    %s
-    <h1 class="relative text-2xl font-bold text-center pt-8">
-      %s
-    </h1>
-  </header>
-  <div class="min-h-screen p-4 sm:px-8 lg:px-12 xl:px-20 2xl:px-32">
-    <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 xl:gap-8">
-""" % (
-                    self.banner,
-                    self.playlist_name,
+                html_body_prefix = _HTML_BODY_PREFIX_TEMPLATE.substitute(
+                    banner=self.banner,
+                    playlist_name=html.escape(self.playlist_name, quote=True),
                 )
                 html_body_suffix = """    </div>
   </div>
 """
-                fo.write(
-                    html_string.format(
-                        html_head=html_head,
-                        html_body="".join([cb["Beatmap Info (Click to View)"] for cb in playlist]),
-                        html_body_prefix=html_body_prefix,
-                        html_body_suffix=html_body_suffix,
-                    ),
-                )
+                html_body = "".join([cb["Beatmap Info (Click to View)"] for cb in playlist])
             else:
-                fo.write(
-                    html_string.format(
-                        html_head="",
-                        html_body=df.to_html(index=False, escape=False, classes="pd"),
-                        html_body_prefix="",
-                        html_body_suffix="",
-                    ),
-                )
+                html_head = ""
+                html_body_prefix = ""
+                html_body_suffix = ""
+                html_body = _html_table(df)
+            fo.write(
+                _HTML_TEMPLATE.substitute(
+                    html_head=html_head,
+                    title=title,
+                    html_body_prefix=html_body_prefix,
+                    html_body=html_body,
+                    html_body_suffix=html_body_suffix,
+                    html_footer=html_footer,
+                ),
+            )
 
         return df_standalone
