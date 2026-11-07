@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 import json
 import logging
 import os
@@ -101,13 +100,10 @@ def iter_computed(engine: Engine, awa: Osuawa, expected_rows: int) -> Iterator[t
     logger.info("待重算 %d 个谱面 / %d 行成绩，每批 %d 个谱面" % (total, expected_rows, CHUNK_SIZE))
     for start in range(0, total, CHUNK_SIZE):
         chunk = bid_list[start : start + CHUNK_SIZE]
-        beatmaps = awa.run_coro(awa.async_get_beatmaps_dict(chunk))
+        beatmaps_dict = awa.get_beatmaps_dict_safe(chunk)
         rows = load_rows(engine, chunk)
         scores_compact: dict[str, SimpleScoreInfo] = {score_id: SimpleScoreInfo.from_row(row) for score_id, row in rows.items()}
-        absent = sorted({score.bid for score in scores_compact.values()} - set(beatmaps))
-        if absent:
-            raise RuntimeError("这些谱面取不到（API 查不到，可能已下架）：%s" % ", ".join(str(bid) for bid in absent[:8]))
-        computed = calc_beatmap_attributes_batch(beatmaps, scores_compact)
+        computed = calc_beatmap_attributes_batch(beatmaps_dict, scores_compact)
         if set(computed) != set(rows):
             missing = sorted(set(rows) - set(computed))
             extra = sorted(set(computed) - set(rows))
@@ -175,10 +171,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         logger.warning("SCORE 表存在多余的列：%s" % ", ".join(extra))
 
     expected_rows = count_rows(engine)
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     awa = Osuawa(
-        loop,
         secrets["args"]["client_id"],
         secrets["args"]["client_secret"],
         None,

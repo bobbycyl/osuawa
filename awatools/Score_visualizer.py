@@ -30,7 +30,7 @@ user = st.selectbox(_("User"), all_users)
 _today = user_today(st.session_state.awa.tz)
 st.date_input(
     _("Date range"),
-    [_today - timedelta(days=30), _today + timedelta(days=1)],
+    (_today - timedelta(days=30), _today + timedelta(days=1)),
     key="cat_date_range",
 )
 

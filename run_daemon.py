@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import pickle
+import signal
 from collections.abc import Sequence
 from time import time, time_ns
 from typing import Literal, Optional, cast
@@ -50,10 +51,6 @@ for _path in [
     if not os.path.exists(_path):
         os.mkdir(_path)
 
-# asyncio event loop
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
 # logging
 formatter = logging.Formatter(st_config["logger"]["messageFormat"])
 ch = logging.StreamHandler()
@@ -79,7 +76,6 @@ logger.info("redis connected")
 
 # Daemon 使用 Client Credentials Grant
 awa = Osuawa(
-    loop,
     st_secrets["args"]["client_id"],
     st_secrets["args"]["client_secret"],
     None,
@@ -328,7 +324,7 @@ def _update_beatmap(
                 )
             else:
                 raise ValueError("cannot update a beatmap from null")
-        else:
+        elif action == "add" or action == "delete" or action == "update1":
             if old_bid is not None and old_mods is not None:
                 # 可能是 delete, update1
                 assert action == "delete" or action == "update1"
@@ -382,6 +378,9 @@ def cleanup_old_tasks_status():
             except (ValueError, TypeError):
                 # 如果 time 字段格式不对，也删除
                 r.delete(key)
+        else:
+            # 没有 time 字段的僵尸任务，也删除
+            r.delete(key)
 
 
 def refresh_oauth_token():
@@ -396,7 +395,7 @@ def refresh_oauth_token():
         aid = os.path.splitext(filename)[0]
         with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", filename), "rb") as fi_b:
             refresh_token = pickle.load(fi_b)
-        _oauth_r = requests.post(
+        _response = requests.post(
             Awapi.TOKEN_URL.format(domain=Domain.OSU.value),
             headers={
                 "Accept": "application/json",
@@ -409,7 +408,10 @@ def refresh_oauth_token():
                 "refresh_token": refresh_token,
                 "scope": " ".join([Scope.PUBLIC.value, Scope.IDENTIFY.value, Scope.FRIENDS_READ.value]),
             },
-        ).json()
+            timeout=(5, 15),
+        )
+        _response.raise_for_status()
+        _oauth_r = _response.json()
         if _oauth_r.get("error"):
             logger.error(f"refresh token for {aid} failed: {_oauth_r.get('error_description')}")
             # 删除文件并删除数据库中的记录
@@ -513,6 +515,13 @@ def update_beatmaps(obj: Optional[list[BeatmapJob]] = None) -> str:
     )
 
 
+def handle_sigterm(signum, frame):
+    # 让 SIGTERM 表现得像 Ctrl+C
+    raise KeyboardInterrupt
+
+
+signal.signal(signal.SIGTERM, handle_sigterm)
+
 cmdparser = CommandParser()
 cmdparser.register_command(0, *commands())
 logger.info("tasks processor initialized")
@@ -525,7 +534,10 @@ setup_scheduled_tasks()
 cleanup_old_tasks_status()
 refresh_oauth_token()
 
-while True:
+MAX_RETRIES = 3
+ATTEMPT = 0
+
+while ATTEMPT < MAX_RETRIES + 1:
     try:
         result: Optional[tuple[str, str]] = cast(
             Optional[tuple[str, str]],
@@ -550,6 +562,7 @@ while True:
                     logger.info(f"[{task_id}/executing]: {_sub_task_result}")
                 except StopIteration as e:
                     logger.info(f"[{task_id}/success]: {e.value} sub-tasks done")
+                    # noinspection bad-argument-type
                     r.hset(
                         C.TASK_STATUS.value.format(task_id=task_id),
                         mapping={
@@ -566,6 +579,7 @@ while True:
                     break
                 except Exception as e:
                     logger.error(f"[{task_id}/error]: {e}", exc_info=True)
+                    # noinspection bad-argument-type
                     r.hset(
                         C.TASK_STATUS.value.format(task_id=task_id),
                         mapping={
@@ -583,7 +597,12 @@ while True:
     except KeyboardInterrupt:
         break
     except Exception as e:
-        logger.error(f"unexpected error: {e}", exc_info=True)
-        break
+        logger.exception(f"unexpected error: {e}", exc_info=e)
+        ATTEMPT += 1
+        logger.info(f"[ATTEMPT {ATTEMPT}/{MAX_RETRIES}]")
+        continue
 
 logger.info("stopping osuawa daemon...")
+engine.dispose()
+r.close()
+logging.shutdown()

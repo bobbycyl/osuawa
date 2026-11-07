@@ -107,7 +107,7 @@ _calculation_semaphore = threading.BoundedSemaphore(MAX_CONCURRENT_CALCULATIONS)
 # 进程内串行化「查缓存 -> 删无效缓存 -> 重新下载 -> 读成 bytes」整个段落。
 # 下载本身由 _download_beatmap 里的全局 filelock 串行化（跨进程），这把锁是为了
 # 避免同一个 bid 的两个请求互相删掉对方刚下好的文件，或在别人重写文件时读到半成品
-_beatmaps_lock = threading.Lock()
+_beatmaps_lck = threading.Lock()
 
 
 class BeatmapNotFoundError(Exception):
@@ -159,7 +159,7 @@ def _load_beatmap(bid: int) -> bytes:
     data = _read_basically_valid_beatmap(path)
     if data is not None:
         return data
-    with _beatmaps_lock:
+    with _beatmaps_lck:
         data = _read_basically_valid_beatmap(path)  # 拿到锁后再看一眼，可能别人已经下好了
         if data is not None:
             return data

@@ -1,4 +1,3 @@
-import asyncio
 import builtins
 import gettext
 import logging
@@ -24,6 +23,7 @@ from osuawa.components import (
     delete_user_cache,
     get_session_id,
     load_value,
+    refresh,
     register_commands,
     task_board,
     update_user_cache,
@@ -77,37 +77,6 @@ def init_logger_fh():
 
     _init_logger_fh(logger.get_logger("streamlit"))
     _init_logger_fh(logger.get_logger(st.session_state.username))
-
-
-def register_awa(
-    ci,
-    cs,
-    ru,
-    sc,
-    dm,
-    oauth_token: Optional[str] = None,
-    oauth_refresh_token: Optional[str] = None,
-    *,
-    aid: str,
-):
-    # 在 session_state 中持久化事件循环
-    if "async_loop" not in st.session_state:
-        # 创建新的事件循环
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        st.session_state.async_loop = loop
-    return Osuawa(
-        st.session_state.async_loop,
-        ci,
-        cs,
-        ru,
-        sc,
-        dm,
-        aid,
-        oauth_token,
-        oauth_refresh_token,
-        debugging_mode=st.session_state._debugging_mode,
-    )
 
 
 def toggle_immersive():
@@ -260,19 +229,11 @@ if "awa" not in st.session_state:
                 prepare_bar.empty()
                 st.stop()
 
-        awa = register_awa(
-            client_id,
-            client_secret,
-            redirect_url,
-            scopes,
-            domain,
-            _oauth_token,
-            _refresh_token,
-            aid=aid,
-        )
+        awa = Osuawa(client_id, client_secret, redirect_url, scopes, domain, aid, _oauth_token, _refresh_token, debugging_mode=st.session_state._debugging_mode)
         # set variables
         # 浏览器没上报时区时保留 Osuawa 的默认值，避免下游 ZoneInfo(None) 报错；
         # 所有「用户时区 -> UTC」的换算只在 utils 的边界函数里做
+        # todo: 校验浏览器上报的时区字符串是否合法
         awa.tz = st.context.timezone or Osuawa.tz
         st.session_state.awa = awa
         st.session_state.user, st.session_state.username = st.session_state.awa.user
@@ -378,7 +339,7 @@ with st.sidebar:
         st.session_state.clear()
         st.cache_data.clear()
         st.cache_resource.clear()
-        st.rerun()
+        refresh()
     # st.toggle(_("wide page layout"), key="wide_layout", value=False)
     if st.button(
         _("Task Board"),

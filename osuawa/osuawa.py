@@ -20,13 +20,13 @@ import html
 import json
 import os
 import platform
-from asyncio import AbstractEventLoop, Semaphore, Task
+from asyncio import Semaphore, Task
 from collections.abc import Coroutine, Sequence
 from dataclasses import fields
 from functools import cached_property
 from itertools import chain
 from string import Template
-from threading import Lock
+from threading import Lock, Thread
 from types import MappingProxyType
 from typing import Any, Literal, Never, Optional, cast, override
 
@@ -37,6 +37,7 @@ from clayutil.futil import Downloader
 from clayutil.sutil import sha256sum
 from clayutil.validator import Integer
 from fontfallback import writing
+from ossapi import BeatmapCompact
 from ossapi.models import MultiplayerScore, RoomPlaylistItem
 from ossapi.ossapiv2_async import (
     Beatmap,
@@ -62,6 +63,7 @@ from .utils import (
     SLOT_MODS,
     SimpleDifficultyAttribute,
     SimpleScoreInfo,
+    api_beatmap_from_local,
     assets_dir,
     available_mods,
     calc_beatmap_attributes_batch,
@@ -120,7 +122,8 @@ def async_cached_throttled_method(isolated: bool = False):
             # isolated 缓存的 key 里有 self.identifier；__init__ 解析身份前它仍是 None，
             # 所有实例会共用 (…, None, …) 这个 key，导致 B 读到 A 的身份
             if isolated and self.identifier is None:
-                return await func(self, *args, **kwargs)
+                async with self.sem, self.throttled:
+                    return await func(self, *args, **kwargs)
 
             key = (
                 _make_cached_method_key(
@@ -175,6 +178,46 @@ class CachedThrottledMixIn:
                 "isolated": dict(CachedThrottledMixIn._isolated_cache),
             },
         )
+
+
+class ThreadSafeSingletonMeta(type):
+    _instances = {}
+    _lck = Lock()
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            with cls._lck:
+                if cls not in cls._instances:
+                    cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
+class ThreadSafeCoroRunner(metaclass=ThreadSafeSingletonMeta):
+    def __init__(self):
+        self.loop = asyncio.new_event_loop()
+        self._thread = Thread(
+            target=self.loop.run_forever,
+            daemon=True,
+            name="CoroRunner",
+        )
+        self._thread.start()
+
+    def run_coro[_T](self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """统一的协程执行方法"""
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is self.loop:
+            coro.close()  # 否则会抛 "coroutine was never awaited"
+            raise RuntimeError("run_coro() cannot be nested inside its own event loop")
+        if self.loop.is_running():
+            # 如果循环正在运行
+            future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+            return future.result()  # 这会阻塞直到完成
+        else:
+            # 循环存在但未运行
+            return self.loop.run_until_complete(coro)
 
 
 class Awapi(OssapiAsync):
@@ -240,7 +283,6 @@ class Osuawa(CachedThrottledMixIn):
 
     def __init__(
         self,
-        loop: AbstractEventLoop,
         client_id,
         client_secret,
         redirect_url,
@@ -255,7 +297,7 @@ class Osuawa(CachedThrottledMixIn):
         debugging_mode: bool = False,
     ):
         super().__init__()
-        self.loop: AbstractEventLoop = loop
+        self._coro_runner = ThreadSafeCoroRunner()
         # 不再暴露 api，而是使用 async_cached_method 包裹用得到的方法，避免直接调用原始方法
         # 后续可能针对 post 请求单独建立函数映射
         # 对于 get_me 等和用户相关的方法，必须将 isolated 设置为 True
@@ -308,7 +350,7 @@ class Osuawa(CachedThrottledMixIn):
 
     @async_cached_throttled_method()
     async def api_beatmaps(self, beatmap_ids: list[int]) -> list[Beatmap]:
-        return await self.__api.beatmaps(beatmap_ids)
+        return await self.__api.beatmaps(cast(list[int | BeatmapCompact], beatmap_ids))
 
     @async_cached_throttled_method()
     async def api_score(self, score_id: int) -> Score:
@@ -354,21 +396,7 @@ class Osuawa(CachedThrottledMixIn):
         return await self.__api.multiplayer_scores(room_id, playlist_id, limit=limit, cursor_string=cursor_string)
 
     def run_coro[_T](self, coro: Coroutine[Any, Any, _T]) -> _T:
-        """统一的协程执行方法"""
-        try:
-            running = asyncio.get_running_loop()
-        except RuntimeError:
-            running = None
-        if running is self.loop:
-            coro.close()  # 否则会抛 "coroutine was never awaited"
-            raise RuntimeError("run_coro() cannot be nested inside its own event loop")
-        if self.loop.is_running():
-            # 如果循环正在运行
-            future = asyncio.run_coroutine_threadsafe(coro, self.loop)
-            return future.result()  # 这会阻塞直到完成
-        else:
-            # 循环存在但未运行
-            return self.loop.run_until_complete(coro)
+        return self._coro_runner.run_coro(coro)
 
     @cached_property
     def user(self) -> tuple[int, str]:
@@ -396,6 +424,18 @@ class Osuawa(CachedThrottledMixIn):
                 tasks.append(tg.create_task(self.api_beatmaps(bids)))
         results = [task.result() for task in tasks]
         return {b.id: b for bs in results for b in bs}
+
+    def get_beatmaps_dict_safe(self, bids: Sequence[int]) -> dict[int, Beatmap]:
+        beatmaps_dict = self.run_coro(self.async_get_beatmaps_dict(bids))
+        for non_online_bid in set(bids) - set(beatmaps_dict):
+            # 看看 cache 里面有没有
+            _path = os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % non_online_bid)
+            if os.path.exists(_path):
+                # 这里不校验文件是否完整
+                beatmaps_dict[non_online_bid] = api_beatmap_from_local(non_online_bid)
+            else:
+                raise ValueError(f"beatmap {non_online_bid} not found or cached")
+        return beatmaps_dict
 
     def create_scores_dataframe(self, scores_compact: dict[str, CompletedSimpleScoreInfo]) -> pd.DataFrame:
         df = pd.DataFrame.from_dict(
@@ -543,6 +583,9 @@ def cut_text(draw: ImageDraw.ImageDraw, font, text: str, length_limit: float, us
             if text_len_dry_run <= length_limit:
                 break
             cut_length -= 1
+            # 用报错的方式实现安全边界。如果给定宽度太窄用 cut_text 是负作用
+            if len(text_cut) < 5:
+                raise ValueError("text is too short")
         return text_cut
     else:
         return ""
@@ -589,171 +632,189 @@ class BeatmapCover(object):
         self.hit_length = hit_length
         self.max_combo = max_combo
 
+    @staticmethod
+    def process_cover(cover_filename: str, apply_blur: bool = False) -> None:
+        with Image.open(cover_filename) as im:
+            if apply_blur:
+                im = im.filter(ImageFilter.BLUR)
+            im = im.resize((1296, int(im.height * 1296 / im.width)), Image.Resampling.LANCZOS)  # 缩放到宽为 1296
+            im = im.crop((im.width // 2 - 648, 0, im.width // 2 + 648, 360))  # 从中间裁剪到 1296 x 360
+
+            # 调整亮度
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            be = ImageEnhance.Brightness(im)
+            im = be.enhance(0.33)
+            with lck:
+                im.save(cover_filename)
+
+    @staticmethod
+    def process_background(bg_filename: str, apply_blur: bool = False) -> None:
+        with Image.open(bg_filename) as im:
+            if apply_blur:
+                im = im.filter(ImageFilter.BLUR)
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            be = ImageEnhance.Brightness(im)
+            im = be.enhance(0.67)
+            with im.copy() as thumb:
+                thumb.thumbnail((140, 64))
+                with lck:
+                    im.save(bg_filename)
+                    thumb.save(os.path.splitext(bg_filename)[0] + ".thumb.jpg", format="JPEG", quality=80, optimize=True)
+
     async def download(self, d: Downloader, filename: str) -> str:
         # 下载 cover 原图，若无 cover 则使用默认图片
         cover_filename = await d.async_start(self.beatmap.beatmapset().covers.cover_2x, filename, headers)
         try:
-            im: Image.Image = Image.open(cover_filename)
+            self.process_cover(cover_filename)
         except UnidentifiedImageError:
             try:
-                im = Image.open(await d.async_start(self.beatmap.beatmapset().covers.slimcover_2x, filename, headers))
+                self.process_cover(await d.async_start(self.beatmap.beatmapset().covers.slimcover_2x, filename, headers))
             except UnidentifiedImageError:
-                im = Image.open(os.path.join(assets_dir, "bg1.jpg"))
-                im = im.filter(ImageFilter.BLUR)
-        im = im.resize((1296, int(im.height * 1296 / im.width)), Image.Resampling.LANCZOS)  # 缩放到宽为 1296
-        im = im.crop((im.width // 2 - 648, 0, im.width // 2 + 648, 360))  # 从中间裁剪到 1296 x 360
-
-        # 调整亮度
-        if im.mode != "RGB":
-            im = im.convert("RGB")
-        be = ImageEnhance.Brightness(im)
-        im = be.enhance(0.33)
-        with lck:
-            im.save(cover_filename)
-
+                self.process_cover(os.path.join(assets_dir, "bg1.jpg"))
         return cover_filename
 
-    async def draw(self, cover_filename) -> str:
-        im = Image.open(cover_filename)
-        draw = ImageDraw.Draw(im)
+    def draw(self, cover_filename) -> None:
+        with Image.open(cover_filename) as im:
+            draw = ImageDraw.Draw(im)
 
-        # 测试长度
-        len_set = 1188
-        text_pos = 16
-        padding = 28
-        mod_theme_len = 50
-        stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
-        title_u = self.beatmap.beatmapset().title_unicode
-        t1_cut = cut_text(
-            draw,
-            ImageFont.truetype(font=self.font_sans, size=72),
-            title_u,
-            len_set - stars_len - text_pos - padding - mod_theme_len,
-            False,
-        )
-        if t1_cut != "":
-            title_u2 = title_u[len(t1_cut) :]
-            title_u = "%s\n%s" % (t1_cut, title_u2)
-            t2_cut = cut_text(
+            # 测试长度
+            len_set = 1188
+            text_pos = 16
+            padding = 28
+            mod_theme_len = 50
+            stars_len = draw.textlength(self.stars, font=ImageFont.truetype(font=self.font_mono_semibold, size=48))
+            title_u = self.beatmap.beatmapset().title_unicode
+            t1_cut = cut_text(
                 draw,
                 ImageFont.truetype(font=self.font_sans, size=72),
-                title_u2,
-                len_set - padding - mod_theme_len,
+                title_u,
+                len_set - stars_len - text_pos - padding - mod_theme_len,
+                False,
+            )
+            if t1_cut != "":
+                title_u2 = title_u[len(t1_cut) :]
+                title_u = "%s\n%s" % (t1_cut, title_u2)
+                t2_cut = cut_text(
+                    draw,
+                    ImageFont.truetype(font=self.font_sans, size=72),
+                    title_u2,
+                    len_set - padding - mod_theme_len,
+                    True,
+                )
+                if t2_cut != "":
+                    title_u = "%s\n%s" % (t1_cut, t2_cut)
+
+            # 绘制左侧文字
+            fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
+            version = self.beatmap.version
+            ver_cut = cut_text(
+                draw,
+                ImageFont.truetype(font=self.font_sans, size=48),
+                version,
+                len_set - padding - mod_theme_len - 328,
                 True,
             )
-            if t2_cut != "":
-                title_u = "%s\n%s" % (t1_cut, t2_cut)
+            if ver_cut != "":
+                version = ver_cut
+            writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
+            writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")
+            writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")
+            writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (42, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (41, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (41, 192 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
+            writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
+            writing.draw_text_v2(
+                draw,
+                (42, 260),
+                self.beatmap.beatmapset().artist_unicode,
+                "#1f1f1f",
+                fonts,
+                48,
+                "ls",
+            )
+            writing.draw_text_v2(
+                draw,
+                (40, 257),
+                self.beatmap.beatmapset().artist_unicode,
+                "white",
+                fonts,
+                48,
+                "ls",
+            )
+            writing.draw_text_v2(
+                draw,
+                (40, 258),
+                self.beatmap.beatmapset().artist_unicode,
+                "white",
+                fonts,
+                48,
+                "ls",
+            )
+            draw.text(
+                (42 + 1188, 326),
+                self.beatmap.beatmapset().creator,
+                font=ImageFont.truetype(font=self.font_sans_medium, size=48),
+                fill="#1f1f2a",
+                anchor="rs",
+            )
+            draw.text(
+                (41 + 1188, 324),
+                self.beatmap.beatmapset().creator,
+                font=ImageFont.truetype(font=self.font_sans_medium, size=48),
+                fill=(180, 235, 250),
+                anchor="rs",
+            )
+            draw.text(
+                (40 + 1188, 324),
+                self.beatmap.beatmapset().creator,
+                font=ImageFont.truetype(font=self.font_sans_medium, size=48),
+                fill=(180, 235, 250),
+                anchor="rs",
+            )
 
-        # 绘制左侧文字
-        fonts = writing.load_fonts(self.font_sans, self.font_sans_fallback)
-        version = self.beatmap.version
-        ver_cut = cut_text(
-            draw,
-            ImageFont.truetype(font=self.font_sans, size=48),
-            version,
-            len_set - padding - mod_theme_len - 328,
-            True,
-        )
-        if ver_cut != "":
-            version = ver_cut
-        writing.draw_text_v2(draw, (42, 29 + 298), version, "#1f1f1f", fonts, 48, "ls")
-        writing.draw_text_v2(draw, (40, 26 + 298), version, "white", fonts, 48, "ls")
-        writing.draw_text_v2(draw, (40, 27 + 298), version, "white", fonts, 48, "ls")
-        writing.draw_multiline_text_v2(draw, (42, 192 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (42, 191 - 88), title_u, "#1f1f1f", fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (42, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (41, 193 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (41, 192 - 88), title_u, (40, 40, 40), fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (40, 189 - 88), title_u, "white", fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (41, 189 - 88), title_u, "white", fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (40, 190 - 88), title_u, "white", fonts, 72, "ls")
-        writing.draw_multiline_text_v2(draw, (41, 190 - 88), title_u, "white", fonts, 72, "ls")
-        writing.draw_text_v2(
-            draw,
-            (42, 260),
-            self.beatmap.beatmapset().artist_unicode,
-            "#1f1f1f",
-            fonts,
-            48,
-            "ls",
-        )
-        writing.draw_text_v2(
-            draw,
-            (40, 257),
-            self.beatmap.beatmapset().artist_unicode,
-            "white",
-            fonts,
-            48,
-            "ls",
-        )
-        writing.draw_text_v2(
-            draw,
-            (40, 258),
-            self.beatmap.beatmapset().artist_unicode,
-            "white",
-            fonts,
-            48,
-            "ls",
-        )
-        draw.text(
-            (42 + 1188, 326),
-            self.beatmap.beatmapset().creator,
-            font=ImageFont.truetype(font=self.font_sans_medium, size=48),
-            fill="#1f1f2a",
-            anchor="rs",
-        )
-        draw.text(
-            (41 + 1188, 324),
-            self.beatmap.beatmapset().creator,
-            font=ImageFont.truetype(font=self.font_sans_medium, size=48),
-            fill=(180, 235, 250),
-            anchor="rs",
-        )
-        draw.text(
-            (40 + 1188, 324),
-            self.beatmap.beatmapset().creator,
-            font=ImageFont.truetype(font=self.font_sans_medium, size=48),
-            fill=(180, 235, 250),
-            anchor="rs",
-        )
+            # 在右上角绘制星数
+            draw.rounded_rectangle(
+                [
+                    len_set + text_pos - stars_len - padding,
+                    32,
+                    len_set + text_pos + padding,
+                    106,
+                ],
+                72,
+                fill="#1f1f1f",
+            )
+            draw.rounded_rectangle(
+                [
+                    len_set + text_pos - stars_len - padding,
+                    30,
+                    len_set + text_pos + padding,
+                    104,
+                ],
+                72,
+                fill=calc_star_rating_color(self.stars1),
+            )
 
-        # 在右上角绘制星数
-        draw.rounded_rectangle(
-            [
-                len_set + text_pos - stars_len - padding,
-                32,
-                len_set + text_pos + padding,
-                106,
-            ],
-            72,
-            fill="#1f1f1f",
-        )
-        draw.rounded_rectangle(
-            [
-                len_set + text_pos - stars_len - padding,
-                30,
-                len_set + text_pos + padding,
-                104,
-            ],
-            72,
-            fill=calc_star_rating_color(self.stars1),
-        )
+            draw.text(
+                (len_set + text_pos, 37),
+                self.stars,
+                anchor="ra",
+                font=ImageFont.truetype(font=self.font_mono_semibold, size=48),
+                fill=self.stars_text_color,
+            )
 
-        draw.text(
-            (len_set + text_pos, 37),
-            self.stars,
-            anchor="ra",
-            font=ImageFont.truetype(font=self.font_mono_semibold, size=48),
-            fill=self.stars_text_color,
-        )
+            # 绘制mod主题色
+            draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=(40, 40, 40))
+            draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=self.block_color)
 
-        # 绘制mod主题色
-        draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=(40, 40, 40))
-        draw.rectangle((len_set + text_pos + mod_theme_len, 0, 1296, 1080), fill=self.block_color)
-
-        with lck:
-            im.save(cover_filename)
-        return cover_filename
+            with lck:
+                im.save(cover_filename)
 
 
 # 用 string.Template 而不是 str.format：占位符是 $name，substitute 的参数值不会被
@@ -867,7 +928,7 @@ class OsuPlaylist(object):
         self.custom_columns: list[str] = ["mods"] + self.source.field_names
 
         self.beatmap_list: list[dict] = [{"bid": entry.bid, "mods": entry.mods, **entry.fields, "notes": entry.notes} for entry in self.source.entries]
-        beatmaps_dict = self.__awa.run_coro(self.__awa.async_get_beatmaps_dict([element["bid"] for element in self.beatmap_list]))
+        beatmaps_dict = self.__awa.get_beatmaps_dict_safe([element["bid"] for element in self.beatmap_list])
         for element in self.beatmap_list:
             # 换行是我们自己转成的 <br />，其余夹带的 HTML 交给白名单清理
             element["notes"] = clean_playlist_html(
@@ -912,6 +973,7 @@ class OsuPlaylist(object):
         #     self.osz_type = "full"
 
     async def beatmap_task(self, beatmap_index: int) -> CompletedPlaylistBeatmap:
+        # todo: 这里面有许多阻塞项，如 download_beatmap、im.save 等，起初只是为了测试 Downloader.async_start() 才改的，现属于技术债
         i, element = beatmap_index + 1, self.beatmap_list[beatmap_index]
         bid: int = element["bid"]
         b: Beatmap = element["beatmap"]
@@ -984,19 +1046,10 @@ class OsuPlaylist(object):
                 )
                 # bg_filename = await bg_d.async_start(f"https://beatconnect.io/bg/%d/%d" % (b.beatmapset_id, bid), "%d" % bid, headers)
                 try:
-                    im: Image.Image = Image.open(bg_filename)
+                    BeatmapCover.process_background(bg_filename)
                 except UnidentifiedImageError:
-                    im = Image.open(os.path.join(assets_dir, "bg1.jpg"))
-                    im = im.filter(ImageFilter.BLUR)
-                if im.mode != "RGB":
-                    im = im.convert("RGB")
-                be = ImageEnhance.Brightness(im)
-                im = be.enhance(0.67)
-                thumb = im.copy()
-                thumb.thumbnail((140, 64))
-                with lck:
-                    im.save(bg_filename)
-                    thumb.save(os.path.splitext(bg_filename)[0] + ".thumb.jpg", format="JPEG", quality=80, optimize=True)
+                    BeatmapCover.process_background(os.path.join(assets_dir, "bg1.jpg"))
+
             bg_filename = os.path.join(self.bg_dir, "%d.jpg" % bid)
             extra_notes = ""
             for column in self.custom_columns:
@@ -1130,7 +1183,7 @@ class OsuPlaylist(object):
                 html.escape(b.beatmapset().creator),
                 html.escape(b.version),
             )
-            await cover.draw(cover_filename)
+            cover.draw(cover_filename)
 
         # 保存数据
         completed_beatmap: CompletedPlaylistBeatmap = {

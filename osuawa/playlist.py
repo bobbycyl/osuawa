@@ -144,18 +144,16 @@ def parse_entry_value(value: str) -> tuple[list[dict[str, Any]], dict[str, Any]]
         if not isinstance(obj, dict) or "mods" not in obj:
             raise ValueError("entry object must have a 'mods' key")
         return _normalize_mods(obj["mods"]), {name: item for name, item in obj.items() if name != "mods"}
-    return parse_mods(value), {}
-
-
-def parse_mods(value: str) -> list[dict[str, Any]]:
-    value = value.strip()
-    if not value:
-        raise ValueError("mods is empty")
-    if value.startswith("["):  # [{"acronym":"DT","settings":{"speed_change":1.1}}]
-        return _normalize_mods(orjson.loads(value))
-    # 简写：只接受长度为 2 的 mod 缩写
-    value = value.upper()
-    return [{"acronym": value[index : index + 2]} for index in range(0, len(value), 2)]
+    else:
+        # 无附加列的语法糖模式
+        value = value.strip()
+        if not value:
+            raise ValueError("mods is empty")
+        if value.startswith("["):  # [{"acronym":"DT","settings":{"speed_change":1.1}}]
+            return _normalize_mods(orjson.loads(value)), {}
+        # 有限的 legacy mods 支持：只接受长度为 2 的 mod 缩写（此处无校验，接受任何输入）
+        value = value.upper()
+        return [{"acronym": value[index : index + 2]} for index in range(0, len(value), 2)], {}
 
 
 def _normalize_mods(obj: Any) -> list[dict[str, Any]]:

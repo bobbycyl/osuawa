@@ -313,9 +313,9 @@ def read_injected_code(filename: str) -> str:
 def strip_quotes(text: str) -> str:
     # 判断是否被引号包裹，若是，则 strip
     if text.startswith('"') and text.endswith('"'):
-        return text.strip('"')
+        return text[1:-1]
     if text.startswith("'") and text.endswith("'"):
-        return text.strip("'")
+        return text[1:-1]
     return text
 
 
@@ -506,6 +506,7 @@ class SimpleDifficultyAttribute(object):
                 if setting_name not in ruleset_mod_settings_mapping[acronym]:
                     raise ValueError("unknown setting '%s' for mod '%s'" % (setting_name, acronym))
                 expected_type: Literal["boolean", "number", "string", "enum"] = ruleset_mod_settings_mapping[acronym][setting_name]["Type"]
+                enum_values = ruleset_mod_settings_mapping[acronym][setting_name]["EnumValues"]
                 if not validate_mod_setting_value(setting_value, expected_type):
                     raise ValueError(
                         "setting '%s' for mod '%s' should be of type '%s'"
@@ -519,7 +520,6 @@ class SimpleDifficultyAttribute(object):
                     setting_value = "true" if setting_value else "false"  # if `bool(a)` is True, then `a` is "true"
                 elif expected_type == "enum":
                     # 强制要求枚举型用字符串整型表示
-                    enum_values = ruleset_mod_settings_mapping[acronym][setting_name]["EnumValues"]
                     if enum_values is None:
                         raise ValueError("undefined enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
                     elif len(enum_values) == 0:  # 这种情况应该不会出现，但是还是进行安全检查
@@ -553,6 +553,9 @@ class SimpleDifficultyAttribute(object):
 
                 # 当且仅当 setting_value 与默认值不同，才会添加到 cleaned_settings
                 _default = ruleset_mod_settings_mapping[acronym][setting_name]["Default"]
+                # 此时 setting_value 已经被标准化，_default 也要标准化才能比较
+                if _default is not None:
+                    _default = "true" if _default is True else "false" if _default is False else enum_values.index(_default) if expected_type == "enum" and enum_values is not None else _default
                 if _default is None or _default != setting_value:
                     cleaned_settings[setting_name] = setting_value
 
@@ -1149,16 +1152,18 @@ RedisTaskId = NewType("RedisTaskId", str)
 
 def push_task(r: Redis, task_command: str) -> RedisTaskId:
     task_id = uuid.uuid4().hex
-    r.lpush(C.TASK_QUEUE.value, "%s%s" % (task_id, task_command))
-    # noinspection bad-argument-type
-    r.hset(
-        C.TASK_STATUS.value.format(task_id=task_id),
-        mapping={
-            "status": "pending",
-            "result": "",
-            "time": time(),
-        },
-    )
+    with r.pipeline() as p:
+        p.lpush(C.TASK_QUEUE.value, "%s%s" % (task_id, task_command))
+        # noinspection bad-argument-type
+        p.hset(
+            C.TASK_STATUS.value.format(task_id=task_id),
+            mapping={
+                "status": "pending",
+                "result": "",
+                "time": time(),
+            },
+        )
+        p.execute()
     return RedisTaskId(task_id)
 
 
@@ -1177,11 +1182,11 @@ def _download_beatmap(_lck_key: str, bid: int, checksum: Optional[str] = None) -
     :param bid: Beatmap ID
     :param checksum: 期望的谱面 md5；为 None 时只判断缓存文件是否存在
     """
-    osu_path = os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid)
-    if os.path.exists(osu_path):
+    beatmap_path = os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid)
+    if os.path.exists(beatmap_path):
         if checksum is None:
             return
-        with open(osu_path, "rb") as fi_b:
+        with open(beatmap_path, "rb") as fi_b:
             if checksum == md5sum(fi_b.read()):
                 return
     last_call = -1
@@ -1544,28 +1549,31 @@ def api_beatmap_from_local(bid: int) -> Beatmap:
         beatmap_path=os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % bid),
         allow_cancel=False,
     )
-    osupp_attr = next(calculator)
     try:
-        calculator.send(None)
-    except StopIteration as e:
-        beatmap_info = e.value
-        # 这里仅写入必要的信息
-        return Beatmap(
-            total_length=beatmap_info["Length"],  # 大概率不准确
-            version=beatmap_info["DifficultyName"],
-            accuracy=float(osupp_attr["__ek_od_orig"]),
-            ar=float(osupp_attr["__ek_ar_orig"]),
-            bpm=float(osupp_attr["__ek_most_common_bpm_orig"]),
-            current_user_tag_ids=beatmap_info["Metadata"]["UserTags"],
-            convert=False,
-            count_circles=int(osupp_attr["__ek_count_circles"]),
-            count_sliders=int(osupp_attr["__ek_count_sliders"]),
-            count_spinners=int(osupp_attr["__ek_count_spinners"]),
-            cs=float(osupp_attr["__ek_cs_orig"]),
-            drain=float(osupp_attr["__ek_drain_length_orig"]),
-            hit_length=float(osupp_attr["__ek_hit_length_orig"]),
-            mode_int=beatmap_info["Ruleset"]["OnlineID"],
-        )
+        osupp_attr = next(calculator)
+        try:
+            calculator.send(None)
+        except StopIteration as e:
+            beatmap_info = e.value
+            # 这里仅写入必要的信息
+            return Beatmap(
+                total_length=beatmap_info["Length"],  # 大概率不准确
+                version=beatmap_info["DifficultyName"],
+                accuracy=float(osupp_attr["__ek_od_orig"]),
+                ar=float(osupp_attr["__ek_ar_orig"]),
+                bpm=float(osupp_attr["__ek_most_common_bpm_orig"]),
+                current_user_tag_ids=beatmap_info["Metadata"]["UserTags"],
+                convert=False,
+                count_circles=int(osupp_attr["__ek_count_circles"]),
+                count_sliders=int(osupp_attr["__ek_count_sliders"]),
+                count_spinners=int(osupp_attr["__ek_count_spinners"]),
+                cs=float(osupp_attr["__ek_cs_orig"]),
+                drain=float(osupp_attr["__ek_drain_length_orig"]),
+                hit_length=float(osupp_attr["__ek_hit_length_orig"]),
+                mode_int=beatmap_info["Ruleset"]["OnlineID"],
+            )
+    finally:
+        calculator.close()
     raise ValueError(f"failed to generate beatmap info for '{bid}'")
 
 

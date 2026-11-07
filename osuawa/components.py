@@ -85,7 +85,7 @@ if TYPE_CHECKING:
 
 type DatabaseName = Literal["BEATMAP", "SCORE", "USER_CACHE"]
 
-_conn = st.connection("osuawa", type="sql", ttl=60)
+_conn = st.connection("osuawa", type="sql")
 # ban the built-in query method
 _conn.query = None  # type: ignore
 
@@ -299,6 +299,8 @@ def refresh(clear_func: Optional[CachedFunc] = None, *args, **kwargs) -> Never:
     # 所有要重置的 session_state 应该都在这里写上
     st.session_state.aggrid_key = str(uuid4())
     st.session_state.playlist_lastupdate = get_playlist_lastupdate()
+    get_redis_connection.clear()
+    _conn.reset()
     if clear_func is not None:
         clear_func.clear(*args, **kwargs)
     st.rerun()
@@ -646,7 +648,10 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
         my_attr.osu_tool_mods,
         my_attr.osu_tool_mod_options,
     )
-    osupp_attr = next(calculator)
+    try:
+        osupp_attr = next(calculator)
+    finally:
+        calculator.close()
     strains: dict[str, list[float]] = osupp_attr["__ek_strains_of_skills"]  # type: ignore[union-attr]
     timelines: dict[str, list[float]] = osupp_attr["__ek_timeline_of_skills"]  # type: ignore[union-attr]
     strain_dicts: dict[str, dict[float, float]] = {_skill: dict(zip(timelines[_skill], strains[_skill], strict=True)) for _skill in strains}
@@ -843,6 +848,10 @@ def update_user_cache(user: int, username: str, aid: str, last_seen_ts: float) -
 
 
 def push_task_with_session_state(task_command: str) -> str:
+    # 不允许一个 session 持有超过 1000 个总任务，避免过度膨胀
+    if len(st.session_state.redis_tasks) > 1000:
+        # 直接抛出异常，说明疑似滥用
+        raise ValueError("too many tasks in session")
     _task_id = push_task(_r, task_command)
     st.session_state.redis_tasks.append(_task_id)
     save_value("redis_tasks")
@@ -852,17 +861,17 @@ def push_task_with_session_state(task_command: str) -> str:
 def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch", "mania"]) -> list[str]:
     match ruleset:
         case "osu":
-            all_mods = osu_mod_entries
-            all_mod_indexes = osu_mod_indexes
+            ruleset_mods = osu_mod_entries
+            ruleset_mod_indexes = osu_mod_indexes
         case "taiko":
-            all_mods = taiko_mod_entries
-            all_mod_indexes = taiko_mod_indexes
+            ruleset_mods = taiko_mod_entries
+            ruleset_mod_indexes = taiko_mod_indexes
         case "catch":
-            all_mods = catch_mod_entries
-            all_mod_indexes = catch_mod_indexes
+            ruleset_mods = catch_mod_entries
+            ruleset_mod_indexes = catch_mod_indexes
         case "mania":
-            all_mods = mania_mod_entries
-            all_mod_indexes = mania_mod_indexes
+            ruleset_mods = mania_mod_entries
+            ruleset_mod_indexes = mania_mod_indexes
 
     _mod_key = "modgen_mod_%d" % key_suffix
     ret = []
@@ -870,21 +879,21 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
         memorized_selectbox(
             _("Mod"),
             _mod_key,
-            [mod_entry["Acronym"] for mod_entry in all_mods],
+            [mod_entry["Acronym"] for mod_entry in ruleset_mods],
             None,
             placeholder=_("Select a mod"),
             label_visibility="collapsed",
             format_func=lambda acronym: "%s %-4s - %s"
             % (
-                get_mod_type_color(all_mod_indexes[acronym]["Type"], True),
+                get_mod_type_color(ruleset_mod_indexes[acronym]["Type"], True),
                 acronym,
-                all_mod_indexes[acronym]["Name"],
+                ruleset_mod_indexes[acronym]["Name"],
             ),
         )
         with st.container(gap="xxsmall"):
             if st.session_state[_mod_key] is not None:
                 ret.append(st.session_state[_mod_key])
-                _mod_entry = all_mod_indexes[st.session_state[_mod_key]]
+                _mod_entry = ruleset_mod_indexes[st.session_state[_mod_key]]
                 _settings = _mod_entry["Settings"]
                 for _setting in _settings:
                     _name = _setting["Name"]
@@ -896,7 +905,7 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
                     )
                     _desc = _setting["Description"]
                     _enum_values = _setting["EnumValues"]
-                    _default = _setting["Default"] or _setting["UnderlyingValue"]
+                    _default = _setting["Default"] if _setting["Default"] is not None else _setting["UnderlyingValue"]
                     match _type:
                         case "boolean":
                             memorized_checkbox(_name, _mod_setting_key, _default or False, help=_desc)
@@ -1054,6 +1063,7 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
 
     for idx, (task_id, status_mapping) in enumerate(tasks, start=1):
         with st.container(border=True):
+            # todo: 这里的读取没有保护，一个崩整个任务面板都打不开
             status = status_mapping["status"]
             _result = orjson.loads(status_mapping["result"] or "{}")
             final = _result.get("final", "0")
