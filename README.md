@@ -6,7 +6,7 @@
 
 just some utilities for osu! standard (Lazer data supported!)
 
-current tools: Score Visualizer, Playlist Generator and Recorder
+current tools: Score Visualizer, Playlist Generator and Room_spectator
 
 ## Requirements
 
