@@ -203,6 +203,9 @@ def execute_tool_call(tool_call: dict[str, Any]) -> str:
     function_args = orjson.loads(tool_call["function"]["arguments"])
 
     if function_name in FUNCTION_MAPPING:
+        # 二次鉴权
+        if st.session_state.perm < 3 and function_name in ("tail_log",):
+            return "目标用户无权限调用该函数"
         if hasattr(FUNCTION_MAPPING[function_name], "__func__") and hasattr(FUNCTION_MAPPING[function_name], "__self__"):  # method
             result = FUNCTION_MAPPING[function_name].__func__(FUNCTION_MAPPING[function_name].__self__, **function_args)  # type: ignore
         else:
@@ -344,8 +347,8 @@ def home_form():
     # IntegerField, FloatField, BoolField, StringField, JSONStringField, CollectionField, CustomField
     min_param_len, max_param_len, command_usage = available_commands[st.session_state.home_command_selector].info
     params = available_commands[st.session_state.home_command_selector].params
-    st.markdown(_("**description**: %s") % available_commands[st.session_state.home_command_selector].description)
-    st.markdown(_("**usage**: %s") % command_usage)
+    st.markdown(_("**description**: %s") % available_commands[st.session_state.home_command_selector].description)  # style: allow
+    st.markdown(_("**usage**: %s") % command_usage)  # style: allow
 
     def _create_param_input(_param: Field, disabled: bool = False):
         _param_name: str = _param.param
@@ -460,4 +463,4 @@ if st.session_state._debugging_mode:
         ["c", "e"],
     )
 
-st.caption(_("Session: %s") % get_session_id())
+st.caption(_("Session: %s") % get_session_id())  # style: allow

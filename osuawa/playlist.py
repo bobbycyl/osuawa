@@ -96,7 +96,7 @@ class PlaylistSource:
             try:
                 mods, fields = parse_entry_value(match.group(2).strip())
             except ValueError as e:
-                raise ValueError("line %d: %s" % (lineno, e)) from e
+                raise ValueError("line %d: %s" % (lineno, e)) from e  # style: allow
             current = PlaylistEntry(bid=int(match.group(1)), mods=mods, fields=fields)
             # noinspection bad-argument-type
             entries.append(current)

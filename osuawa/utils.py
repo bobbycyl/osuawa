@@ -6,8 +6,8 @@ import contextlib
 import hmac
 import os
 import re
+import tomllib
 import types
-import unicodedata
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
@@ -25,6 +25,7 @@ import numpy as np
 import orjson
 import pandas as pd
 import typing_extensions
+import unicodedata
 from PerformanceCalculator import ProcessorWorkingBeatmap
 from clayutil.futil import Downloader, filelock
 from clayutil.sutil import md5sum
@@ -115,11 +116,7 @@ class C(Enum):
 #: （后者不改变可见内容，但能用于视觉欺骗或伪造日志行）
 _UNSAFE_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]')
 #: Windows 设备名；去掉扩展名后命中即非法（CON.txt 同样不行）
-_WINDOWS_DEVICE_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL"}
-    | {"COM%d" % index for index in range(1, 10)}
-    | {"LPT%d" % index for index in range(1, 10)}
-)
+_WINDOWS_DEVICE_NAMES = frozenset({"CON", "PRN", "AUX", "NUL"} | {"COM%d" % index for index in range(1, 10)} | {"LPT%d" % index for index in range(1, 10)})
 
 
 def is_safe_filename(name: str) -> bool:
@@ -1153,6 +1150,7 @@ RedisTaskId = NewType("RedisTaskId", str)
 def push_task(r: Redis, task_command: str) -> RedisTaskId:
     task_id = uuid.uuid4().hex
     r.lpush(C.TASK_QUEUE.value, "%s%s" % (task_id, task_command))
+    # noinspection bad-argument-type
     r.hset(
         C.TASK_STATUS.value.format(task_id=task_id),
         mapping={
@@ -1165,7 +1163,9 @@ def push_task(r: Redis, task_command: str) -> RedisTaskId:
 
 
 # 谱面下载的全局锁名：所有进程（web api / daemon / streamlit）共用这一个锁文件，
-# 保证任何时刻全局只有一个 _download_osu 在跑
+# 保证任何时刻全局只有一个 _download_beatmap 在跑。这把锁是真实的互斥，超时即抛
+# Timeout、不执行下载；下载的 HTTP 超时是另一层独立保护，由 clayutil.Downloader 负责。
+# 锁的有界超时、下载的状态码校验与 HTTP 超时都由 clayutil.futil 提供，本模块不再自行实现
 OSU_DOWNLOAD_LCK = "beatmap_down_0"
 
 
@@ -1184,13 +1184,21 @@ def _download_beatmap(_lck_key: str, bid: int, checksum: Optional[str] = None) -
         with open(osu_path, "rb") as fi_b:
             if checksum == md5sum(fi_b.read()):
                 return
-    sleep(1)
+    last_call = -1
+    if os.path.exists(os.path.join(C.STATIC_DIRECTORY.value, "beatmap_lastcall")):
+        with open(os.path.join(C.STATIC_DIRECTORY.value, "beatmap_lastcall"), encoding="utf-8") as fi:
+            last_call = int(fi.read())
+    # 由于这个接口似乎有限流（每 1.2s 只能请求 1 次），所以这里做一个简单的限频
+    diff = 1.2 - (time() - last_call)
+    if diff > 0:
+        sleep(diff)
+    with open(os.path.join(C.STATIC_DIRECTORY.value, "beatmap_lastcall"), "w", encoding="utf-8") as fo:
+        fo.write(str(time()))
     Downloader(C.BEATMAPS_CACHE_DIRECTORY.value).start("https://osu.ppy.sh/osu/%d" % bid, "%d.osu" % bid, headers)
-    sleep(0.5)
 
 
 def download_beatmap(beatmap: Beatmap) -> None:
-    """下载 beatmap 对应的谱面文件；缓存里已有且 md5 一致就直接返回"""
+    """下载 beatmap 对应的谱面文件；缓存里已有且 md5 一致即使用缓存"""
     _download_beatmap(OSU_DOWNLOAD_LCK, beatmap.id, beatmap.checksum)
 
 
@@ -1581,3 +1589,8 @@ def _build_update_ignore(dialect: str, body: str, primary_keys: list[str]) -> st
         suffix = f"ON CONFLICT ({', '.join(primary_keys)}) DO NOTHING"
         sql = f"{body} {suffix}"
     return sql
+
+
+def toml_load(path: str) -> dict[str, Any]:
+    with open(path, "rb") as fi_b:
+        return tomllib.load(fi_b)

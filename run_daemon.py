@@ -15,7 +15,6 @@ import orjson
 import redis
 import requests
 import schedule
-import toml
 from clayutil.cmdparse import (
     CollectionField as Coll,
     Command,
@@ -29,11 +28,11 @@ from sqlalchemy import text
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.db import build_score_insert_sql, create_db_engine, resolve_db_url, score_users_query, scores_compact_to_params, sync_score_columns
 from osuawa.playlist import PlaylistSource
-from osuawa.utils import BeatmapJob, BeatmapSpec, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, RedisTaskId, SimpleScoreInfo, is_safe_filename, push_task
+from osuawa.utils import BeatmapJob, BeatmapSpec, C, CompletedPlaylistBeatmap, CompletedSimpleScoreInfo, DatabasePlaylistBeatmap, RedisTaskId, SimpleScoreInfo, is_safe_filename, push_task, toml_load
 
 # streamlit settings
-st_config = toml.load("./.streamlit/config.toml")
-st_secrets = toml.load("./.streamlit/secrets.toml")
+st_config = toml_load("./.streamlit/config.toml")
+st_secrets = toml_load("./.streamlit/secrets.toml")
 
 # 路径创建
 for _path in [
@@ -230,7 +229,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
         tmp_playlist = OsuPlaylist(awa, playlist_filename, css_style=1, source=source)
         playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = awa.run_coro(tmp_playlist.playlist_task())
     except Exception as e:  # 这里无法确定是什么东西报错了，因为内部是 async 的 TaskGroup
-        raise ValueError("failed to parse the spec(s): %s" % beatmap_specs) from e
+        raise ValueError("failed to parse the spec(s): %s" % beatmap_specs) from e  # style: allow
     # 根据 # 键对其进行排序。# 从 1 开始递增，它与传入的 specs 顺序一致
     playlist_beatmaps_raw.sort(key=lambda x: int(x["#"]))
     playlist_beatmaps_db = []

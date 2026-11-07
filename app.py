@@ -28,7 +28,7 @@ from osuawa.components import (
     task_board,
     update_user_cache,
 )
-from osuawa.utils import consume_oauth_state, create_unique_picker, is_safe_filename, generate_oauth_state, read_injected_code
+from osuawa.utils import consume_oauth_state, create_unique_picker, generate_oauth_state, is_safe_filename, read_injected_code
 
 st.session_state._debugging_mode = st.secrets.args.debugging_mode
 admins = st.secrets.args.admins

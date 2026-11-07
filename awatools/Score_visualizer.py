@@ -74,15 +74,7 @@ def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
         df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
     else:
         df2 = df1[(df1["b_star_rating"] >= srl) & (df1["b_star_rating"] <= srh) & ((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]
-    if st.session_state.cat_advanced_filter != "":
-        try:
-            df3: pd.DataFrame = df2.query(st.session_state.cat_advanced_filter)
-        except Exception as e:
-            st.error(_("invalid filter: %s") % e)
-            df3 = pd.DataFrame()
-    else:
-        df3 = df2
-    return df3
+    return df2
 
 
 def calc_statistics(data: pd.DataFrame, column: str) -> tuple[
@@ -252,7 +244,6 @@ with st.expander(_("Filtering")):
             "bid",
         ],
     )
-    st.text_input(_("Advanced filter"), key="cat_advanced_filter")
 
 df_o = apply_filter(df)
 
@@ -429,21 +420,19 @@ with st.container(border=True):
     can_show_chart_pr = True
     if df_o_stats.at[st.session_state.cat_comp_index, "std"] == 0:
         st.error(
-            _("'%s' of user %d is constant (%s)")
+            _("'%s' of user %d is constant")
             % (
                 st.session_state.cat_comp_index,
                 user,
-                df_o_stats.at[st.session_state.cat_comp_index, "mean"],
             ),
         )
         can_show_chart_pr = False
     if df_c_stats.at[st.session_state.cat_comp_index, "std"] == 0:
         st.error(
-            _("'%s' of user %d is constant (%s)")
+            _("'%s' of user %d is constant")
             % (
                 st.session_state.cat_comp_index,
                 comp_user,
-                df_c_stats.at[st.session_state.cat_comp_index, "mean"],
             ),
         )
         can_show_chart_pr = False

@@ -618,11 +618,11 @@ if st.session_state.perm >= 1:
                             ),
                         )
                     except orjson.JSONDecodeError:
-                        st.toast(_("invalid JSON: %s") % edited_row.RAW_MODS)
+                        st.toast(_("invalid JSON: '%s'") % edited_row.RAW_MODS)
                         specs_recalculate_valid = False
                         break
                     except (ValueError, TypeError):
-                        st.toast(_("invalid value: %s") % edited_row.RAW_MODS)
+                        st.toast(_("invalid value: '%s'") % edited_row.RAW_MODS)
                         specs_recalculate_valid = False
                         break
                     olds_to_drop.append((str(orig["MODS"]), new_primary))
@@ -697,11 +697,11 @@ if uploaded_file is not None:
         st.stop()
     # 浏览器上传的 name 可伪造，拼进 .playlist/.html/.csv/.covers 路径之前先判定；不通过就终止
     if not is_safe_filename(uploaded_file.name):
-        st.error(_("invalid value: %s") % uploaded_file.name)
+        st.error(_("invalid value: '%s'") % uploaded_file.name)
         st.stop()
     playlist_name = os.path.splitext(uploaded_file.name)[0]
     if not is_safe_filename(playlist_name):
-        st.error(_("invalid value: %s") % playlist_name)
+        st.error(_("invalid value: '%s'") % playlist_name)
         st.stop()
     session_path = os.path.join(C.UPLOADED_DIRECTORY.value, uid)
     if not os.path.exists(session_path):

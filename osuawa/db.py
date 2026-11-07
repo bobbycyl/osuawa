@@ -71,7 +71,7 @@ def get_score_column_types() -> list[tuple[str, str]]:
             columns.append((name, _SCORE_SQL_TYPES[origin]))
         except KeyError:
             raise RuntimeError(
-                "field '%s' (type %s) has no sql type mapping" % (field.name, field_type),
+                "field '%s' with type '%s' has no sql type mapping" % (field.name, field_type),
             ) from None
     return columns
 

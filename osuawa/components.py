@@ -471,13 +471,18 @@ def files_action(action: Literal["show", "clean"], filename: Optional[str] = Non
 
 
 def tail_log(n: int = 100, keyword: Optional[str] = None) -> str:
+    if n > 10000:
+        raise ValueError("n must be less than 10000")
     ret_md = "# Show last %d lines of logs\n" % n
     for log_filename in ["streamlit.log", "daemon.log"]:
         ret_md += "## %s" % log_filename
         log_filename = os.path.join(C.LOGS.value, log_filename)
-        with open(log_filename, "r", encoding="utf-8") as fi:
-            # 先拿到最后 N 行
-            last_lines = deque(fi, maxlen=n)
+        if os.path.exists(log_filename):
+            with open(log_filename, "r", encoding="utf-8") as fi:
+                # 先拿到最后 N 行
+                last_lines = deque(fi, maxlen=n)
+        else:
+            last_lines = []
 
         results = []
         if keyword is not None:
@@ -1074,7 +1079,7 @@ def tasks_grid(tasks: list[tuple[RedisTaskId, dict[str, str]]]):
                 case _:
                     st.json(_result, expanded=False)
 
-            st.caption(_("updated at: %s") % dt.strftime("%Y-%m-%d %H:%M:%S %Z%z"))
+            st.caption(_("updated at: %s") % dt.strftime("%Y-%m-%d %H:%M:%S %Z%z"))  # style: allow
 
 
 def task_board():
