@@ -378,7 +378,7 @@ if st.session_state.perm >= 1:
         keyword_lower = st.session_state.gen_filter_search.lower()
         target_cols = ["BID", "SID", "INFO", "SKILL_SLOT", "MODS", "NOTES"]
         mask = df[target_cols].apply(
-            lambda x: x.astype(str).str.lower().str.contains(keyword_lower, na=False).any(),
+            lambda x: x.astype(str).str.lower().str.contains(keyword_lower, na=False, regex=False).any(),
             axis=1,
         )
         df = df[mask]

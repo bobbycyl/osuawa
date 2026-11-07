@@ -24,7 +24,7 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
             tar.extract(
                 "dejavu-fonts-ttf-2.37/ttf/DejaVuSansCondensed.ttf",
                 output_dir,
-                filter="fully_trusted",
+                filter="data",
             )
         os.remove(ttf_dejavu)
         shutil.move(
@@ -81,7 +81,7 @@ def download_dependencies(output_dir: str, mirrors: Optional[dict[str, list[str]
             "dll-fribidi.tar.bz2",
         )
         with tarfile.open(dll_fribidi, "r:bz2") as tar:
-            tar.extract("Library/bin/fribidi-0.dll", output_dir, filter="fully_trusted")
+            tar.extract("Library/bin/fribidi-0.dll", output_dir, filter="data")
         os.remove(dll_fribidi)
         shutil.move(
             os.path.join(output_dir, "Library", "bin", "fribidi-0.dll"),
