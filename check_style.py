@@ -5,26 +5,32 @@
     i18n         前端文案必须包裹 _()，且 msgid 用英文
     ui-fstring   前端文案不能是 f-string：gettext 只认字面量，整条模板无法翻译
     ui-literal   拼接出来的文案里不能留未翻译的中文片段
-    ui-quote     文案里插值的「名字」用单引号，如 "no valid data for '%s'"
+    ui-quote     文案里的 %s 用成对引号，如 "no valid data for '%s'"
     exc-lang     异常消息必须是英文
     exc-case     异常消息小写开头
     exc-i18n     异常消息不要用 _()（异常跟着语言变会让排查变难）
-    exc-quote    异常消息里的名字用单引号
+    exc-quote    异常消息里的 %s 用成对引号
     log-lang     日志消息必须是英文（日志不加引号：裸插值便于 grep）
     catalog      _() 的 msgid 必须在 zh_CN 的 .po 里有译文
 
 引号规则对三类消息不同，是有依据的，别一刀切：
     异常      对齐 Python 内建写法（KeyError: 'k'），且异常不翻译，引号稳定
-    前端文案  引号帮用户区分「句子」和「值」，只对名字类加；路径/URL 不加
+    前端文案  引号帮用户区分「句子」和「值」；反引号也可用于 Markdown 文案
     日志      消费者是 grep 和日志系统，引号是噪声
+
+静态分析无法可靠地区分「名字」和「自由文本」，所以前两类消息默认检查所有 %s。
+确实不需要引号的载荷必须显式豁免，不再根据冒号、括号等上下文偷偷放行。
+%r / %a 自带 repr 转换，%d 等数值占位符不适用引号规则；f-string 没有类型信息，
+也不自动推断其中的插值是不是需要引号的字符串。
 
 AgGrid 的 header_name 不检查：BID / SR / AR / OD / Drain / Combo 是 osu! 圈的固定写法。
 
 豁免：行尾写 # style: allow 可跳过该行；EXEMPT 里可按「文件 + rule 前缀」整块豁免。
 
 用法：
-    python check_style.py                # 检查整个仓库，有问题 exit 1
-    python check_style.py awatools/         # 只检查某个目录或文件
+    python check_style.py                 # 检查整个仓库，有问题 exit 1
+    python check_style.py awatools/       # 只检查某个目录或文件
+    python check_style.py --path awatools/
 """
 
 from __future__ import annotations
@@ -33,7 +39,8 @@ import argparse
 import ast
 import pathlib
 import re
-import sys
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 #: 会显示用户看得见的文案的 st.* 函数（第一个位置参数，或下面的 kwargs）
 UI_FUNCS = {
@@ -84,7 +91,8 @@ SKIP_DIRS = {".venv", "osu-tools", "__pycache__", ".git", ".ruff_cache"}
 PO_PATH = pathlib.Path("share/locale/zh_CN/LC_MESSAGES/messages.po")
 
 CJK = re.compile(r"[\u4e00-\u9fa5]")
-STR_SPEC = re.compile(r"%(?:\([^)]*\))?[-+ 0#]*\d*(?:\.\d+)?s")
+#: 完整的 printf 风格占位符。%% 必须先作为整体消费，不能删字符后再匹配。
+PERCENT_SPEC = re.compile(r"%(?:\([^)]*\))?[-+ 0#]*(?:\*|\d+)?(?:\.(?:\*|\d+))?[hlL]?[diouxXeEfFgGcrsa%]")
 
 #: (文件名, rule 前缀) -> 豁免理由；前缀不能为空，否则会豁免一切
 EXEMPT: dict[tuple[str, str], str] = {
@@ -94,7 +102,7 @@ EXEMPT: dict[tuple[str, str], str] = {
 assert all(prefix for _, prefix in EXEMPT), "EXEMPT 的 rule 前缀不能为空"
 
 
-# --------------------------------------------------------------------------- 语法小工具
+# --------------------------------------------------------------------------- 结构化消息
 
 
 def dotted(node: ast.AST) -> str:
@@ -108,70 +116,87 @@ def dotted(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
-def literal(node: ast.AST) -> str | None:
-    """取出可检查的文本：字面量、f-string 的字面量部分、_("x") 的 msgid
+@dataclass(frozen=True)
+class TextPart:
+    """一个真实存在过的字面量；不同 part 之间绝不共享引号上下文"""
 
-    _("x") % y 会取到 "x"；只取拼接的最左段（要整条文本请用 message_text）；
-    其它表达式（变量、函数调用）返回 None，表示无法静态检查。
+    text: str
+    lineno: int
+    translated: bool = False
+    fstring: bool = False
+
+
+@dataclass(frozen=True)
+class Message:
+    """从 AST 提取的消息，保留字面量边界、翻译状态与动态表达式信息"""
+
+    parts: tuple[TextPart, ...] = ()
+    dynamic: bool = False
+
+    @property
+    def text(self) -> str:
+        """用于语言和大小写检查的静态文本；动态表达式本身不参与"""
+        return "".join(part.text for part in self.parts)
+
+    @property
+    def translated(self) -> bool:
+        return any(part.translated for part in self.parts)
+
+    @property
+    def has_fstring(self) -> bool:
+        return any(part.fstring for part in self.parts)
+
+
+def extract_message(node: ast.AST, translated: bool = False) -> Message:
+    """递归提取字面量，而不是把表达式剥到最左边或拼成假上下文
+
+    % 格式化只读取左侧模板，右侧是值；+ 拼接保留各段边界；_() 只标记其
+    内部的字面量。变量、函数调用和 f-string 插值会把 dynamic 置为 True，
+    防止把不完整的静态文本当成完整 msgid 收入 catalog。
     """
-    while isinstance(node, ast.BinOp):  # 剥掉 % 与 + 拼接，取最左边
-        node = node.left
-    if isinstance(node, ast.Call) and dotted(node.func) == "_" and node.args:
-        node = node.args[0]
-        while isinstance(node, ast.BinOp):
-            node = node.left
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
+        return Message((TextPart(node.value, node.lineno, translated),))
+
     if isinstance(node, ast.JoinedStr):
         # noinspection bad-argument-type, unresolved-references
-        return "".join(v.value for v in node.values if isinstance(v, ast.Constant) and isinstance(v.value, str))
-    return None
+        text = "".join(value.value for value in node.values if isinstance(value, ast.Constant) and isinstance(value.value, str))
+        return Message((TextPart(text, node.lineno, translated, fstring=True),), dynamic=True)
 
-
-def add_operands(node: ast.AST) -> list[ast.AST]:
-    """把 a + b + c 摊平成 [a, b, c]，用于逐段判断是否被 _() 包住"""
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return add_operands(node.left) + add_operands(node.right)
-    return [node]
+        left = extract_message(node.left, translated)
+        right = extract_message(node.right, translated)
+        return Message(left.parts + right.parts, left.dynamic or right.dynamic)
 
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        return extract_message(node.left, translated)
 
-def message_text(node: ast.AST) -> str:
-    """把 a + b + _("c") 的各段拼成完整文本，取不到文本的段按空串算
+    if isinstance(node, ast.Call) and dotted(node.func) == "_" and node.args:
+        return extract_message(node.args[0], translated=True)
 
-    只看最左段会漏掉 "done" + "中文" 这类尾巴，日志/异常的语言与引号检查都走这里。
-    """
-    return "".join(literal(op) or "" for op in add_operands(node))
-
-
-def is_translated(node: ast.AST) -> bool:
-    """是否 _("x") 或 _("x") % y"""
-    while isinstance(node, ast.BinOp):
-        node = node.left
-    return isinstance(node, ast.Call) and dotted(node.func) == "_"
+    return Message(dynamic=True)
 
 
 def has_words(text: str) -> bool:
     """剥掉占位符后还剩不剩自然语言（"#### #%d: %s" 属于没有，不用翻译）"""
-    return bool(re.search(r"[A-Za-z\u4e00-\u9fa5]", re.sub(r"%[-+ 0#]*\d*(?:\.\d+)?[A-Za-z]", "", text)))
+    return bool(re.search(r"[A-Za-z\u4e00-\u9fa5]", PERCENT_SPEC.sub("", text)))
 
 
 def unquoted_specs(text: str) -> list[str]:
-    """找出没被引号包住的 %s
+    """找出没有被成对单引号或反引号紧贴包住的 %s
 
-    先抹掉 %% 转义再匹配，否则 "100%%s" 会被当成占位符。
-    以下视为自由文本、不要求引号：已加引号的 '%s'、冒号后的载荷（": %s"）、
-    括号里的说明（"(type %s)"、"(got %s)"）。
+    不在检查前删除 %%，由 PERCENT_SPEC 直接消费完整 token，避免索引漂移。
+    冒号和括号不再构成隐式豁免；确有需要时使用行尾 style: allow。
     """
-    cleaned = text.replace("%%", "")
     found = []
-    for match in STR_SPEC.finditer(cleaned):
-        before = cleaned[max(0, match.start() - 2) : match.start()]
-        after = cleaned[match.end() : match.end() + 1]
-        if before.endswith(("'", "`")) and after in ("'", "`"):
+    for match in PERCENT_SPEC.finditer(text):
+        spec = match.group(0)
+        if not spec.endswith("s"):
             continue
-        if before.endswith(": ") or before.endswith("(") or after == ")":
+        before = text[match.start() - 1 : match.start()] if match.start() else ""
+        after = text[match.end() : match.end() + 1]
+        if before in ("'", "`") and after == before:
             continue
-        found.append(match.group(0))
+        found.append(spec)
     return found
 
 
@@ -209,115 +234,94 @@ class Checker:
         return "# style: allow" in text or "# noqa" in text
 
     def collect_msgid(self, path: pathlib.Path, node: ast.AST) -> None:
-        """记录用到的 msgid，供 catalog 检查（与主遍历共用一次解析）"""
+        """记录完整静态 msgid，供 catalog 检查（与主遍历共用一次解析）"""
         if isinstance(node, ast.Call) and dotted(node.func) == "_" and node.args:
-            text = literal(node.args[0])
-            if text:
-                self.msgids.setdefault(text, (path, node.lineno))
+            message = extract_message(node.args[0])
+            if message.text and not message.dynamic:
+                self.msgids.setdefault(message.text, (path, node.lineno))
 
-    # -------- 四条规则
+    # -------- 四类规则
 
     def check_ui(self, path: pathlib.Path, call: ast.Call) -> None:
-        """前端文案：必须 _()、不能是 f-string、名字要加引号"""
+        """前端文案：必须 _()、不能是 f-string、%s 要加成对引号"""
         name = dotted(call.func).rsplit(".", 1)[-1]
         if name not in UI_FUNCS:
             return
         if name == "dialog":
             targets = call.args[:1]
         elif name == "tabs" and call.args and isinstance(call.args[0], ast.List):
-            # noinspection unresolved-references
             targets = call.args[0].elts
         else:
             targets = call.args[:1] + [kw.value for kw in call.keywords if kw.arg in UI_TEXT_KWARGS]
 
         for target in targets:
-            text = literal(target)
+            message = extract_message(target)
+            text = message.text
             if not text or not has_words(text):
                 continue
             self.ui_texts += 1
 
-            if isinstance(target, ast.JoinedStr):
+            if message.has_fstring:
                 self.add(path, target.lineno, "ui-fstring", '文案是 f-string，无法翻译（应为 _("模板 %%s") %% 值）：%r' % text[:60], call.lineno)
                 continue
 
-            operands = add_operands(target)
+            # 引号按原始字面量查，绝不让 + 两侧的字符组成虚假的引号上下文。
+            for part in message.parts:
+                for spec in unquoted_specs(part.text):
+                    self.add(path, target.lineno, "ui-quote", "%s 没加引号：%r" % (spec, part.text[:60]), call.lineno)
 
-            # 引号按段查：拼接时尾巴上的 %s 也要覆盖
-            for op in operands:
-                piece = literal(op)
-                if piece:
-                    for spec in unquoted_specs(piece):
-                        self.add(path, target.lineno, "ui-quote", "%s 没加引号：%r" % (spec, piece[:60]), call.lineno)
+            chinese = [part for part in message.parts if not part.translated and CJK.search(part.text)]
+            if chinese and (message.dynamic or message.translated or len(message.parts) > 1):
+                self.add(path, target.lineno, "ui-literal", "拼接里有未翻译的中文片段：%r" % chinese[0].text[:60], call.lineno)
+                continue
 
-            # 拼接：任何一段中文常量都是漏翻（"_() + 中文尾巴" 比 "前缀 + _()" 更常见）
-            if len(operands) > 1:
-                # noinspection unresolved-references
-                chinese = [op.value for op in operands if isinstance(op, ast.Constant) and isinstance(op.value, str) and CJK.search(op.value)]
-                if chinese:
-                    # noinspection string-format, unresolved-references
-                    self.add(path, target.lineno, "ui-literal", "拼接里有未翻译的中文片段：%r" % chinese[0][:60], call.lineno)
-                    continue
-
-            if is_translated(target):
-                if CJK.search(text):
+            if message.translated:
+                if any(CJK.search(part.text) for part in message.parts if part.translated):
                     self.add(path, target.lineno, "i18n", "msgid 应该是英文：%r" % text[:60], call.lineno)
                 continue
 
-            if not any(is_translated(op) for op in operands):
-                self.add(path, target.lineno, "i18n", "文案没有包裹 _()：%r" % text[:60], call.lineno)
+            self.add(path, target.lineno, "i18n", "文案没有包裹 _()：%r" % text[:60], call.lineno)
 
     def check_exception(self, path: pathlib.Path, node: ast.Raise) -> None:
-        """异常消息：英文、小写开头、不用 _()、名字加引号"""
+        """异常消息：英文、小写开头、不用 _()、%s 加成对引号"""
         if not isinstance(node.exc, ast.Call) or not node.exc.args:
             return
-        arg = node.exc.args[0]
-        text = message_text(arg)
+        message = extract_message(node.exc.args[0])
+        text = message.text
         if not text:  # 取不到文本（变量、f"{k}" 这类全插值）就没什么可查的
             return
         self.exceptions += 1
 
-        if is_translated(arg):
+        if message.translated:
             self.add(path, node.lineno, "exc-i18n", "异常消息不要用 _()：%r" % text[:60])
         if CJK.search(text):
             self.add(path, node.lineno, "exc-lang", "异常消息必须是英文：%r" % text[:60])
         elif text[:1].isupper():
             self.add(path, node.lineno, "exc-case", "异常消息小写开头：%r" % text[:60])
-        if not isinstance(arg, ast.JoinedStr):  # f-string 没有 %s，引号规则不适用
-            for spec in unquoted_specs(text):
+        for part in message.parts:
+            if part.fstring:  # f-string 插值没有类型信息，不推断是否需要引号
+                continue
+            for spec in unquoted_specs(part.text):
                 self.add(path, node.lineno, "exc-quote", "%s 没加引号：%r" % (spec, text[:60]))
 
     def check_log(self, path: pathlib.Path, call: ast.Call) -> None:
-        """日志消息：只要求英文（引号不给日志加，便于 grep）"""
-        for arg in call.args:
-            text = message_text(arg)
-            if not text:
-                continue
-            self.logs += 1
-            if CJK.search(text):
-                self.add(path, arg.lineno, "log-lang", "日志消息必须是英文：%r" % text[:60], call.lineno)
-
-    def check_catalog(self) -> None:
-        """_() 的 msgid 都要有译文"""
-        try:
-            # noinspection package-requirements
-            from babel.messages.pofile import read_po
-        except ImportError:
-            print("跳过 catalog 检查：未安装 babel", file=sys.stderr)
+        """日志消息：只检查第一个参数（消息模板），其余参数是要插入的值"""
+        if not call.args:
             return
-        if not PO_PATH.exists():
+        arg = call.args[0]
+        message = extract_message(arg)
+        text = message.text
+        if not text:
             return
-        with open(PO_PATH, "rb") as po_file:
-            # noinspection unhashable
-            translated = {m.id for m in read_po(po_file) if isinstance(m.id, str) and m.id}
-        for msgid in sorted(set(self.msgids) - translated):
-            path, lineno = self.msgids[msgid]
-            self.add(path, lineno, "catalog", "缺少译文：%r" % msgid[:60])
+        self.logs += 1
+        if CJK.search(text):
+            self.add(path, arg.lineno, "log-lang", "日志消息必须是英文：%r" % text[:60], call.lineno)
 
 
 # --------------------------------------------------------------------------- 入口
 
 
-def iter_files(root: pathlib.Path):
+def iter_files(root: pathlib.Path) -> Iterator[pathlib.Path]:
     if root.is_file():
         yield root
         return
@@ -328,11 +332,12 @@ def iter_files(root: pathlib.Path):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="检查 i18n 与消息书写规范")
-    parser.add_argument("--path", default=".", help="要检查的文件或目录（默认当前仓库）")
+    parser.add_argument("path", nargs="?", help="要检查的文件或目录（默认当前仓库）")
+    parser.add_argument("--path", dest="path_option", help="要检查的文件或目录（等价于位置参数）")
     args = parser.parse_args(argv)
 
     checker = Checker()
-    for path in iter_files(pathlib.Path(args.path)):
+    for path in iter_files(pathlib.Path(args.path_option or args.path or ".")):
         checker.files += 1
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             checker.collect_msgid(path, node)
@@ -344,7 +349,6 @@ def main(argv: list[str] | None = None) -> int:
                     checker.check_ui(path, node)
                 elif name in LOG_METHODS:
                     checker.check_log(path, node)
-    checker.check_catalog()
 
     for path, lineno, rule, detail in checker.issues:
         print("%s:%d [%s] %s" % (path, lineno, rule, detail))
