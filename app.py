@@ -128,7 +128,6 @@ st.session_state.translate = gettext_getfunc(st.session_state._uni_lang_value)  
 pg_homepage = st.Page("Home.py", title=_("Homepage"))
 pg_score_visualizer = st.Page("awatools/Score_visualizer.py", title=_("Score Visualizer"))
 pg_playlist_generator = st.Page("awatools/Playlist_generator.py", title=_("Playlist Generator"))
-pg_recorder = st.Page("awatools/Recorder.py", title=_("Recorder"))
 pg_room_spectator = st.Page("awatools/Room_spectator.py", title=_("Room Spectator"))
 
 load_value("redis_tasks", [])
@@ -336,7 +335,6 @@ pg_list = [
     pg_homepage,
     pg_score_visualizer,
     pg_playlist_generator,
-    pg_recorder,
     pg_room_spectator,
 ]
 if st.session_state.perm >= 2:

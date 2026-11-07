@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: osuawa VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-04 23:42+0800\n"
-"PO-Revision-Date: 2026-11-04 23:41+0800\n"
+"POT-Creation-Date: 2026-11-07 22:10+0800\n"
+"PO-Revision-Date: 2026-11-07 22:09+0800\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -19,11 +19,11 @@ msgstr ""
 "Generated-By: Babel 2.14.0\n"
 "X-Generator: Poedit 3.10\n"
 
-#: Home.py:37 app.py:126
+#: Home.py:37 app.py:128
 msgid "Homepage"
 msgstr "主页"
 
-#: Home.py:48 osuawa/components.py:1103
+#: Home.py:48 osuawa/components.py:1075
 #, python-format
 msgid "%d sub-tasks done"
 msgstr "%d 个子任务已完成"
@@ -36,799 +36,784 @@ msgstr "请稍候……"
 msgid "Welcome!"
 msgstr "欢迎使用！"
 
-#: Home.py:342
+#: Home.py:345
 msgid "Select a command"
 msgstr "选择一个命令"
 
-#: Home.py:347
+#: Home.py:350
 #, python-format
 msgid "**description**: %s"
 msgstr "**命令描述**：%s"
 
-#: Home.py:348
+#: Home.py:351
 #, python-format
 msgid "**usage**: %s"
 msgstr "**使用方法**：%s"
 
-#: Home.py:398
+#: Home.py:401
 msgid "enabled"
 msgstr "启用"
 
-#: Home.py:417
+#: Home.py:420
 msgid "Preview the command"
 msgstr "预览命令"
 
-#: Home.py:423
+#: Home.py:426
 msgid "Run"
 msgstr "运行"
 
-#: Home.py:436
+#: Home.py:439
 msgid "How can I help you?"
 msgstr "有什么我能帮你的吗？"
 
-#: Home.py:439
+#: Home.py:442
 msgid "unsupported input type"
 msgstr "不支持的输入类型"
 
-#: Home.py:463
+#: Home.py:466
 #, python-format
 msgid "Session: %s"
 msgstr "当前会话：%s"
 
-#: app.py:127 pages/Score_visualizer.py:26
+#: app.py:129 awatools/Score_visualizer.py:26
 msgid "Score Visualizer"
 msgstr "查成分"
 
-#: app.py:128 pages/Playlist_generator.py:31
+#: app.py:130 awatools/Playlist_generator.py:31
 msgid "Playlist Generator"
 msgstr "做课题"
 
-#: app.py:129 pages/Recorder.py:23
-msgid "Recorder"
-msgstr "看记录"
-
-#: app.py:130 pages/Room_spectator.py:15
+#: app.py:131 awatools/Room_spectator.py:15
 msgid "Room Spectator"
-msgstr "裁比赛"
+msgstr "看比赛"
 
-#: app.py:138
+#: app.py:139
 msgid "Loading... Keep your cursor steady."
 msgstr "正在加载中……手不要抖。"
 
-#: app.py:139
+#: app.py:140
 msgid "PP has gone."
 msgstr "PP 飞走了。"
 
-#: app.py:140
+#: app.py:141
 msgid "Attempting to parse a 400pp jump map..."
 msgstr "正在尝试解析一张 400pp 的跳图……"
 
-#: app.py:141
+#: app.py:142
 msgid "Who moved my mouse sensitivity?"
 msgstr "谁动了我的鼠标灵敏度？"
 
-#: app.py:142
+#: app.py:143
 msgid "Don’t take it too seriously, this is just a toy."
 msgstr "别太较真，这只是个玩具。"
 
-#: app.py:143
+#: app.py:144
 msgid "Re-timing the map... No wait, it’s perfectly aligned this time!"
 msgstr "对齐时轴中……已经对齐了！"
 
-#: app.py:144
+#: app.py:145
 msgid "I've got a slider break!"
 msgstr "我断滑条了！"
 
-#: app.py:145
+#: app.py:146
 msgid "Shh, don’t tell anyone what this tool is built with."
 msgstr "嘘，别和其他人说这个工具是用什么构建的。"
 
-#: app.py:146
+#: app.py:147
 msgid "Calculating how long your wrist can last."
 msgstr "正在计算你的手腕还能坚持多久。"
 
-#: app.py:147
+#: app.py:148
 msgid "This loading bar moves slower than a 128-BPM song."
 msgstr "这进度条动得比 128 BPM 的歌还慢。"
 
-#: app.py:148
+#: app.py:149
 msgid ""
 "Tip: You can nod your head to the beat even if the loading bar is stuck."
 msgstr "小贴士：即使进度条不动，你也可以跟着节奏点头。"
 
-#: app.py:149
+#: app.py:150
 msgid "I want a rhythm-pulsing progress bar like Lazer’s."
 msgstr "我想要一个 Lazer 同款跟随节奏律动的进度条。"
 
-#: app.py:150
+#: app.py:151
 msgid "Pooling is a headache."
 msgstr "选图真令人头疼。"
 
-#: app.py:151
+#: app.py:152
 msgid "Loading Stellar Railway... Wait, I meant star rating."
 msgstr "正在启动星……啊不对，加载星数。"
 
-#: app.py:152
+#: app.py:153
 msgid "My ACC is expanding and contracting with temperature."
 msgstr "我的准确率正在热胀冷缩。"
 
-#: app.py:153
+#: app.py:154
 msgid "Generating fake SS screenshots..."
 msgstr "正在生成虚假的 SS 截图。"
 
-#: app.py:154
+#: app.py:155
 msgid "Loading miss hitsound... 404 Not Found."
 msgstr "正在加载 miss 击打音效…… 404 你访问的页面不存在。"
 
-#: app.py:155
+#: app.py:156
 msgid "Why is your HP thicker than MMORPG bosses?"
 msgstr "你的血条怎么比大型多人在线角色扮演游戏的头目还厚？"
 
-#: app.py:156
+#: app.py:157
 msgid "I'm not a fan of DT."
 msgstr "我不喜欢 DT。"
 
-#: app.py:157
+#: app.py:158
 msgid "Calculating how much patience you need..."
 msgstr "正在计算你需要多少耐心……"
 
-#: app.py:158
+#: app.py:159
 msgid "Loading \"my hand slipped\" excuse generator..."
 msgstr "正在加载“我手滑了”借口生成器……"
 
-#: app.py:159
+#: app.py:160
 msgid "Generating fake \"this is my first time playing\" claims..."
 msgstr "正在编造“这是我第一次玩”的谎言……"
 
-#: app.py:160
+#: app.py:161
 msgid "Loading C#, Rust, JavaScript and so on..."
 msgstr "正在加载 C#、Rust、JavaScript 等……"
 
-#: app.py:161
+#: app.py:162
 msgid "Calculating how much time you have wasted..."
 msgstr "正在计算你已经浪费了多少时间……"
 
-#: app.py:162
+#: app.py:163
 msgid "Sleeping..."
 msgstr "睡觉中……"
 
-#: app.py:163
+#: app.py:164
 msgid "Refactoring spaghetti code? No, just piling it up."
 msgstr "重构屎山代码？不不不，堆叠屎山代码。"
 
-#: app.py:164
+#: app.py:165
 msgid ""
 "If you see this tip for more than 5 seconds, the thread is probably dead."
 msgstr "如果这条小贴士显示超过 5 秒钟，线程可能已经死了。"
 
-#: app.py:165
+#: app.py:166
 msgid "There are no bugs, only undocumented features."
 msgstr "没有 bug，只有未标明特性。"
 
-#: app.py:166
+#: app.py:167
 msgid "The loading bar is actually of random length, stop staring at it."
 msgstr "进度条是随机的，别盯着它了。"
 
-#: app.py:167
+#: app.py:168
 #, python-format
 msgid "If I told you it were 99%% loaded, would you believe me?"
 msgstr "如果我说已经加载了 99%% 了，你会信吗？"
 
-#: app.py:168
+#: app.py:169
 msgid "Analyzing your play history... it seems you like Tech maps?"
 msgstr "正在分析你的游玩历史……似乎你喜欢 Tech 图？"
 
-#: app.py:169
+#: app.py:170
 msgid "Stop looking at the Accuracy, enjoy the music!"
 msgstr "别关注准确率了，享受音乐！"
 
-#: app.py:170
+#: app.py:171
 msgid "Loading... (This tip is also part of the loading process)"
 msgstr "正在加载中……（是的，仅此而已）"
 
-#: app.py:173
+#: app.py:174
 msgid "Loading necessary objects..."
 msgstr "正在加载必要对象……"
 
-#: app.py:210
+#: app.py:246
 msgid "Please click the button below to authorize the app."
 msgstr "请点击下方的按钮以完成授权。"
 
-#: app.py:212
+#: app.py:259
 msgid "OAuth2 URL"
 msgstr "授权链接"
 
-#: app.py:337
+#: app.py:341
 msgid "Easter Egg"
 msgstr "彩蛋"
 
-#: app.py:351
+#: app.py:355
 msgid "Press `F` to exit immersive mode."
 msgstr "按 `F` 退出沉浸模式。"
 
-#: app.py:361
+#: app.py:365
 msgid "Immersive Mode"
 msgstr "沉浸模式"
 
-#: app.py:369
+#: app.py:373
 msgid "Clear Cache"
 msgstr "清除缓存"
 
-#: app.py:380 app.py:385
+#: app.py:384 app.py:389
 msgid "Task Board"
 msgstr "任务面板"
 
-#: app.py:389
+#: app.py:393
 msgid "Exit Immersive Mode"
 msgstr "退出沉浸模式"
 
-#: osuawa/components.py:315
-msgid "Failed to initialize the osu! api wrapper. Please refresh the page."
-msgstr "初始化 osu! api 失败，请刷新页面。"
-
-#: osuawa/components.py:348
-msgid "Register command parser"
-msgstr "注册命令解析器"
-
-#: osuawa/components.py:370
-msgid "Get user info"
-msgstr "获取用户信息"
-
-#: osuawa/components.py:377
-msgid "Save user's recent scores"
-msgstr "保存用户最近分数"
-
-#: osuawa/components.py:384
-msgid "Get and display score"
-msgstr "展示分数"
-
-#: osuawa/components.py:391
-msgid "Get and display user scores of a beatmap"
-msgstr "展示用户谱面分数"
-
-#: osuawa/components.py:398
-msgid "Generate local playlists"
-msgstr "生成本地课题"
-
-#: osuawa/components.py:405
-msgid "Display user's recent scores (only saved scores are available)"
-msgstr "展示用户最近分数（需要先保存分数）"
-
-#: osuawa/components.py:412
-msgid "Draw strain graph of an osu! beatmap (converted beatmap supported)"
-msgstr "绘制 osu! 标准模式谱面的难度折线图（支持转谱）"
-
-#: osuawa/components.py:419
-msgid "Calculate similarity of the two osu!standard beatmaps"
-msgstr "计算两张 osu! 标准模式谱面的相似度"
-
-#: osuawa/components.py:426
-msgid "Calculate feature epsilon"
-msgstr "计算谱面特征 ε"
-
-#: osuawa/components.py:431
-msgid "Display all active sessions"
-msgstr "展示所有活跃会话"
-
-#: osuawa/components.py:432
-msgid "Invalidate all sessions"
-msgstr "退出所有会话"
-
-#: osuawa/components.py:551
-#, python-format
-msgid "skipped '%s'"
-msgstr "已跳过 %s"
-
-#: osuawa/components.py:570
-#, python-format
-msgid "failed to generate '%s'"
-msgstr "生成 %s 失败"
-
-#: osuawa/components.py:573
-#, python-format
-msgid "generated '%s'"
-msgstr "已生成 %s"
-
-#: osuawa/components.py:584
-msgid "querying the user list"
-msgstr "正在请求用户列表"
-
-#: osuawa/components.py:590
-#, python-format
-msgid "user %d not found"
-msgstr "用户 %d 不存在"
-
-#: osuawa/components.py:605
-msgid "token matched"
-msgstr "令牌验证通过"
-
-#: osuawa/components.py:607
-msgid "token mismatched"
-msgstr "令牌验证失败"
-
-#: osuawa/components.py:609
-#, python-brace-format
-msgid "use `reg {\"token\": \"<token>\"}` to pass the token"
-msgstr "使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌"
-
-#: osuawa/components.py:613
-msgid "token generated"
-msgstr "令牌已生成"
-
-#: osuawa/components.py:614
-msgid ""
-"You need to ask the web admin for the session token to unlock full features."
-msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。"
-
-#: osuawa/components.py:667
-#, python-format
-msgid "invalid ruleset id: '%d'"
-msgstr "无效游戏模式 ID：%d"
-
-#: osuawa/components.py:699
-#, python-format
-msgid "Difficulty Graph of %d"
-msgstr "%d 的难度曲线"
-
-#: osuawa/components.py:703
-msgid "Start Time"
-msgstr "开始时间"
-
-#: osuawa/components.py:704
-msgid "Strain"
-msgstr "难度值"
-
-#: osuawa/components.py:778 osuawa/components.py:782
-msgid "mean"
-msgstr "均值"
-
-#: osuawa/components.py:792
-msgid "Sample"
-msgstr "样本"
-
-#: osuawa/components.py:793 pages/Playlist_generator.py:203
-msgid "Value"
-msgstr "值"
-
-#: osuawa/components.py:794
-msgid "Metric"
-msgstr "指标"
-
-#: osuawa/components.py:899
-msgid "Mod"
-msgstr "模组"
-
-#: osuawa/components.py:903
-msgid "Select a mod"
-msgstr "选择一个模组"
-
-#: osuawa/components.py:1012 pages/Recorder.py:127
-msgid "Ruleset"
-msgstr "游戏模式"
-
-#: osuawa/components.py:1033 pages/Playlist_generator.py:665
-msgid "Delete"
-msgstr "删除"
-
-#: osuawa/components.py:1043 pages/Playlist_generator.py:259
-msgid "Add"
-msgstr "添加"
-
-#: osuawa/components.py:1045
-msgid "Reset"
-msgstr "重置"
-
-#: osuawa/components.py:1047
-msgid "Apply to the form"
-msgstr "应用至表单"
-
-#: osuawa/components.py:1049
-msgid "Preview"
-msgstr "预览"
-
-#: osuawa/components.py:1094
-#, python-format
-msgid "#%d: %s"
-msgstr "#%d：%s"
-
-#: osuawa/components.py:1099
-msgid "pending..."
-msgstr "待定……"
-
-#: osuawa/components.py:1110
-#, python-format
-msgid "updated at: %s"
-msgstr "更新于 %s"
-
-#: osuawa/components.py:1124
-msgid "all"
-msgstr "全部"
-
-#: osuawa/components.py:1125
-msgid "pending"
-msgstr "待定"
-
-#: osuawa/components.py:1126
-msgid "success"
-msgstr "成功"
-
-#: osuawa/components.py:1127
-msgid "error"
-msgstr "错误"
-
-#: pages/Playlist_generator.py:34 pages/Playlist_generator.py:40
-#: pages/Playlist_generator.py:256
+#: awatools/Playlist_generator.py:34 awatools/Playlist_generator.py:40
+#: awatools/Playlist_generator.py:256
 msgid "Mod Generator"
 msgstr "模组选择"
 
-#: pages/Playlist_generator.py:46
+#: awatools/Playlist_generator.py:46
 msgid "New Style"
 msgstr "新版样式"
 
-#: pages/Playlist_generator.py:94
+#: awatools/Playlist_generator.py:94
 msgid "Export selection as a playlist"
 msgstr "将选中行导出为课题"
 
-#: pages/Playlist_generator.py:97 pages/Playlist_generator.py:671
+#: awatools/Playlist_generator.py:97 awatools/Playlist_generator.py:671
 msgid "no beatmaps selected"
 msgstr "未选中任何谱面"
 
-#: pages/Playlist_generator.py:115
+#: awatools/Playlist_generator.py:115
 msgid "Download"
 msgstr "下载"
 
-#: pages/Playlist_generator.py:197
+#: awatools/Playlist_generator.py:197
 msgid "Slot Filter"
 msgstr "图池位筛选"
 
-#: pages/Playlist_generator.py:198
+#: awatools/Playlist_generator.py:198
 msgid "Index Filter"
 msgstr "指标筛选"
 
-#: pages/Playlist_generator.py:203
+#: awatools/Playlist_generator.py:203
 msgid "Statistics of the data query"
 msgstr "查询结果的统计数据"
 
-#: pages/Playlist_generator.py:203
+#: awatools/Playlist_generator.py:203
 msgid "Skill Type"
 msgstr "技能类型"
 
-#: pages/Playlist_generator.py:214
+#: awatools/Playlist_generator.py:203 osuawa/components.py:761
+msgid "Value"
+msgstr "值"
+
+#: awatools/Playlist_generator.py:214
 msgid "Playlist had been updated. Shall we refresh?"
 msgstr "课题已更新，不妨刷新？"
 
-#: pages/Playlist_generator.py:219
+#: awatools/Playlist_generator.py:219
 #, python-format
 msgid ""
 "Auto refresh is disabled on this page. Click the `%s` button to refresh "
 "manually."
 msgstr "此页面已禁用自动刷新。你可以点击 `%s` 按钮手动刷新课题。"
 
-#: pages/Playlist_generator.py:219 pages/Playlist_generator.py:657
+#: awatools/Playlist_generator.py:219 awatools/Playlist_generator.py:657
 msgid "Refresh"
 msgstr "刷新"
 
-#: pages/Playlist_generator.py:222
+#: awatools/Playlist_generator.py:222
 msgid "## Online Playlist Creator"
 msgstr "## 在线课题制作器"
 
-#: pages/Playlist_generator.py:237
+#: awatools/Playlist_generator.py:237
 msgid "Beatmap URLs or IDs, separated by spaces"
 msgstr "谱面链接或 BID，用空格分隔"
 
-#: pages/Playlist_generator.py:238
+#: awatools/Playlist_generator.py:238
 msgid "Slot"
 msgstr "图池位"
 
-#: pages/Playlist_generator.py:239
+#: awatools/Playlist_generator.py:239
 msgid "Notes"
 msgstr "备注"
 
-#: pages/Playlist_generator.py:249
+#: awatools/Playlist_generator.py:249
 msgid "Pool (text before '-' is considered series)"
 msgstr "图池（“-”前的视为系列）"
 
-#: pages/Playlist_generator.py:253
+#: awatools/Playlist_generator.py:253
 msgid "Mod Settings"
 msgstr "模组设置"
 
-#: pages/Playlist_generator.py:256
+#: awatools/Playlist_generator.py:256
 #, python-format
 msgid "Tip: You can use '%s' to set mods."
 msgstr "提示：可以用 %s 设置模组。"
 
-#: pages/Playlist_generator.py:265
+#: awatools/Playlist_generator.py:259 osuawa/components.py:1015
+msgid "Add"
+msgstr "添加"
+
+#: awatools/Playlist_generator.py:265
 msgid "blank slot not allowed"
 msgstr "不允许空图池位"
 
-#: pages/Playlist_generator.py:267
+#: awatools/Playlist_generator.py:267
 msgid "blank beatmap not allowed"
 msgstr "不允许空谱面"
 
-#: pages/Playlist_generator.py:292
+#: awatools/Playlist_generator.py:292
 msgid "no beatmaps input"
 msgstr "未键入谱面"
 
-#: pages/Playlist_generator.py:312
+#: awatools/Playlist_generator.py:312
 msgid "Pool"
 msgstr "图池"
 
-#: pages/Playlist_generator.py:314
+#: awatools/Playlist_generator.py:314
 msgid "Status"
 msgstr "状态"
 
-#: pages/Playlist_generator.py:317
+#: awatools/Playlist_generator.py:317
 msgid "Search"
 msgstr "搜索"
 
-#: pages/Playlist_generator.py:319
+#: awatools/Playlist_generator.py:319
 msgid "Search..."
 msgstr "搜索……"
 
-#: pages/Playlist_generator.py:322
+#: awatools/Playlist_generator.py:322
 msgid "Highlight duplicates"
 msgstr "高亮重复项"
 
-#: pages/Playlist_generator.py:323
+#: awatools/Playlist_generator.py:323
 msgid "Match sorting"
 msgstr "赛图排序"
 
-#: pages/Playlist_generator.py:577
+#: awatools/Playlist_generator.py:577
 msgid "Commit"
 msgstr "提交"
 
-#: pages/Playlist_generator.py:592
+#: awatools/Playlist_generator.py:592
 #, python-format
 msgid "(%d %s) not found, skipped"
 msgstr "(%d %s) 未找到，已跳过"
 
-#: pages/Playlist_generator.py:621
-#, python-format
-msgid "invalid JSON: %s"
+#: awatools/Playlist_generator.py:621
+#, fuzzy, python-format
+msgid "invalid JSON: '%s'"
 msgstr "无效 JSON：%s"
 
-#: pages/Playlist_generator.py:625
-#, python-format
-msgid "invalid value: %s"
+#: awatools/Playlist_generator.py:625 awatools/Playlist_generator.py:700
+#: awatools/Playlist_generator.py:704
+#, fuzzy, python-format
+msgid "invalid value: '%s'"
 msgstr "值无效：%s"
 
-#: pages/Playlist_generator.py:632
+#: awatools/Playlist_generator.py:632
 msgid "no changes made"
 msgstr "未做改动"
 
-#: pages/Playlist_generator.py:660
+#: awatools/Playlist_generator.py:660
 msgid "Export"
 msgstr "导出"
 
-#: pages/Playlist_generator.py:687 pages/Score_visualizer.py:389
+#: awatools/Playlist_generator.py:665 osuawa/components.py:1005
+msgid "Delete"
+msgstr "删除"
+
+#: awatools/Playlist_generator.py:687 awatools/Score_visualizer.py:380
 msgid "Statistics"
 msgstr "统计数据"
 
-#: pages/Playlist_generator.py:692
+#: awatools/Playlist_generator.py:692
 msgid "## Generate from a file"
 msgstr "## 使用课题源文件生成"
 
-#: pages/Playlist_generator.py:693
+#: awatools/Playlist_generator.py:693
 msgid "Choose a file"
 msgstr "选择文件"
 
-#: pages/Playlist_generator.py:696
+#: awatools/Playlist_generator.py:696
 msgid "multiple files not allowed"
 msgstr "不允许同时上传多个文件"
 
-#: pages/Playlist_generator.py:732
+#: awatools/Playlist_generator.py:739
 msgid "Download the resources"
 msgstr "下载资源"
 
-#: pages/Recorder.py:71
-msgid "invalid user ids"
-msgstr "无效用户 ID"
-
-#: pages/Recorder.py:104
-msgid "Full info"
-msgstr "完整信息"
-
-#: pages/Recorder.py:108
-msgid "## tosu Panel"
-msgstr "## tosu 面板"
-
-#: pages/Recorder.py:109
-msgid "tosu URL"
-msgstr "tosu 地址"
-
-#: pages/Recorder.py:110
-msgid "Table options"
-msgstr "表格选项"
-
-#: pages/Recorder.py:111 pages/Score_visualizer.py:225
-msgid "Mods filter (regex)"
-msgstr "模组筛选（正则表达式）"
-
-#: pages/Recorder.py:112
-msgid "Best only"
-msgstr "仅最好成绩"
-
-#: pages/Recorder.py:113
-msgid "Prettify"
-msgstr "美化输出"
-
-#: pages/Recorder.py:115
-msgid "friends"
-msgstr "好友"
-
-#: pages/Recorder.py:116
-msgid "Submit"
-msgstr "提交"
-
-#: pages/Recorder.py:117
-msgid "Manually add user ids"
-msgstr "手动添加用户 ID"
-
-#: pages/Recorder.py:121
-msgid "failed to connect to tosu"
-msgstr "无法连接到 tosu"
-
-#: pages/Recorder.py:126
-msgid "## Local Beatmap ID Records"
-msgstr "## 本地谱面 ID 记录"
-
-#: pages/Recorder.py:128
-msgid "Limit"
-msgstr "限制"
-
-#: pages/Room_spectator.py:26
+#: awatools/Room_spectator.py:26
 msgid "Room IDs, separated by spaces"
 msgstr "房间 ID，用空格分隔"
 
-#: pages/Room_spectator.py:30
+#: awatools/Room_spectator.py:30
 msgid "Please input room IDs"
 msgstr "请输入房间 ID"
 
-#: pages/Score_visualizer.py:28
+#: awatools/Score_visualizer.py:28
 msgid "User"
 msgstr "用户"
 
-#: pages/Score_visualizer.py:32
+#: awatools/Score_visualizer.py:32
 msgid "Date range"
 msgstr "日期范围"
 
-#: pages/Score_visualizer.py:81
-#, python-format
-msgid "invalid filter: %s"
-msgstr "无效筛选器：%s"
-
-#: pages/Score_visualizer.py:186
+#: awatools/Score_visualizer.py:178
 msgid "no scores found"
 msgstr "暂无本地分数"
 
-#: pages/Score_visualizer.py:189
+#: awatools/Score_visualizer.py:181
 msgid "User profile"
 msgstr "用户主页"
 
-#: pages/Score_visualizer.py:192
+#: awatools/Score_visualizer.py:184
 msgid "## PP Overall"
 msgstr "## 总体 PP"
 
-#: pages/Score_visualizer.py:194
+#: awatools/Score_visualizer.py:186
 msgid "hd"
 msgstr "HD"
 
-#: pages/Score_visualizer.py:195
+#: awatools/Score_visualizer.py:187
 msgid "high_ar"
 msgstr "高 AR"
 
-#: pages/Score_visualizer.py:196
+#: awatools/Score_visualizer.py:188
 msgid "low_ar"
 msgstr "低 AR"
 
-#: pages/Score_visualizer.py:197
+#: awatools/Score_visualizer.py:189
 msgid "very_low_ar"
 msgstr "极低 AR"
 
-#: pages/Score_visualizer.py:198
+#: awatools/Score_visualizer.py:190
 msgid "speed_up"
 msgstr "加速"
 
-#: pages/Score_visualizer.py:199
+#: awatools/Score_visualizer.py:191
 msgid "speed_down"
 msgstr "减速"
 
-#: pages/Score_visualizer.py:200
+#: awatools/Score_visualizer.py:192
 msgid "fl"
 msgstr "FL"
 
-#: pages/Score_visualizer.py:203
+#: awatools/Score_visualizer.py:195
 #, python-format
 msgid "based on %d (%d passed) score(s)"
 msgstr "基于 %d 条成绩（%d 条通过）"
 
-#: pages/Score_visualizer.py:205
+#: awatools/Score_visualizer.py:197
 #, python-format
 msgid "got/100/92/81/67 %s/%s/%s/%s/%spp"
 msgstr "实得/100/92/81/67 %s/%s/%s/%s/%spp"
 
-#: pages/Score_visualizer.py:214
+#: awatools/Score_visualizer.py:206
 msgid "tag"
 msgstr "标签"
 
-#: pages/Score_visualizer.py:214
+#: awatools/Score_visualizer.py:206
 msgid "got (passed)"
 msgstr "实得（通过）"
 
-#: pages/Score_visualizer.py:214
+#: awatools/Score_visualizer.py:206
 msgid "if (passed)"
 msgstr "理论（通过）"
 
-#: pages/Score_visualizer.py:214
+#: awatools/Score_visualizer.py:206
 msgid "count (total)"
 msgstr "数量（全部）"
 
-#: pages/Score_visualizer.py:221
+#: awatools/Score_visualizer.py:213
 msgid "total"
 msgstr "合计"
 
-#: pages/Score_visualizer.py:224
+#: awatools/Score_visualizer.py:216
 msgid "Filtering"
 msgstr "筛选"
 
-#: pages/Score_visualizer.py:226
+#: awatools/Score_visualizer.py:217
+msgid "Mods filter (regex)"
+msgstr "模组筛选（正则表达式）"
+
+#: awatools/Score_visualizer.py:218
 msgid "Star rating"
 msgstr "难度星数"
 
-#: pages/Score_visualizer.py:227
+#: awatools/Score_visualizer.py:219
 msgid "Passed only"
 msgstr "排除失败成绩"
 
-#: pages/Score_visualizer.py:228
+#: awatools/Score_visualizer.py:220
 msgid "Common mods only"
 msgstr "仅常见模组"
 
-#: pages/Score_visualizer.py:230
+#: awatools/Score_visualizer.py:222
 msgid "Custom columns"
 msgstr "自定义列"
 
-#: pages/Score_visualizer.py:255
-msgid "Advanced filter"
-msgstr "高级筛选"
-
-#: pages/Score_visualizer.py:286
+#: awatools/Score_visualizer.py:277
 #, python-format
 msgid "no valid data for '%s'"
 msgstr "%s 无有效数据"
 
-#: pages/Score_visualizer.py:336
+#: awatools/Score_visualizer.py:327
 msgid "## Playing Preferences"
 msgstr "## 游玩偏好"
 
-#: pages/Score_visualizer.py:337
+#: awatools/Score_visualizer.py:328
 msgid "Compared to"
 msgstr "比较方"
 
-#: pages/Score_visualizer.py:340
+#: awatools/Score_visualizer.py:331
 #, python-format
 msgid "no scores found for user %d"
 msgstr "暂无用户 %d 的分数"
 
-#: pages/Score_visualizer.py:417
+#: awatools/Score_visualizer.py:408
 msgid "Index"
 msgstr "指标"
 
-#: pages/Score_visualizer.py:432 pages/Score_visualizer.py:442
-#, python-format
-msgid "'%s' of user %d is constant (%s)"
+#: awatools/Score_visualizer.py:423 awatools/Score_visualizer.py:432
+#, fuzzy, python-format
+msgid "'%s' of user %d is constant"
 msgstr "指标 %s（用户 %d）无变异（值为 %s）"
 
-#: pages/Score_visualizer.py:484
+#: awatools/Score_visualizer.py:473
 msgid "## Skills Analysis"
 msgstr "## 能力分析"
 
-#: pages/Score_visualizer.py:485
+#: awatools/Score_visualizer.py:474
 msgid "More complex charts"
 msgstr "使用复杂图表"
 
-#: pages/Score_visualizer.py:525
+#: awatools/Score_visualizer.py:514
 msgid "## Filtered Data"
 msgstr "## 目前筛选数据"
+
+#: osuawa/components.py:278
+msgid "Failed to initialize the osu! api wrapper. Please refresh the page."
+msgstr "初始化 osu! api 失败，请刷新页面。"
+
+#: osuawa/components.py:311
+msgid "Register command parser"
+msgstr "注册命令解析器"
+
+#: osuawa/components.py:333
+msgid "Get user info"
+msgstr "获取用户信息"
+
+#: osuawa/components.py:340
+msgid "Save user's recent scores"
+msgstr "保存用户最近分数"
+
+#: osuawa/components.py:347
+msgid "Get and display score"
+msgstr "展示分数"
+
+#: osuawa/components.py:354
+msgid "Get and display user scores of a beatmap"
+msgstr "展示用户谱面分数"
+
+#: osuawa/components.py:361
+msgid "Generate local playlists"
+msgstr "生成本地课题"
+
+#: osuawa/components.py:368
+msgid "Display user's recent scores (only saved scores are available)"
+msgstr "展示用户最近分数（需要先保存分数）"
+
+#: osuawa/components.py:375
+msgid "Draw strain graph of an osu! beatmap (converted beatmap supported)"
+msgstr "绘制 osu! 标准模式谱面的难度折线图（支持转谱）"
+
+#: osuawa/components.py:382
+msgid "Calculate similarity of the two osu!standard beatmaps"
+msgstr "计算两张 osu! 标准模式谱面的相似度"
+
+#: osuawa/components.py:389
+msgid "Calculate feature epsilon"
+msgstr "计算谱面特征 ε"
+
+#: osuawa/components.py:394
+msgid "Display all active sessions"
+msgstr "展示所有活跃会话"
+
+#: osuawa/components.py:395
+msgid "Invalidate all sessions"
+msgstr "退出所有会话"
+
+#: osuawa/components.py:519
+#, python-format
+msgid "skipped '%s'"
+msgstr "已跳过 %s"
+
+#: osuawa/components.py:538
+#, python-format
+msgid "failed to generate '%s'"
+msgstr "生成 %s 失败"
+
+#: osuawa/components.py:541
+#, python-format
+msgid "generated '%s'"
+msgstr "已生成 %s"
+
+#: osuawa/components.py:552
+msgid "querying the user list"
+msgstr "正在请求用户列表"
+
+#: osuawa/components.py:558
+#, python-format
+msgid "user %d not found"
+msgstr "用户 %d 不存在"
+
+#: osuawa/components.py:573
+msgid "token matched"
+msgstr "令牌验证通过"
+
+#: osuawa/components.py:575
+msgid "token mismatched"
+msgstr "令牌验证失败"
+
+#: osuawa/components.py:577
+#, python-brace-format
+msgid "use `reg {\"token\": \"<token>\"}` to pass the token"
+msgstr "使用 `reg {\"token\": \"<token>\"}` 命令以使用令牌"
+
+#: osuawa/components.py:581
+msgid "token generated"
+msgstr "令牌已生成"
+
+#: osuawa/components.py:582
+msgid ""
+"You need to ask the web admin for the session token to unlock full features."
+msgstr "请向网站管理员索取一次性会话令牌以解锁全部功能。"
+
+#: osuawa/components.py:635
+#, python-format
+msgid "invalid ruleset id: '%d'"
+msgstr "无效游戏模式 ID：%d"
+
+#: osuawa/components.py:667
+#, python-format
+msgid "Difficulty Graph of %d"
+msgstr "%d 的难度曲线"
+
+#: osuawa/components.py:671
+msgid "Start Time"
+msgstr "开始时间"
+
+#: osuawa/components.py:672
+msgid "Strain"
+msgstr "难度值"
+
+#: osuawa/components.py:746 osuawa/components.py:750
+msgid "mean"
+msgstr "均值"
+
+#: osuawa/components.py:760
+msgid "Sample"
+msgstr "样本"
+
+#: osuawa/components.py:762
+msgid "Metric"
+msgstr "指标"
+
+#: osuawa/components.py:871
+msgid "Mod"
+msgstr "模组"
+
+#: osuawa/components.py:875
+msgid "Select a mod"
+msgstr "选择一个模组"
+
+#: osuawa/components.py:984
+msgid "Ruleset"
+msgstr "游戏模式"
+
+#: osuawa/components.py:1017
+msgid "Reset"
+msgstr "重置"
+
+#: osuawa/components.py:1019
+msgid "Apply to the form"
+msgstr "应用至表单"
+
+#: osuawa/components.py:1021
+msgid "Preview"
+msgstr "预览"
+
+#: osuawa/components.py:1066
+#, python-format
+msgid "#%d: %s"
+msgstr "#%d：%s"
+
+#: osuawa/components.py:1071
+msgid "pending..."
+msgstr "待定……"
+
+#: osuawa/components.py:1082
+#, python-format
+msgid "updated at: %s"
+msgstr "更新于 %s"
+
+#: osuawa/components.py:1096
+msgid "all"
+msgstr "全部"
+
+#: osuawa/components.py:1097
+msgid "pending"
+msgstr "待定"
+
+#: osuawa/components.py:1098
+msgid "success"
+msgstr "成功"
+
+#: osuawa/components.py:1099
+msgid "error"
+msgstr "错误"
+
+#~ msgid "Recorder"
+#~ msgstr "看记录"
+
+#~ msgid "invalid user ids"
+#~ msgstr "无效用户 ID"
+
+#~ msgid "Full info"
+#~ msgstr "完整信息"
+
+#~ msgid "## tosu Panel"
+#~ msgstr "## tosu 面板"
+
+#~ msgid "tosu URL"
+#~ msgstr "tosu 地址"
+
+#~ msgid "Table options"
+#~ msgstr "表格选项"
+
+#~ msgid "Best only"
+#~ msgstr "仅最好成绩"
+
+#~ msgid "Prettify"
+#~ msgstr "美化输出"
+
+#~ msgid "friends"
+#~ msgstr "好友"
+
+#~ msgid "Submit"
+#~ msgstr "提交"
+
+#~ msgid "Manually add user ids"
+#~ msgstr "手动添加用户 ID"
+
+#~ msgid "failed to connect to tosu"
+#~ msgstr "无法连接到 tosu"
+
+#~ msgid "## Local Beatmap ID Records"
+#~ msgstr "## 本地谱面 ID 记录"
+
+#~ msgid "Limit"
+#~ msgstr "限制"
+
+#, python-format
+#~ msgid "invalid filter: %s"
+#~ msgstr "无效筛选器：%s"
+
+#~ msgid "Advanced filter"
+#~ msgstr "高级筛选"
 
 #~ msgid "unknown ruleset"
 #~ msgstr "未知游戏模式"
