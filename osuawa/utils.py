@@ -1179,7 +1179,7 @@ def _download_beatmap(_lck_key: str, bid: int, checksum: Optional[str] = None) -
     last_call = -1
     if os.path.exists(os.path.join(C.STATIC_DIRECTORY.value, "beatmap_lastcall")):
         with open(os.path.join(C.STATIC_DIRECTORY.value, "beatmap_lastcall"), encoding="utf-8") as fi:
-            last_call = int(fi.read())
+            last_call = float(fi.read())
     # 由于这个接口似乎有限流（每 1.2s 只能请求 1 次），所以这里做一个简单的限频
     diff = 1.2 - (time() - last_call)
     if diff > 0:
@@ -1499,22 +1499,13 @@ def format_size(size_bytes: float):
 
 
 def regex_search_column(data: pd.DataFrame, column: str, pattern: str) -> pd.DataFrame:
-    """对某一列进行正则搜索"""
-
-    data = data.copy()
-
-    def search_func(text):
-        if pd.isna(text):
-            return None
-        try:
-            m = re.search(pattern, str(text))
-        except re.error:
-            return None
-        # 这里改成 .group(0) 显示匹配内容，或者直接返回 text 显示原行
-        return text if m else None
-
-    data[column] = data[column].apply(search_func)
-    return data
+    """按正则过滤行，只保留 ``column`` 列匹配 ``pattern`` 的记录"""
+    if not pattern:
+        return data
+    compiled = re.compile(pattern)
+    values = data[column]
+    mask = values.notna() & values.astype(str).str.contains(compiled, na=False)
+    return data.loc[mask].copy()
 
 
 def safe_norm(value, type_: type = str):

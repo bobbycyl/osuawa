@@ -211,7 +211,9 @@ def check_playlist_lastupdate():
         st.session_state.playlist_lastupdate = _playlist_lastupdate
     else:
         if _playlist_lastupdate > st.session_state.playlist_lastupdate:
-            st.toast(_("Playlist had been updated. Shall we refresh?"))
+            st.info(_("Playlist had been updated. Shall we refresh?"))
+            # 为了避免后续不再刷新，这里要更新 playlist_lastupdate（容差 100）
+            st.session_state.playlist_lastupdate += 100
 
 
 if st.session_state.perm >= 1:

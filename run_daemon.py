@@ -603,3 +603,6 @@ logger.info("stopping osuawa daemon...")
 engine.dispose()
 r.close()
 logging.shutdown()
+if ATTEMPT == MAX_RETRIES + 1:
+    exit(1)
+exit(0)

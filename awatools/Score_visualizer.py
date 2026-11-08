@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import Optional, TYPE_CHECKING
@@ -68,7 +69,12 @@ def calc_pp_overall_count(data: pd.DataFrame, tag: Optional[str] = None) -> str:
 
 def apply_filter(data: pd.DataFrame) -> pd.DataFrame:
     srl, srh = st.session_state.cat_sr_range
-    df1 = regex_search_column(data, "mods", st.session_state.cat_mods)
+    try:
+        df1 = regex_search_column(data, "mods", st.session_state.cat_mods)
+    except re.error as e:
+        # 非法正则时提示并跳过这一层过滤；不过滤成空表，避免下游统计除零
+        st.error(_("invalid value: '%s'") % e)
+        df1 = data
     if srl == 0.0 and srh == 10.0:
         # 0 - 10 视为无限制
         df2: pd.DataFrame = df1[((not st.session_state.cat_passed) | df1["passed"]) & ((not st.session_state.cat_acm) | df1["only_common_mods"])]

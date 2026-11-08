@@ -20,6 +20,7 @@ import html
 import json
 import os
 import platform
+import shutil
 from asyncio import Semaphore, Task
 from collections.abc import Coroutine, Sequence
 from dataclasses import fields
@@ -672,7 +673,8 @@ class BeatmapCover(object):
             try:
                 self.process_cover(await d.async_start(self.beatmap.beatmapset().covers.slimcover_2x, filename, headers))
             except UnidentifiedImageError:
-                self.process_cover(os.path.join(assets_dir, "bg1.jpg"))
+                shutil.copy(os.path.join(assets_dir, "bg1.jpg"), cover_filename)
+                self.process_cover(cover_filename)
         return cover_filename
 
     def draw(self, cover_filename) -> None:
@@ -1048,7 +1050,8 @@ class OsuPlaylist(object):
                 try:
                     BeatmapCover.process_background(bg_filename)
                 except UnidentifiedImageError:
-                    BeatmapCover.process_background(os.path.join(assets_dir, "bg1.jpg"))
+                    shutil.copy(os.path.join(assets_dir, "bg1.jpg"), bg_filename)
+                    BeatmapCover.process_background(bg_filename)
 
             bg_filename = os.path.join(self.bg_dir, "%d.jpg" % bid)
             extra_notes = ""
