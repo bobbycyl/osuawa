@@ -11,7 +11,6 @@
     exc-i18n     异常消息不要用 _()（异常跟着语言变会让排查变难）
     exc-quote    异常消息里的 %s 用成对引号
     log-lang     日志消息必须是英文（日志不加引号：裸插值便于 grep）
-    catalog      _() 的 msgid 必须在 zh_CN 的 .po 里有译文
 
 引号规则对三类消息不同，是有依据的，别一刀切：
     异常      对齐 Python 内建写法（KeyError: 'k'），且异常不翻译，引号稳定
@@ -28,7 +27,7 @@ AgGrid 的 header_name 不检查：BID / SR / AR / OD / Drain / Combo 是 osu! �
 豁免：行尾写 # style: allow 可跳过该行；EXEMPT 里可按「文件 + rule 前缀」整块豁免。
 
 用法：
-    python check_style.py                 # 检查整个仓库，有问题 exit 1
+    python check_style.py                 # 检查整个仓库，有规则问题或文件解析失败时 exit 1
     python check_style.py awatools/       # 只检查某个目录或文件
     python check_style.py --path awatools/
 """
@@ -39,6 +38,7 @@ import argparse
 import ast
 import pathlib
 import re
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 
@@ -88,7 +88,6 @@ UI_TEXT_KWARGS = {"label", "help", "placeholder", "page_title", "caption", "text
 LOG_METHODS = {"debug", "info", "warning", "warn", "error", "exception", "critical", "fatal"}
 
 SKIP_DIRS = {".venv", "osu-tools", "__pycache__", ".git", ".ruff_cache"}
-PO_PATH = pathlib.Path("share/locale/zh_CN/LC_MESSAGES/messages.po")
 
 CJK = re.compile(r"[\u4e00-\u9fa5]")
 #: 完整的 printf 风格占位符。%% 必须先作为整体消费，不能删字符后再匹配。
@@ -152,7 +151,7 @@ def extract_message(node: ast.AST, translated: bool = False) -> Message:
 
     % 格式化只读取左侧模板，右侧是值；+ 拼接保留各段边界；_() 只标记其
     内部的字面量。变量、函数调用和 f-string 插值会把 dynamic 置为 True，
-    防止把不完整的静态文本当成完整 msgid 收入 catalog。
+    避免把不完整的静态文本当成完整文案（用于 ui-literal 的拼接判定）。
     """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return Message((TextPart(node.value, node.lineno, translated),))
@@ -206,7 +205,6 @@ def unquoted_specs(text: str) -> list[str]:
 class Checker:
     def __init__(self) -> None:
         self.issues: list[tuple[str, int, str, str]] = []
-        self.msgids: dict[str, tuple[pathlib.Path, int]] = {}  # msgid -> (文件, 行号)
         self.files = 0
         self.ui_texts = 0
         self.logs = 0
@@ -232,13 +230,6 @@ class Checker:
         lines = self._source[path]
         text = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
         return "# style: allow" in text or "# noqa" in text
-
-    def collect_msgid(self, path: pathlib.Path, node: ast.AST) -> None:
-        """记录完整静态 msgid，供 catalog 检查（与主遍历共用一次解析）"""
-        if isinstance(node, ast.Call) and dotted(node.func) == "_" and node.args:
-            message = extract_message(node.args[0])
-            if message.text and not message.dynamic:
-                self.msgids.setdefault(message.text, (path, node.lineno))
 
     # -------- 四类规则
 
@@ -337,10 +328,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     checker = Checker()
+    parse_errors = 0
     for path in iter_files(pathlib.Path(args.path_option or args.path or ".")):
+        # 只把读取/解析放进 try：解析失败要计入失败并继续检查其它文件，
+        # 不能静默跳过（CI 假绿灯）；检查器自身在遍历时出错则应直接暴露。
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, SyntaxError, ValueError) as e:
+            parse_errors += 1
+            print("%s: %s" % (path, e), file=sys.stderr)
+            continue
         checker.files += 1
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            checker.collect_msgid(path, node)
+        for node in ast.walk(tree):
             if isinstance(node, ast.Raise):
                 checker.check_exception(path, node)
             elif isinstance(node, ast.Call):
@@ -355,7 +354,9 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "扫描 %d 个文件（%d 条文案 / %d 条日志 / %d 个异常），共 %d 个问题" % (checker.files, checker.ui_texts, checker.logs, checker.exceptions, len(checker.issues)),
     )
-    return 1 if checker.issues else 0
+    if parse_errors:
+        print("%d 个文件解析失败" % parse_errors, file=sys.stderr)
+    return 1 if checker.issues or parse_errors else 0
 
 
 if __name__ == "__main__":
