@@ -28,6 +28,7 @@ from osuawa.components import (
     memorized_selectbox,
     tail_log,
 )
+from osuawa.utils import format_external_value
 
 if TYPE_CHECKING:
 
@@ -414,9 +415,7 @@ def home_form():
     for i in range(max_param_len):
         if st.session_state["home_param_%d_enabled" % i]:
             _v = st.session_state["home_param_%d" % i]
-            if isinstance(_v, bool):
-                _v = "true" if _v else "false"
-            parts.append(str(_v))
+            parts.append(format_external_value(_v))
     with st.expander(_("Preview the command"), icon=":material/preview:"):
         st.json(parts)
     st.session_state["input"] = " ".join(parts)

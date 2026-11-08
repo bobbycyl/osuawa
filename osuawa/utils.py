@@ -354,15 +354,20 @@ def _unwrap_optional(annotation: Any) -> Any:
     return annotation
 
 
+def format_external_value(value: Any) -> str:
+    """把内部原生值转成对外文本（用于 ``<acronym>_<setting>=<value>`` 中的 ``value``）"""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
     readable_mods: list[str] = []
     for i in range(len(mods)):
         if "settings" in mods[i]:
             settings_str = []
             for setting_name, setting_value in mods[i]["settings"].items():
-                if isinstance(setting_value, bool):
-                    setting_value = "true" if setting_value else "false"
-                settings_str.append("%s=%s" % (setting_name, setting_value))
+                settings_str.append("%s=%s" % (setting_name, format_external_value(setting_value)))
             readable_mods.append("%s(%s)" % (mods[i]["acronym"], ",".join(settings_str)))
         else:
             readable_mods.append(mods[i]["acronym"])
@@ -449,7 +454,9 @@ class SimpleDifficultyAttribute(object):
         :param mods: 模组列表
         :param ruleset_id: 游戏模式 ID，若为 None 则默认使用当前谱面的模式 ID
         :param beatmap_path: 谱面文件路径
-        :return: (standardized_mods（已排序的）, {acronym, settings}, osu_tool_mods（与输入顺序一致）, osu_tool_mod_options（与输入顺序一致）)
+        :return: (standardized_mods（已排序的；settings 保留原生值，enum 为枚举名）,
+                  {acronym, settings}, osu_tool_mods（与输入顺序一致）,
+                  osu_tool_mod_options（对外文本，经 format_external_value 转换）)
         """
         match ruleset_id:
             case 0:
@@ -516,46 +523,26 @@ class SimpleDifficultyAttribute(object):
                             expected_type,
                         ),
                     )
-                if expected_type == "boolean":
-                    setting_value = "true" if setting_value else "false"  # if `bool(a)` is True, then `a` is "true"
-                elif expected_type == "enum":
-                    # 强制要求枚举型用字符串整型表示
+                if expected_type == "enum":
+                    # 归一化成枚举名字符串，而不是索引
+                    # validate_mod_setting_value 已保证这里是 str。
                     if enum_values is None:
                         raise ValueError("undefined enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
-                    elif len(enum_values) == 0:  # 这种情况应该不会出现，但是还是进行安全检查
+                    if len(enum_values) == 0:  # 这种情况应该不会出现，但是还是进行安全检查
                         raise ValueError("empty enum values for setting '%s' of mod '%s'" % (setting_name, acronym))
-                    # 这里可能有 4 种情况：
-                    # 1. setting_value 是整型 => 检查是否越界，转换为字符串
-                    # 2. setting_value 是浮点型/布尔型 => 直接拒绝
-                    # 3. setting_value 是整型字符串 => 转换为整型并与 1 相同
-                    # 4. setting_value 是枚举型定义的对应字符串 => 查找索引并转换为字符串
-                    if isinstance(setting_value, int):
-                        _check_index_range(setting_value, len(enum_values), setting_name, acronym)  # 检查是否越界
-                        setting_value = str(setting_value)
-                    elif isinstance(setting_value, (float, bool)):
-                        raise ValueError("unexpected enum value '%s' for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                    if setting_value in enum_values:
+                        pass
+                    elif setting_value.isdecimal():
+                        # 前导 0 要剔除，如 "01" -> 1
+                        index = int(setting_value)
+                        _check_index_range(index, len(enum_values), setting_name, acronym)
+                        setting_value = enum_values[index]
                     else:
-                        if setting_value in enum_values:
-                            setting_value = str(enum_values.index(setting_value))
-                        else:
-                            if setting_value.isdecimal():
-                                # 这里要确保前导 0 被正确剔除，如 "01" -> "1"
-                                int_setting_value = int(setting_value)
-                                _check_index_range(
-                                    int_setting_value,
-                                    len(enum_values),
-                                    setting_name,
-                                    acronym,
-                                )
-                                setting_value = str(int_setting_value)
-                            else:
-                                raise ValueError("unknown enum value '%s' for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
+                        raise ValueError("unknown enum value '%s' for setting '%s' of mod '%s'" % (setting_value, setting_name, acronym))
 
-                # 当且仅当 setting_value 与默认值不同，才会添加到 cleaned_settings
+                # 当且仅当 setting_value 与默认值不同，才会添加到 cleaned_settings。
+                # Default 与 setting_value 现在是同一套原生表示，直接比较即可
                 _default = ruleset_mod_settings_mapping[acronym][setting_name]["Default"]
-                # 此时 setting_value 已经被标准化，_default 也要标准化才能比较
-                if _default is not None:
-                    _default = "true" if _default is True else "false" if _default is False else enum_values.index(_default) if expected_type == "enum" and enum_values is not None else _default
                 if _default is None or _default != setting_value:
                     cleaned_settings[setting_name] = setting_value
 
@@ -586,7 +573,7 @@ class SimpleDifficultyAttribute(object):
                 cur_mod_settings = cur_mod.get("settings", {})
                 mods_dict[cur_mod["acronym"]] = cur_mod_settings
                 for setting_name, setting_value in cur_mod_settings.items():
-                    osu_tool_mod_options.append("%s_%s=%s" % (cur_mod["acronym"], setting_name, setting_value))
+                    osu_tool_mod_options.append("%s_%s=%s" % (cur_mod["acronym"], setting_name, format_external_value(setting_value)))
                 osu_tool_mods.append(cur_mod["acronym"])
             standardized_mods.extend(cur_mods)
 

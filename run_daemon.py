@@ -187,7 +187,6 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
             len_diff = res.rowcount
         else:
             len_diff = 0
-    # noinspection PyStringFormat
     return "%s: got/diff: %d/%d" % (
         username,
         len(scores_compact),
@@ -195,7 +194,6 @@ def save_recent_scores(user: int, include_fails: bool = True) -> str:
     )
 
 
-# noinspection PyTypedDict
 def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[DatabasePlaylistBeatmap]:
     """创建临时课题。仅创建，不生成
 
@@ -220,7 +218,6 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
     # 直接把 spec 交给 OsuPlaylist，不再先写一份临时源文件
     source = PlaylistSource.from_specs(beatmap_specs)
     playlist_filename = os.path.join(C.UPLOADED_DIRECTORY.value, "online", "%s_%d.playlist" % (name, time_ns() // 1_000_000))
-    # noinspection PyBroadException
     try:
         tmp_playlist = OsuPlaylist(awa, playlist_filename, css_style=1, source=source)
         playlist_beatmaps_raw: list[CompletedPlaylistBeatmap] = awa.run_coro(tmp_playlist.playlist_task())

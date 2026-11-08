@@ -61,6 +61,7 @@ from osuawa.utils import (
     catch_mod_indexes,
     day_bounds_epoch,
     download_beatmap,
+    format_external_value,
     format_size,
     get_mod_type_color,
     get_playlist_lastupdate,
@@ -936,14 +937,12 @@ def _mod_customization(key_suffix: int, ruleset: Literal["osu", "taiko", "catch"
                     _setting_value = st.session_state[_mod_setting_key]
                     # 如果选中值非不是默认值，才添加模组设置
                     if _setting_value != _default:
-                        if isinstance(_setting_value, bool):
-                            _setting_value = "true" if _setting_value else "false"
                         ret.append(
                             "%s_%s=%s"
                             % (
                                 st.session_state[_mod_key],
                                 _name,
-                                _setting_value,
+                                format_external_value(_setting_value),
                             ),
                         )
     return ret
