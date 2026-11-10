@@ -8,7 +8,6 @@ import streamlit as st
 from clayutil.cmdparse import (
     BoolField as Bool,
     CommandError,
-    CommandParser,
     Field,
     IntegerField as Int,
     JSONStringField as JsonStr,
@@ -339,7 +338,6 @@ def process_streaming_with_tools():
 
 @st.fragment
 def home_form():
-    st.session_state.cmdparser = cast(CommandParser, st.session_state.cmdparser)
     # 命令面板
     available_commands = st.session_state.cmdparser.data
     # 一个 select_box 选择命令，根据选择的命令，生成参数数量、参数类型、参数描述的输入框

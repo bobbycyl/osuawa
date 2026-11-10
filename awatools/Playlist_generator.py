@@ -137,7 +137,6 @@ NEEDED_ATTR_MAPPING = {
 }
 
 
-# noinspection
 @st.cache_data(ttl=300)
 def calc_attr(data) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
     processed: dict[str, dict[str, Any]] = {}
@@ -582,8 +581,7 @@ if st.session_state.perm >= 1:
             olds_to_drop: list[tuple[str, bool]] = []  # (old MODS, RAW_MODS changed)
 
             # 先索引原始 df，加快查找效率
-            # noinspection PyUnresolvedReferences
-            orig_indexed = {(int(row.BID), str(row.MODS)): {c: getattr(row, c) for c in EDITABLE + ["MODS", "SUGGESTOR", "ADD_TS"]} for row in df.itertuples()}  # ty:ignore[unresolved-attribute]
+            orig_indexed = {(int(row.BID), str(row.MODS)): {c: getattr(row, c) for c in EDITABLE + ["MODS", "SUGGESTOR", "ADD_TS"]} for row in df.itertuples()}  # type: ignore
             specs_recalculate_valid = True
             for edited_row in edited_df[["BID", "MODS"] + EDITABLE].itertuples():
                 edited_bid = int(edited_row.BID)

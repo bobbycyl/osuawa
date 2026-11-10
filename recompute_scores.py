@@ -78,7 +78,7 @@ def count_rows(engine: Engine) -> int:
         return int(conn.execute(text(score_count_query())).scalar_one())
 
 
-def load_rows(engine: Engine, bids: Sequence[int]) -> dict[str, Mapping[str, Any]]:
+def load_rows(engine: Engine, bids: Sequence[int]) -> Mapping[str, Mapping[str, Any]]:
     """取出这批谱面的全部成绩行，返回 ``score_id -> 原始行``（列名已大写）"""
     values = {"chunk_bids": list(bids)}
     statement = text(score_rows_query("BID IN :chunk_bids")).bindparams(bindparam("chunk_bids", expanding=True))
@@ -87,7 +87,7 @@ def load_rows(engine: Engine, bids: Sequence[int]) -> dict[str, Mapping[str, Any
     return {str(row._mapping["SCORE_ID"]): {str(key).upper(): value for key, value in row._mapping.items()} for row in rows}
 
 
-def iter_computed(engine: Engine, awa: Osuawa, expected_rows: int) -> Iterator[tuple[dict[str, Mapping[str, Any]], dict[str, CompletedSimpleScoreInfo]]]:
+def iter_computed(engine: Engine, awa: Osuawa, expected_rows: int) -> Iterator[tuple[Mapping[str, Mapping[str, Any]], Mapping[str, CompletedSimpleScoreInfo]]]:
     """按谱面分批重算，逐批产出 ``(原始行, 重算结果)``
 
     ``原始行`` 是 ``score_id -> 库里的旧值（列名大写）``，供检查比对使用。

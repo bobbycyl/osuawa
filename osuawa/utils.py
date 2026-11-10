@@ -9,7 +9,7 @@ import re
 import tomllib
 import types
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import date, datetime, timezone
 from enum import Enum, unique
@@ -361,7 +361,7 @@ def format_external_value(value: Any) -> str:
     return str(value)
 
 
-def to_readable_mods(mods: list[dict[str, Any]]) -> list[str]:
+def to_readable_mods(mods: Sequence[Mapping[str, Any]]) -> list[str]:
     readable_mods: list[str] = []
     for i in range(len(mods)):
         if "settings" in mods[i]:
@@ -445,7 +445,7 @@ class SimpleDifficultyAttribute(object):
     @classmethod
     def validate_and_transform_mods(
         cls,
-        mods: list[dict[str, Any]],
+        mods: Sequence[Mapping[str, Any]],
         ruleset_id: Optional[int] = None,
         beatmap_path: Optional[str | bytes] = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str]]:
@@ -495,7 +495,7 @@ class SimpleDifficultyAttribute(object):
         )
 
         standardized_mods = []
-        mods_dict = {}  # {acronym, settings}
+        mods_dict: dict[str, Any] = {}  # {acronym, settings}
         osu_tool_mods: list[str] = []
         osu_tool_mod_options: list[str] = []
 
@@ -609,7 +609,7 @@ class SimpleDifficultyAttribute(object):
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
         self.ruleset_id = ruleset_id
 
-    def set_mods(self, mods: list):
+    def set_mods(self, mods: Sequence[Mapping[str, Any]]):
         (
             self.standardized_mods,
             mods_dict,
@@ -768,7 +768,7 @@ class SimpleScoreInfo(object):
     max_combo: int
     passed: bool
     pp: Optional[float]
-    _mods: list[dict[str, str] | dict[str, dict[str, str]]]
+    _mods: Sequence[dict[str, str] | dict[str, dict[str, Any]]]
     ts: datetime
     statistics: ScoreStatistics
     st: Optional[datetime]
@@ -1050,7 +1050,6 @@ class ExtendedSimpleScoreInfo(CompletedSimpleScoreInfo):
     only_common_mods: bool
 
 
-# noinspection PyArgumentList
 CompletedPlaylistBeatmap = typing_extensions.TypedDict(
     "CompletedPlaylistBeatmap",
     {
@@ -1368,8 +1367,6 @@ def calc_beatmap_attributes_batch(
     scores_compact: Mapping[str, SimpleScoreInfo],
 ) -> dict[str, CompletedSimpleScoreInfo]:
     """批量计算，按 ``(bid, mods, ruleset)`` 复用同一个 osupp 计算器
-
-    相比逐条调用 :func:`calc_beatmap_attributes`：
 
     - 同一谱面只解析一次 ``.osu``、只做一次难度计算
     - ``pp100 / pp92 / pp81 / pp67`` 只与谱面和模组有关，与成绩无关，

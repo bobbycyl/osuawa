@@ -60,7 +60,7 @@ class PlaylistSource:
         entries: list[PlaylistEntry] = []
         banner = ""
         footer = ""
-        current: PlaylistEntry | None = None
+        current = None
         notes: list[str] = []
 
         def flush() -> None:
@@ -98,7 +98,6 @@ class PlaylistSource:
             except ValueError as e:
                 raise ValueError("line %d: %s" % (lineno, e)) from e  # style: allow
             current = PlaylistEntry(bid=int(match.group(1)), mods=mods, fields=fields)
-            # noinspection bad-argument-type
             entries.append(current)
         flush()
         # 条目和 notes 都收齐后再构造，source 一开始就是完整的

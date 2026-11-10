@@ -165,7 +165,6 @@ class CachedThrottledMixIn:
     # 经过测试，并发 4 不会触发 429 错误
     # todo: 并发 4 可能太稳健了，可以稍稍放大？
     sem = Semaphore(6)
-    # noinspection argument-list
     throttled: Throttled = Throttled(key="awa", quota="60/m", timeout=60)
 
     def __init__(self):

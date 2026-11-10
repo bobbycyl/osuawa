@@ -82,7 +82,6 @@ if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
 
-    st.session_state.awa = cast(Osuawa, st.session_state.awa)
 
 type DatabaseName = Literal["BEATMAP", "SCORE", "USER_CACHE"]
 
@@ -111,6 +110,7 @@ def awa_query(database: DatabaseName, sql: str, show_spinner: bool | str = False
     spinner_text = show_spinner if isinstance(show_spinner, str) else "Running query..."
     with st.spinner(spinner_text) if show_spinner else contextlib.nullcontext():
         df = pd.read_sql(text(sql), _conn.connect(), params=params)
+        assert isinstance(df, pd.DataFrame)
     df.columns = df.columns.str.upper()
     return df
 
@@ -660,8 +660,8 @@ def draw_strain_graph(bid: int, mod_settings: Optional[str] = None, ruleset_id: 
         osupp_attr = next(calculator)
     finally:
         calculator.close()
-    strains: dict[str, list[float]] = osupp_attr["__ek_strains_of_skills"]  # type: ignore[union-attr]
-    timelines: dict[str, list[float]] = osupp_attr["__ek_timeline_of_skills"]  # type: ignore[union-attr]
+    strains: dict[str, list[float]] = osupp_attr["__ek_strains_of_skills"]
+    timelines: dict[str, list[float]] = osupp_attr["__ek_timeline_of_skills"]
     strain_dicts: dict[str, dict[float, float]] = {_skill: dict(zip(timelines[_skill], strains[_skill], strict=True)) for _skill in strains}
     df_strain = pd.DataFrame(strain_dicts).fillna(0.0).reset_index(names=["time"])
     df_strain["time"] = pd.to_datetime(df_strain["time"], unit="ms")
@@ -781,7 +781,7 @@ def draw_clustered_bars(
 
 def query_all_sessions() -> pd.DataFrame:
     df = awa_query("USER_CACHE", "SELECT * FROM USER_CACHE WHERE USER_ID = %d" % st.session_state.user)
-    df["LAST_SEEN_TS"] = pd.to_datetime(df["LAST_SEEN_TS"], unit="s", utc=True).dt.tz_convert(st.session_state.awa.tz)  # type: ignore[union-attr]
+    df["LAST_SEEN_TS"] = pd.to_datetime(df["LAST_SEEN_TS"], unit="s", utc=True).dt.tz_convert(st.session_state.awa.tz)
     df.rename(
         columns={"AID": "ajs_anonymous_id", "LAST_SEEN_TS": "last_seen_datetime"},
         inplace=True,

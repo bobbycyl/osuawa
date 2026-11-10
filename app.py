@@ -5,7 +5,7 @@ import os
 import pickle
 from threading import Lock
 from time import time
-from typing import Optional, TYPE_CHECKING, cast
+from typing import Optional, TYPE_CHECKING
 from urllib.parse import urlencode
 
 import requests
@@ -70,7 +70,7 @@ def init_logger_fh():
     def _init_logger_fh(_logger: logging.Logger):
 
         if hasattr(_logger, "streamlit_custom_file_handler"):
-            _logger.removeHandler(cast(logging.Handler, _logger.streamlit_custom_file_handler))
+            _logger.removeHandler(_logger.streamlit_custom_file_handler)  # ty: ignore[invalid-argument-type]
 
         _logger.streamlit_custom_file_handler = fh  # type: ignore
         _logger.addHandler(_logger.streamlit_custom_file_handler)  # type: ignore

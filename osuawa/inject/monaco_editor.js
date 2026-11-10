@@ -153,7 +153,7 @@ class MonacoEditorCell {
             display: flex; flex-direction: column; overflow: hidden;
         `;
 
-        const uid = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+        const uid = Date.now() + "_" + Math.random().toString(36).slice(2, 11);
         const titleBar = document.createElement("div");
         titleBar.style.cssText = `
             padding: 12px 20px; background: #2d2d2d;

@@ -1,8 +1,7 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import streamlit as st
 
-from osuawa import Osuawa
 from osuawa.components import init_page
 from osuawa.utils import CompletedSimpleScoreInfo, SimpleScoreInfo
 
@@ -10,7 +9,6 @@ if TYPE_CHECKING:
 
     def _(_text: str) -> str: ...
 
-    st.session_state.awa = cast(Osuawa, st.session_state.awa)
 
 init_page(_("Room Spectator") + " - osuawa")
 

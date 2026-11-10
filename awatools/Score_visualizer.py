@@ -271,7 +271,7 @@ def create_distplot(
     比较两组同一指标时应该这样传，否则两边的直方图刻度不一样、根本没法比。
     传与 ``hist_data`` 等长的序列时各组用自己的宽度，适用于同一张图里画不同量纲的指标。
     """
-    bin_sizes: list[Optional[float]] = [bin_size] * len(hist_data) if bin_size is None or isinstance(bin_size, (int, float)) else list(bin_size)
+    bin_sizes: Sequence[Optional[float]] = [bin_size] * len(hist_data) if bin_size is None or isinstance(bin_size, (int, float)) else list(bin_size)
     fig = go.Figure()
 
     for i, (data, label) in enumerate(zip(hist_data, group_labels, strict=True)):

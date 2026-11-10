@@ -476,7 +476,7 @@ def update_beatmaps(obj: Optional[list[BeatmapJob]] = None) -> str:
         beatmap_spec: BeatmapSpec | list | None = beatmap_job.get("beatmap")  # JSON 反序列化时会自动转换为 list 类型，需要强制转换为 BeatmapSpec 类型
         if beatmap_spec is not None:
             has_spec_list.append(True)
-            beatmap_specs.append(BeatmapSpec(*beatmap_spec))  # type: ignore[union-attr]
+            beatmap_specs.append(BeatmapSpec(*beatmap_spec))
             operator = beatmap_job["operator"]
         else:
             has_spec_list.append(False)

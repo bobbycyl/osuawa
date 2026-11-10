@@ -268,7 +268,6 @@ def auth_required(func: Callable) -> Callable:
         _logger.info("handling request from %s: %s" % (api_key, params))
 
         try:
-            # noinspection argument-list
             with Throttled(key=api_key, quota="12/m"):
                 return func(request, *args, _params=params, **kwargs)
         except LimitedError as e:
