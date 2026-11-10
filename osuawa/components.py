@@ -37,17 +37,17 @@ from streamlit import logger
 from streamlit.runtime.caching.cache_utils import CachedFunc
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-from osuawa import C, OsuPlaylist, Osuawa
-from osuawa.db import (
+from .db import (
     SCORE_PRIMARY_KEY,
     SCORE_TABLE,
     resolve_db_url,
     score_rows_query,
     score_users_query,
 )
-from osuawa.osuawa import CachedThrottledMixIn
-from osuawa.utils import (
+from .osuawa import CachedThrottledMixIn, OsuPlaylist, Osuawa
+from .utils import (
     BeatmapFeature,
+    C,
     CompletedSimpleScoreInfo,
     RedisTaskId,
     SimpleDifficultyAttribute,
@@ -340,10 +340,17 @@ def commands():
         ),
         Command(
             "save",
-            _("Save user's recent scores"),
+            _("Save user recent scores"),
             [Int("user")],
             1,
             lambda user: push_task_with_session_state("save %d" % user),
+        ),
+        Command(
+            "playlistupd",
+            _("Recalculate all online playlists to update the fields"),
+            [],
+            4,
+            lambda: push_task_with_session_state("playlistupd"),
         ),
         Command(
             "score",

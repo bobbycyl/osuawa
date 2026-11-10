@@ -25,6 +25,7 @@ from clayutil.cmdparse import (
 )
 from ossapi.ossapiv2_async import Domain, Scope, Score
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
 from osuawa import Awapi, OsuPlaylist, Osuawa
 from osuawa.db import build_score_insert_sql, create_db_engine, resolve_db_url, score_users_query, scores_compact_to_params, sync_score_columns
@@ -146,6 +147,13 @@ def commands():
             0,
             update_beatmaps,
         ),
+        Command(
+            "playlistupd",
+            "recompute all beatmaps in the playlist table",
+            [],
+            0,
+            update_all_beatmaps,
+        ),
     ]
 
 
@@ -262,6 +270,7 @@ def create_tmp_playlist(name: str, beatmap_specs: list[BeatmapSpec]) -> list[Dat
 
 
 def _update_beatmap(
+    conn: Connection,
     action: Literal["add", "update0", "update1", "delete"],
     beatmap: Optional[DatabasePlaylistBeatmap],
     old_bid: Optional[int] = None,
@@ -271,6 +280,9 @@ def _update_beatmap(
 
     如果 beatmap 不为 None，则 old_bid 必须为 None
 
+    事务由调用方持有：一个命令里的多条 beatmap 必须一起成功/一起失败
+
+    :param conn: 调用方开启的事务
     :param beatmap: 欲更新的谱面
     :param old_bid: 欲删除的 BID（主键之一）
     :param old_mods: 欲删除的 MODS（主键之二）
@@ -290,72 +302,77 @@ def _update_beatmap(
 
     new_bid = None
     new_mods = None
-    with engine.begin() as conn:
-        if action == "update0":
-            if beatmap is not None:
-                new_bid = beatmap["BID"]
-                new_mods = beatmap["MODS"]
-                conn.execute(
-                    text(
-                        """UPDATE BEATMAP
-                           SET INFO       = :INFO,
-                               SKILL_SLOT = :SKILL_SLOT,
-                               SR         = :SR,
-                               BPM        = :BPM,
-                               HIT_LENGTH = :HIT_LENGTH,
-                               MAX_COMBO  = :MAX_COMBO,
-                               CS         = :CS,
-                               AR         = :AR,
-                               OD         = :OD,
-                               MODS       = :MODS,
-                               NOTES      = :NOTES,
-                               STATUS     = :STATUS,
-                               COMMENTS   = :COMMENTS,
-                               POOL       = :POOL,
-                               RAW_MODS   = :RAW_MODS,
-                               SERIES     = :SERIES
-                           WHERE BID = :BID
-                             AND MODS = :MODS""",
-                    ),
-                    beatmap,
-                )
-            else:
-                raise ValueError("cannot update a beatmap from null")
-        elif action == "add" or action == "delete" or action == "update1":
-            if old_bid is not None and old_mods is not None:
-                # 可能是 delete, update1
-                assert action == "delete" or action == "update1"
-                # 有可能传入的是 numpy 类型，需要强制转化为原生类型
-                # 已更新：目前应该不需要强制类型转换
-                # old_bid = int(old_bid)
-                # old_mods = str(old_mods)
-                conn.execute(
-                    text(
-                        """DELETE
-                           FROM BEATMAP
-                           WHERE BID = :bid
-                             AND MODS = :mods""",
-                    ),
-                    {"bid": old_bid, "mods": old_mods},
-                )
-            if beatmap is not None:
-                # 可能是 add, update1
-                assert action == "add" or action == "update1"
-                new_bid = beatmap["BID"]
-                new_mods = beatmap["MODS"]
-                conn.execute(
-                    text(
-                        """INSERT INTO BEATMAP
-                           VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE, :SERIES)""",
-                    ),
-                    beatmap,
-                )
+    if action == "update0":
+        if beatmap is not None:
+            new_bid = beatmap["BID"]
+            new_mods = beatmap["MODS"]
+            conn.execute(
+                text(
+                    """UPDATE BEATMAP
+                       SET INFO       = :INFO,
+                           SKILL_SLOT = :SKILL_SLOT,
+                           SR         = :SR,
+                           BPM        = :BPM,
+                           HIT_LENGTH = :HIT_LENGTH,
+                           MAX_COMBO  = :MAX_COMBO,
+                           CS         = :CS,
+                           AR         = :AR,
+                           OD         = :OD,
+                           MODS       = :MODS,
+                           NOTES      = :NOTES,
+                           STATUS     = :STATUS,
+                           COMMENTS   = :COMMENTS,
+                           POOL       = :POOL,
+                           RAW_MODS   = :RAW_MODS,
+                           SERIES     = :SERIES
+                       WHERE BID = :BID
+                         AND MODS = :MODS""",
+                ),
+                beatmap,
+            )
+        else:
+            raise ValueError("cannot update a beatmap from null")
+    elif action == "add" or action == "delete" or action == "update1":
+        if old_bid is not None and old_mods is not None:
+            # 可能是 delete, update1
+            assert action == "delete" or action == "update1"
+            # 有可能传入的是 numpy 类型，需要强制转化为原生类型
+            # 已更新：目前应该不需要强制类型转换
+            # old_bid = int(old_bid)
+            # old_mods = str(old_mods)
+            conn.execute(
+                text(
+                    """DELETE
+                       FROM BEATMAP
+                       WHERE BID = :bid
+                         AND MODS = :mods""",
+                ),
+                {"bid": old_bid, "mods": old_mods},
+            )
+        if beatmap is not None:
+            # 可能是 add, update1
+            assert action == "add" or action == "update1"
+            new_bid = beatmap["BID"]
+            new_mods = beatmap["MODS"]
+            conn.execute(
+                text(
+                    """INSERT INTO BEATMAP
+                       VALUES (:BID, :SID, :INFO, :SKILL_SLOT, :SR, :BPM, :HIT_LENGTH, :MAX_COMBO, :CS, :AR, :OD, :MODS, :NOTES, :STATUS, :COMMENTS, :POOL, :SUGGESTOR, :RAW_MODS, :ADD_TS, :U_ARTIST, :U_TITLE, :SERIES)""",
+                ),
+                beatmap,
+            )
 
     return new_bid or 0, new_mods or "", old_bid or 0, old_mods or ""
 
 
 def _build_update_return_message(action_verb: str, action_list: list[tuple[int, str]]) -> str:
     return "%s %s" % (action_verb, ", ".join(["(%d, %s)" % tup for tup in action_list]))
+
+
+def _touch_playlist_lastupdate() -> None:
+    """标记课题刚被改过：前端靠这个文件的时间戳决定要不要提示刷新"""
+    with open(os.path.join(C.STATIC_DIRECTORY.value, "playlist_lastupdate"), "w", encoding="utf-8") as fo:
+        fo.write(str(time_ns()))
 
 
 def cleanup_old_tasks_status():
@@ -475,31 +492,32 @@ def update_beatmaps(obj: Optional[list[BeatmapJob]] = None) -> str:
     # beatmap_specs 只收集带 beatmap 的条目，其下标与 obj 的下标不同步，
     # 因此用一个只随 spec 推进的游标取值
     spec_index = 0
-    for i, beatmap_job in enumerate(obj):
-        if has_spec_list[i]:
-            database_beatmap = database_beatmaps[spec_index]
-            spec_index += 1
-        else:
-            database_beatmap = None
-        action = beatmap_job.get("action")
-        new_bid, new_mods, old_bid, old_mods = _update_beatmap(
-            action,
-            database_beatmap,
-            beatmap_job.get("old_bid"),
-            beatmap_job.get("old_mods"),
-        )
-        match action:
-            case "add":
-                add_list.append((new_bid, new_mods))
-            case "delete":
-                delete_list.append((old_bid, old_mods))
-            case "update0":  # update
-                update_list.append((new_bid, new_mods))
-            case "update1":  # update from old mods
-                update_list.append((new_bid, "%s -> %s" % (old_mods, new_mods)))
-    # 更新时间戳
-    with open(os.path.join(C.STATIC_DIRECTORY.value, "playlist_lastupdate"), "w", encoding="utf-8") as fo:
-        fo.write(str(time_ns()))
+    # 整个命令的所有增删改放在同一个事务里：一个 playlist 要么全部生效、要么全部回滚
+    with engine.begin() as conn:
+        for i, beatmap_job in enumerate(obj):
+            if has_spec_list[i]:
+                database_beatmap = database_beatmaps[spec_index]
+                spec_index += 1
+            else:
+                database_beatmap = None
+            action = beatmap_job.get("action")
+            new_bid, new_mods, old_bid, old_mods = _update_beatmap(
+                conn,
+                action,
+                database_beatmap,
+                beatmap_job.get("old_bid"),
+                beatmap_job.get("old_mods"),
+            )
+            match action:
+                case "add":
+                    add_list.append((new_bid, new_mods))
+                case "delete":
+                    delete_list.append((old_bid, old_mods))
+                case "update0":  # update
+                    update_list.append((new_bid, new_mods))
+                case "update1":  # update from old mods
+                    update_list.append((new_bid, "%s -> %s" % (old_mods, new_mods)))
+    _touch_playlist_lastupdate()
     return "; ".join(
         [
             _build_update_return_message(action_verb, action_list)
@@ -510,6 +528,52 @@ def update_beatmaps(obj: Optional[list[BeatmapJob]] = None) -> str:
             ]
         ],
     )
+
+
+#: playlistupd 每批处理多少行：限制单次构造的 OsuPlaylist 任务数与内存占用
+PLAYLISTUPD_CHUNK_SIZE = 200
+
+
+def update_all_beatmaps() -> str:
+    """重算整张 BEATMAP 表"""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT BID, MODS, SKILL_SLOT, POOL, NOTES, STATUS, COMMENTS, SUGGESTOR, RAW_MODS, ADD_TS FROM BEATMAP ORDER BY BID, MODS"),
+        ).all()
+    total = len(rows)
+    if total == 0:
+        return "no beatmap to update"
+    logger.info("playlistupd: %d row(s) to update" % total)
+    database_beatmaps: list[DatabasePlaylistBeatmap] = []
+    for start in range(0, total, PLAYLISTUPD_CHUNK_SIZE):
+        logger.info("playlistupd: computing %d/%d" % (start, total))
+        database_beatmaps.extend(
+            create_tmp_playlist(
+                "playlistupd",
+                [
+                    BeatmapSpec(
+                        bid=int(row.BID),
+                        raw_mods=orjson.loads(row.RAW_MODS),
+                        slot=row.SKILL_SLOT or "",
+                        pool=row.POOL or "",
+                        notes=row.NOTES or "",
+                        status=int(row.STATUS or 0),
+                        comments=row.COMMENTS or "",
+                        suggestor=row.SUGGESTOR or "",
+                        add_ts=float(row.ADD_TS or 0.0),
+                    )
+                    for row in rows[start : start + PLAYLISTUPD_CHUNK_SIZE]
+                ],
+            )
+        )
+    if len(database_beatmaps) != total:
+        raise ValueError("unexpected database beatmaps count: %d != %d" % (len(database_beatmaps), total))
+    logger.info("playlistupd: writing back %d row(s)" % total)
+    with engine.begin() as conn:
+        for old_row, database_beatmap in zip(rows, database_beatmaps, strict=True):
+            _update_beatmap(conn, "update1", database_beatmap, old_mods=old_row.MODS)
+    _touch_playlist_lastupdate()
+    return "updated %d beatmap(s)" % total
 
 
 def handle_sigterm(signum, frame):
