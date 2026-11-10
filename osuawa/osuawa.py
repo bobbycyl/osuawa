@@ -193,6 +193,14 @@ class ThreadSafeSingletonMeta(type):
 
 
 class ThreadSafeCoroRunner(metaclass=ThreadSafeSingletonMeta):
+    """把一个协程丢到固定的后台线程里跑完，供同步代码调用
+
+    ⚠️ 这个线程没有 Streamlit 的 ScriptRunContext：协程里碰 ``st.session_state`` /
+    ``st.*`` 会直接抛 AttributeError。需要的东西一律由调用方作为参数传进来，别在协程
+    体里读会话状态。也不要试图把某个会话的上下文挂到这个线程上——它是全进程单例，
+    挂上去只会让不同会话互相串。
+    """
+
     def __init__(self):
         self.loop = asyncio.new_event_loop()
         self._thread = Thread(

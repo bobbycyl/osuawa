@@ -11,6 +11,7 @@
     exc-i18n     异常消息不要用 _()（异常跟着语言变会让排查变难）
     exc-quote    异常消息里的 %s 用成对引号
     log-lang     日志消息必须是英文（日志不加引号：裸插值便于 grep）
+    coro-st      协程里不能访问 st.*
 
 引号规则对三类消息不同，是有依据的，别一刀切：
     异常      对齐 Python 内建写法（KeyError: 'k'），且异常不翻译，引号稳定
@@ -21,6 +22,10 @@
 确实不需要引号的载荷必须显式豁免，不再根据冒号、括号等上下文偷偷放行。
 %r / %a 自带 repr 转换，%d 等数值占位符不适用引号规则；f-string 没有类型信息，
 也不自动推断其中的插值是不是需要引号的字符串。
+
+协程（async def）由 ThreadSafeCoroRunner 丢到固定的后台线程执行，那个线程没有
+Streamlit 的 ScriptRunContext，st.*（尤其 st.session_state）在里面一律不可用。
+需要的对象由调用方作为参数传进来，UI 操作留在调用协程的前后。
 
 AgGrid 的 header_name 不检查：BID / SR / AR / OD / Drain / Combo 是 osu! 圈的固定写法。
 
@@ -202,6 +207,17 @@ def unquoted_specs(text: str) -> list[str]:
 # --------------------------------------------------------------------------- 检查器
 
 
+def iter_coroutine_body(node: ast.AsyncFunctionDef) -> Iterator[ast.AST]:
+    """遍历协程体，但不下钻嵌套的 async def（它自己会被单独检查，避免重复报）"""
+    pending = list(ast.iter_child_nodes(node))
+    while pending:
+        child = pending.pop()
+        if isinstance(child, ast.AsyncFunctionDef):
+            continue
+        yield child
+        pending.extend(ast.iter_child_nodes(child))
+
+
 class Checker:
     def __init__(self) -> None:
         self.issues: list[tuple[str, int, str, str]] = []
@@ -209,6 +225,7 @@ class Checker:
         self.ui_texts = 0
         self.logs = 0
         self.exceptions = 0
+        self.coroutines = 0
         self._source: dict[pathlib.Path, list[str]] = {}
 
     # -------- 公共设施
@@ -308,6 +325,13 @@ class Checker:
         if CJK.search(text):
             self.add(path, arg.lineno, "log-lang", "日志消息必须是英文：%r" % text[:60], call.lineno)
 
+    def check_coroutine(self, path: pathlib.Path, node: ast.AsyncFunctionDef) -> None:
+        """协程体：不能访问 st.* （只检查 st 这个名称）"""
+        self.coroutines += 1
+        for child in iter_coroutine_body(node):
+            if isinstance(child, ast.Attribute) and isinstance(child.value, ast.Name) and child.value.id == "st":
+                self.add(path, child.lineno, "coro-st", "协程里不能访问 `st.%s`：它跑在没有 ScriptRunContext 的后台线程上" % child.attr)
+
 
 # --------------------------------------------------------------------------- 入口
 
@@ -342,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
         for node in ast.walk(tree):
             if isinstance(node, ast.Raise):
                 checker.check_exception(path, node)
+            elif isinstance(node, ast.AsyncFunctionDef):
+                checker.check_coroutine(path, node)
             elif isinstance(node, ast.Call):
                 name = dotted(node.func).rsplit(".", 1)[-1]
                 if dotted(node.func).startswith("st."):
@@ -352,7 +378,8 @@ def main(argv: list[str] | None = None) -> int:
     for path, lineno, rule, detail in checker.issues:
         print("%s:%d [%s] %s" % (path, lineno, rule, detail))
     print(
-        "扫描 %d 个文件（%d 条文案 / %d 条日志 / %d 个异常），共 %d 个问题" % (checker.files, checker.ui_texts, checker.logs, checker.exceptions, len(checker.issues)),
+        "扫描 %d 个文件（%d 条文案 / %d 条日志 / %d 个异常 / %d 个协程），共 %d 个问题"
+        % (checker.files, checker.ui_texts, checker.logs, checker.exceptions, checker.coroutines, len(checker.issues)),
     )
     if parse_errors:
         print("%d 个文件解析失败" % parse_errors, file=sys.stderr)
