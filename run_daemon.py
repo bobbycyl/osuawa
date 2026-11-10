@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import pickle
@@ -401,13 +402,28 @@ def refresh_oauth_token():
     # aid 直接由文件名反推：它既是 ossapi 的 token_key，也是 USER_CACHE.AID，
     # 还要和 .oauth/<aid>.pickle 对得上。文件名与 pickle 格式都不能改，
     # 详见 C.OAUTH_TOKEN_DIRECTORY 处的说明。
-    for filename in os.listdir(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh")):
-        # 目录内容也会被拼进路径，先判定；坏文件跳过而不拖垮整个守护进程
+    refresh_dir = os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh")
+    try:
+        with engine.connect() as conn:
+            known_aids = set(conn.execute(text("SELECT AID FROM USER_CACHE")).scalars().all())
+    except Exception as e:
+        logger.warning("skipping orphan refresh token cleanup: %s" % e)
+        known_aids = None
+    for filename in os.listdir(refresh_dir):
         if not is_safe_filename(filename):
             logger.error("skipping unsafe token filename: %s" % filename)
             continue
-        aid = os.path.splitext(filename)[0]
-        with open(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", filename), "rb") as fi_b:
+        aid, suffix = os.path.splitext(filename)
+        if suffix != ".pickle":
+            continue
+        if known_aids is not None and aid not in known_aids:
+            # 孤 refresh token：留着只会被当成有效凭证反复刷新，直接清掉。
+            # 对应的 access token 单独留着没有副作用，不用管
+            with contextlib.suppress(OSError):
+                os.remove(os.path.join(refresh_dir, filename))
+            logger.warning("removed orphan refresh token: %s" % aid)
+            continue
+        with open(os.path.join(refresh_dir, filename), "rb") as fi_b:
             refresh_token = pickle.load(fi_b)
         _response = requests.post(
             Awapi.TOKEN_URL.format(domain=Domain.OSU.value),

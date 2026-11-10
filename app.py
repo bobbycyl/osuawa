@@ -84,6 +84,13 @@ def toggle_immersive():
     st.session_state.immersive_toggled = True
 
 
+def _clear_oauth_callback_params() -> None:
+    """把一次性回调参数从 URL 里清掉，避免刷新时重复消费或误判"""
+    for key in ("code", "state"):
+        if key in st.query_params:
+            st.query_params.pop(key)
+
+
 if "lck" not in st.session_state:
     # 由于使用 ajs_anonymous_id 作为半持久化文件名，所以一般来说线程锁足以，不需要文件锁
     st.session_state.lck = Lock()
@@ -153,7 +160,7 @@ if "awa" not in st.session_state:
     try:
         # aid 来自客户端 cookie，拼进任何路径之前先判定；不通过就终止
         if not is_safe_filename(aid):
-            raise PermissionError("unsafe anonymous id cookie; enable cookies and refresh the page")
+            raise PermissionError("unsafe browser")
         # 文件名就是 ossapi 的 token_key（这里为 aid），pickle 也是它的既有约定；
         # 不要改成哈希名或换序列化格式，详见 C.OAUTH_TOKEN_DIRECTORY 处的说明
         token_filename = "%s.pickle" % aid
@@ -168,12 +175,8 @@ if "awa" not in st.session_state:
             # 一次性参数无论成败都从 URL 里清掉，避免刷新时重复消费或误判。
             code = st.query_params.code
             state = st.query_params.get("state")
-            st.query_params.pop("code")
-            if "state" in st.query_params:
-                st.query_params.pop("state")
-            if not state or not consume_oauth_state(aid, state):
-                logger.get_logger("streamlit").warning("oauth state mismatch or expired for session %s" % get_session_id())
-            else:
+            _clear_oauth_callback_params()
+            if state and consume_oauth_state(aid, state):
                 prepare_bar.progress(50, text=get_an_osu_meme())
                 _response = requests.post(
                     Awapi.TOKEN_URL.format(domain=domain),
@@ -198,13 +201,14 @@ if "awa" not in st.session_state:
                     raise PermissionError("oauth token request failed: '%s'" % _oauth_r.get("error_description"))
                 _oauth_token = _oauth_r.get("access_token")
                 _refresh_token = _oauth_r.get("refresh_token")
-                if not _oauth_token:
-                    raise ValueError("oauth token response has no access token")
                 prepare_bar.progress(67, text=get_an_osu_meme())
+            else:
+                # 校验不过就绝不拿 code 换 token，否则攻击者能把受害者会话绑到自己的账号。
+                logger.get_logger("streamlit").warning("oauth state mismatch or expired for session %s" % get_session_id())
+                raise PermissionError("invalid authorization")
 
         if _oauth_token is None:
-            # 没拿到新 token（首次访问，或 state 校验失败）就回落到此前保存的 token 文件；
-            # state 不匹配时绝不换 token，攻击者无法把受害者会话绑到自己的账号。
+            # 没拿到新 token（首次访问，或回调校验失败）就回落到此前保存的 token 文件
             if os.path.exists(token_path) and os.path.exists(refresh_path):
                 with open(token_path, "rb") as fi_b:
                     _oauth_token = pickle.load(fi_b)
@@ -243,15 +247,11 @@ if "awa" not in st.session_state:
         with open(refresh_path, "wb") as fi_b:
             pickle.dump(_refresh_token, fi_b)
     except Exception as e:
-        # 由于自动刷新功能由 daemon 承担，这里理论上不会触发
         if not st.session_state._debugging_mode and is_safe_filename(aid):
             delete_user_cache(aid)
         st.error(str(e))
         prepare_bar.empty()
-        if "code" in st.query_params:
-            st.query_params.pop("code")
-        if "state" in st.query_params:
-            st.query_params.pop("state")
+        _clear_oauth_callback_params()
         st.stop()
     update_user_cache(
         st.session_state.user,

@@ -790,9 +790,25 @@ def query_all_sessions() -> pd.DataFrame:
     return df
 
 
-def delete_user_cache(aid: str) -> None:
+def _remove_token_files(aid: str) -> None:
+    """删 aid 对应的 access / refresh token 文件；aid 不合法时直接抛错
+
+    USER_CACHE 的行是 token 文件的唯一真相：行删掉之后两个文件都不该再留在盘上，
+    否则 daemon 的刷新任务还会拿 refresh token 换出新的一份写回来。
+    """
     if not is_safe_filename(aid):
         raise ValueError("unsafe token cache key")
+    token_filename = "%s.pickle" % aid
+    for token_path in (
+        os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, token_filename),
+        os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "refresh", token_filename),
+    ):
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(token_path)
+
+
+def delete_user_cache(aid: str) -> None:
+    _remove_token_files(aid)
     with _conn.session as s:
         s.execute(
             text(
@@ -801,15 +817,12 @@ def delete_user_cache(aid: str) -> None:
             params={"aid": aid},
         )
         s.commit()
-    if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid)):
-        os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid))
 
 
 def invalidate_user_cache(user: Optional[int] = None) -> None:
     if user is None:
         user = st.session_state.user
     with _conn.session as s:
-        # 首先查询所有 aid，删除本地缓存的 token pickle
         res = s.execute(
             text(
                 "SELECT AID FROM USER_CACHE WHERE USER_ID = :user",
@@ -818,10 +831,7 @@ def invalidate_user_cache(user: Optional[int] = None) -> None:
         )
         aids = [x[0] for x in res.fetchall()]
         for aid in aids:
-            if not is_safe_filename(aid):
-                raise ValueError("unsafe token cache key")
-            if os.path.exists(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid)):
-                os.remove(os.path.join(C.OAUTH_TOKEN_DIRECTORY.value, "%s.pickle" % aid))
+            _remove_token_files(aid)
         s.execute(
             text(
                 "DELETE FROM USER_CACHE WHERE USER_ID = :user",

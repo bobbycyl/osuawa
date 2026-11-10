@@ -172,6 +172,41 @@ def _oauth_state_path(aid: str) -> str:
     return os.path.join(C.OAUTH_STATE_DIRECTORY.value, "%s.json" % aid)
 
 
+def _read_oauth_state(path: str) -> Optional[bytes]:
+    """读一份 state 记录；不存在或读不了返回 None"""
+    try:
+        with open(path, "rb") as fi_b:
+            return fi_b.read()
+    except OSError:
+        return None
+
+
+def _decode_oauth_state(raw: Optional[bytes]) -> Any:
+    """把 state 记录解析成对象；坏记录返回 None"""
+    if raw is None:
+        return None
+    try:
+        return orjson.loads(raw)
+    except orjson.JSONDecodeError:
+        return None
+
+
+def _oauth_state_is_fresh(payload: Any) -> bool:
+    """记录结构完整且没过期（不比对具体 state 值）"""
+    if not isinstance(payload, dict):
+        return False
+    expected = payload.get("state")
+    issued_at = payload.get("ts")
+    if not isinstance(expected, str) or not isinstance(issued_at, (int, float)):
+        return False
+    return time() - issued_at <= OAUTH_STATE_TTL
+
+
+def _oauth_state_matches(payload: Any, state: str) -> bool:
+    """记录是否正是本次回调要用的那份 state"""
+    return _oauth_state_is_fresh(payload) and hmac.compare_digest(payload["state"].encode("utf-8"), state.encode("utf-8"))
+
+
 def generate_oauth_state(aid: str) -> str:
     """为一次授权请求生成 state 并持久化，返回要放进授权 URL 的值
 
@@ -200,35 +235,37 @@ def generate_oauth_state(aid: str) -> str:
 def consume_oauth_state(aid: str, state: str) -> bool:
     """校验回调携带的 state，且保证只会被消费一次
 
-    用 os.rename 把记录原子地「抢走」：文件系统的 rename 是原子的，并发到达的多个
-    回调只有一个能成功，因此不可能出现同一 state 被校验通过两次。抢到之后再比对
-    state 与签发时间；记录不存在、坏记录、过期、state 不匹配一律返回 False。
+    分两步，先只读校验、再原子抢占：
+
+    1. 只读打开记录比对。记录不存在、坏记录、过期、state 不匹配都直接返回 False
+    2. 校验通过后用 ``os.rename`` 把记录原子地「抢走」
     """
     if not is_safe_filename(aid) or not isinstance(state, str) or not state:
         return False
     state_path = _oauth_state_path(aid)
+    if not _oauth_state_matches(_decode_oauth_state(_read_oauth_state(state_path)), state):
+        return False
     claimed = "%s.%s.claimed" % (state_path, uuid.uuid4().hex)
     try:
         os.rename(state_path, claimed)
     except OSError:
         return False
     try:
-        with open(claimed, "rb") as fi_b:
-            payload = orjson.loads(fi_b.read())
-    except (OSError, orjson.JSONDecodeError):
+        raw = _read_oauth_state(claimed)
+        if _oauth_state_matches(_decode_oauth_state(raw), state):
+            return True
+        # 抢占期间记录被换成了新一次授权签发的 state：手上这份已经过时，这次回调按失败处理。
+        # 若盘上还没有更新的记录，把它放回去——失败的请求不该消耗掉合法 state。
+        if raw is not None and _oauth_state_is_fresh(_decode_oauth_state(raw)):
+            try:
+                with open(state_path, "xb") as fo_b:  # 只新建、不覆盖：有更新的记录就让它赢
+                    fo_b.write(raw)
+            except OSError:
+                pass
         return False
     finally:
         with contextlib.suppress(OSError):
             os.unlink(claimed)
-    if not isinstance(payload, dict):
-        return False
-    expected = payload.get("state")
-    issued_at = payload.get("ts")
-    if not isinstance(expected, str) or not isinstance(issued_at, (int, float)):
-        return False
-    if time() - issued_at > OAUTH_STATE_TTL:
-        return False
-    return hmac.compare_digest(expected.encode("utf-8"), state.encode("utf-8"))
 
 
 @unique
