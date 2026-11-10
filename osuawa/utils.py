@@ -768,7 +768,7 @@ class SimpleScoreInfo(object):
     max_combo: int
     passed: bool
     pp: Optional[float]
-    _mods: Sequence[dict[str, str] | dict[str, dict[str, Any]]]
+    _mods: list[dict[str, Any]]
     ts: datetime
     statistics: ScoreStatistics
     st: Optional[datetime]
