@@ -76,7 +76,6 @@ from .utils import (
     download_beatmap,
     headers,
     simple_user_dict,
-    to_readable_mods,
 )
 
 if platform.system() == "Windows":
@@ -480,7 +479,15 @@ class Osuawa(CachedThrottledMixIn):
         df[ec[18]] = df["b_aim_difficulty"] / df["b_speed_difficulty"]
         df[ec[19]] = df["b_ppplus_jump_rating"] / df["b_ppplus_flow_rating"]
         df[ec[20]] = np.where(df["is_nf"], df["score"] * 2, df["score"])
-        df[ec[21]] = df["_mods"].apply(lambda x: "; ".join(to_readable_mods(x)))
+
+        def _readable_mods(mods: list[dict], ruleset_id: int) -> str:
+            try:
+                _, _, _, _, readable = SimpleDifficultyAttribute.validate_and_transform_mods(mods, int(ruleset_id))
+            except (ValueError, TypeError, KeyError):
+                return "; ".join(str(mod.get("acronym", "?")) for mod in mods)
+            return "; ".join(readable)
+
+        df[ec[21]] = [_readable_mods(mods, ruleset_id) for mods, ruleset_id in zip(df["_mods"], df["ruleset_id"], strict=True)]
         df[ec[22]] = df["_mods"].map(lambda mods: ({m["acronym"] for m in mods} <= self.common_mods))
         # 剔除以 _ 开头的字段
         return df.drop(columns=[c for c in df.columns if c.startswith("_")])
@@ -1004,7 +1011,7 @@ class OsuPlaylist(object):
         download_beatmap(b)
         my_attr = SimpleDifficultyAttribute(b.cs, b.accuracy, b.ar, b.bpm or 0, b.hit_length, cast(Literal[0, 1, 2, 3], b.mode_int))
         my_attr.set_mods(mods)
-        mods_ready: list[str] = to_readable_mods(my_attr.standardized_mods)  # 准备给用户看的 Mods 表现形式
+        mods_ready: list[str] = my_attr.readable_mods.copy()  # 准备给用户看的 Mods 表现形式（已标准化）
         if is_fm:
             mods_ready.insert(0, "FM")
         osupp_attr = calculate_difficulty(

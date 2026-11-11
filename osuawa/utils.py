@@ -398,17 +398,58 @@ def format_external_value(value: Any) -> str:
     return str(value)
 
 
-def to_readable_mods(mods: Sequence[Mapping[str, Any]]) -> list[str]:
-    readable_mods: list[str] = []
-    for i in range(len(mods)):
-        if "settings" in mods[i]:
-            settings_str = []
-            for setting_name, setting_value in mods[i]["settings"].items():
-                settings_str.append("%s=%s" % (setting_name, format_external_value(setting_value)))
-            readable_mods.append("%s(%s)" % (mods[i]["acronym"], ",".join(settings_str)))
-        else:
-            readable_mods.append(mods[i]["acronym"])
-    return readable_mods
+#: 课题 slot 的固定顺序；未列明的名字按字母序排在它们之后、TB 之前
+SLOT_ORDER: tuple[str, ...] = ("NM", "HD", "HR", "DT", "FM", "F+")
+SLOT_LAST = "TB"
+_SLOT_OTHER_RANK = len(SLOT_ORDER)
+_SLOT_UNKNOWN_RANK = len(SLOT_ORDER) + 2
+_SLOT_INDEX_WIDTH = int(C.SLOT_MAX_LEN.value) - 2
+
+
+def slot_sort_key(slot: Any) -> tuple[int, str, str]:
+    """课题 slot 的排序键 ``(类别, 类别名, 补零编号)``。
+
+    顺序：``NM → HD → HR → DT → FM → F+ → 其他（按字母序）→ TB``；
+    同一类别内按编号的数字序（``NM2`` 在 ``NM10`` 之前，编号补零至
+    ``SLOT_MAX_LEN - 2`` 位后按字典序比较）。未知或缺失的 slot 一律排最后。
+
+    这是 Playlist Generator 的 "Match sorting" 与 Room Spectator 的分组展示
+    共用的唯一规则来源；改顺序只改 :data:`SLOT_ORDER` 即可。
+    """
+    text = "" if slot is None else str(slot)
+    if not text or text in ("nan", "None", "<NA>", "NaT"):
+        return _SLOT_UNKNOWN_RANK, "", ""
+    name, index = text[:2], text[2:]
+    if name == SLOT_LAST:
+        rank = _SLOT_OTHER_RANK + 1
+    elif name in SLOT_ORDER:
+        rank = SLOT_ORDER.index(name)
+    else:
+        rank = _SLOT_OTHER_RANK
+    return rank, name, index.zfill(_SLOT_INDEX_WIDTH)
+
+
+def sort_by_slot(
+    df: pd.DataFrame,
+    slot_column: str = "SKILL_SLOT",
+    extra_columns: Sequence[str] = ("ADD_TS",),
+) -> pd.DataFrame:
+    """按 :func:`slot_sort_key` 的规则重排 DataFrame，返回新对象。
+
+    刻意不生成 ``Categorical`` 列：pandas 3 下 Categorical 在 Arrow 里是
+    ``dictionary<values=large_string>``，Streamlit 的序列化只 downcast 顶层
+    large 类型，st_aggrid 前端内置的旧版 Arrow JS 解不了 LargeUtf8，表格会
+    直接渲染为空白。所以拆成三列普通 int/str 辅助列，排完即删。
+    """
+    if df.empty:
+        return df
+    keys = df[slot_column].map(slot_sort_key)
+    out = df.copy()
+    out["_slot_cat"] = keys.map(lambda key: key[0])
+    out["_slot_name"] = keys.map(lambda key: key[1])
+    out["_slot_index"] = keys.map(lambda key: key[2])
+    by = ["_slot_cat", "_slot_name", "_slot_index", *[column for column in extra_columns if column in out.columns]]
+    return out.sort_values(by=by).drop(columns=["_slot_cat", "_slot_name", "_slot_index"])
 
 
 def calc_bin_size(data) -> float:
@@ -485,7 +526,7 @@ class SimpleDifficultyAttribute(object):
         mods: Sequence[Mapping[str, Any]],
         ruleset_id: Optional[int] = None,
         beatmap_path: Optional[str | bytes] = None,
-    ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str], list[str], list[str]]:
         """验证并转换标准 mods 列表
 
         :param mods: 模组列表
@@ -493,7 +534,8 @@ class SimpleDifficultyAttribute(object):
         :param beatmap_path: 谱面文件路径
         :return: (standardized_mods（已排序的；settings 保留原生值，enum 为枚举名）,
                   {acronym, settings}, osu_tool_mods（与输入顺序一致）,
-                  osu_tool_mod_options（对外文本，经 format_external_value 转换）)
+                  osu_tool_mod_options（对外文本，经 format_external_value 转换）,
+                  readable_mods（与 standardized_mods 同序的可读文本，展示层用）)
         """
         match ruleset_id:
             case 0:
@@ -535,6 +577,7 @@ class SimpleDifficultyAttribute(object):
         mods_dict: dict[str, Any] = {}  # {acronym, settings}
         osu_tool_mods: list[str] = []
         osu_tool_mod_options: list[str] = []
+        readable_mods: list[str] = []  # 与 standardized_mods 同序，顺带生成，不额外遍历
 
         # 需要两次遍历 mods，第一次用来验证和转换，第二次用来排序和分堆
         for mod in mods:
@@ -609,12 +652,16 @@ class SimpleDifficultyAttribute(object):
             for cur_mod in cur_mods:
                 cur_mod_settings = cur_mod.get("settings", {})
                 mods_dict[cur_mod["acronym"]] = cur_mod_settings
+                settings_readable: list[str] = []
                 for setting_name, setting_value in cur_mod_settings.items():
-                    osu_tool_mod_options.append("%s_%s=%s" % (cur_mod["acronym"], setting_name, format_external_value(setting_value)))
+                    value_text = format_external_value(setting_value)
+                    osu_tool_mod_options.append("%s_%s=%s" % (cur_mod["acronym"], setting_name, value_text))
+                    settings_readable.append("%s=%s" % (setting_name, value_text))
                 osu_tool_mods.append(cur_mod["acronym"])
+                readable_mods.append("%s(%s)" % (cur_mod["acronym"], ",".join(settings_readable)) if settings_readable else cur_mod["acronym"])
             standardized_mods.extend(cur_mods)
 
-        return standardized_mods, mods_dict, osu_tool_mods, osu_tool_mod_options
+        return standardized_mods, mods_dict, osu_tool_mods, osu_tool_mod_options, readable_mods
 
     def __init__(
         self,
@@ -641,7 +688,8 @@ class SimpleDifficultyAttribute(object):
         self.is_speed_up = False
         self.is_speed_down = False
         self.is_fl = False
-        self.standardized_mods = []
+        self.standardized_mods = []  # 与 APIMod 的标准 json 存在出入：enum 为具体字符串而非索引字符串
+        self.readable_mods: list[str] = []  # 与 standardized_mods 同序的可读文本
         self.osu_tool_mods: list[str] = []  # [acronym]
         self.osu_tool_mod_options: list[str] = []  # [acronym_setting_name=setting_value]
         self.ruleset_id = ruleset_id
@@ -652,6 +700,7 @@ class SimpleDifficultyAttribute(object):
             mods_dict,
             self.osu_tool_mods,
             self.osu_tool_mod_options,
+            self.readable_mods,
         ) = self.validate_and_transform_mods(mods, self.ruleset_id)
         if "NF" in mods_dict:
             self.is_nf = True

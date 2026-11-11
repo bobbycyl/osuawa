@@ -1045,7 +1045,7 @@ def mods_generator(ret_type=None):
 
     with st.expander(_("Preview")):
         mods = make_unstandardized_mods_from_lines(mods=lines)
-        mods, _mod_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(
+        mods, _mod_dict, osu_tool_mods, osu_tool_mod_options, _readable_mods = SimpleDifficultyAttribute.validate_and_transform_mods(
             mods,
             cast(
                 Literal[0, 1, 2, 3],

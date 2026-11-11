@@ -185,7 +185,7 @@ def _parse_mods(mods: str, ruleset_id: Literal[0, 1, 2, 3], beatmap_path: str | 
     """把以分号分隔的 mods 解析成 osu-tools 需要的 ``(mods, mod_options)``"""
     # slot 参数只是用来给 mods 列表打头，这里用 "SP" 占位，解析完再剔除
     unstandardized_mods = make_unstandardized_mods_from_lines(mods=mods.split(";"))
-    _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(
+    _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options, _readable_mods = SimpleDifficultyAttribute.validate_and_transform_mods(
         unstandardized_mods,
         ruleset_id,
         beatmap_path,

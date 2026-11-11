@@ -378,8 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     for path, lineno, rule, detail in checker.issues:
         print("%s:%d [%s] %s" % (path, lineno, rule, detail))
     print(
-        "扫描 %d 个文件（%d 条文案 / %d 条日志 / %d 个异常 / %d 个协程），共 %d 个问题"
-        % (checker.files, checker.ui_texts, checker.logs, checker.exceptions, checker.coroutines, len(checker.issues)),
+        "扫描 %d 个文件（%d 条文案 / %d 条日志 / %d 个异常 / %d 个协程），共 %d 个问题" % (checker.files, checker.ui_texts, checker.logs, checker.exceptions, checker.coroutines, len(checker.issues)),
     )
     if parse_errors:
         print("%d 个文件解析失败" % parse_errors, file=sys.stderr)

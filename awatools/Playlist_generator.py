@@ -19,7 +19,7 @@ from streamlit import logger
 from osuawa import C, OsuPlaylist
 from osuawa.components import awa_query as _awa_query, draw_clustered_bars, get_session_id, init_page, load_value, memorized_selectbox, mods_generator, push_task_with_session_state, refresh, save_value
 from osuawa.playlist import PlaylistSource
-from osuawa.utils import BeatmapJob, BeatmapSpec, SimpleDifficultyAttribute, available_mods, get_playlist_lastupdate, is_safe_filename, read_injected_code, safe_norm
+from osuawa.utils import BeatmapJob, BeatmapSpec, SimpleDifficultyAttribute, available_mods, get_playlist_lastupdate, is_safe_filename, read_injected_code, safe_norm, sort_by_slot
 
 validate_restricted_identifier = partial(validate_type, type_=str, min_value=1, max_value=16, predicate=str.isidentifier)
 
@@ -149,7 +149,7 @@ def calc_attr(data) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
         skill_type = _slot[:2]
         with open(os.path.join(C.BEATMAPS_CACHE_DIRECTORY.value, "%d.osu" % _bid), "rb") as fi_b:
             beatmap_bytes = fi_b.read()
-        _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options = SimpleDifficultyAttribute.validate_and_transform_mods(_raw_mods, beatmap_path=beatmap_bytes)
+        _standardized_mods, _mods_dict, osu_tool_mods, osu_tool_mod_options, _readable_mods = SimpleDifficultyAttribute.validate_and_transform_mods(_raw_mods, beatmap_path=beatmap_bytes)
         calculator = calculate_performance(
             beatmap_path=beatmap_bytes,
             mods=osu_tool_mods,
@@ -389,28 +389,7 @@ if st.session_state.perm >= 1:
     df["_is_dup_song"] = (df["U_ARTIST"] + " " + df["U_TITLE"]).isin(duplicate_songs)
 
     if match_slot_sort:
-        # 新增 SLOT 排序辅助列
-        # 拆分 SKILL_SLOT 列为 _slot_name (:2) 和 _slot_index (2:) 两列，
-        # _slot_name 向左填充 0，直至达到 SLOT_MAX_LEN - 2 位
-        # 排序方式：
-        # 1. 首先按照 _slot_name 排序，顺序为 NM -> HD -> HR -> DT -> FM -> F+ -> 其他未列明字段 -> TB
-        # 2. 然后按照 _slot_index 排序，因为向左填充 0 了所以直接按 alphabet 排序即可
-        df["_slot_name"] = df["SKILL_SLOT"].str[:2]
-        df["_slot_index"] = df["SKILL_SLOT"].str[2:].str.zfill(int(C.SLOT_MAX_LEN.value) - 2)
-        custom_order = ["NM", "HD", "HR", "DT", "FM", "F+"]
-        last_special = "TB"
-        other_names = sorted(
-            set(df["_slot_name"].unique()) - set(custom_order) - {last_special},
-        )
-        category_order = custom_order + other_names + [last_special]
-        # 这里不能使用 pd.Categorical：pandas 3 下 Categorical 列在 Arrow 中是 dictionary<values=large_string>，
-        # 而 Streamlit 的组件序列化只 downcast 顶层的 large 类型、不会处理 dictionary 内部类型，
-        # st_aggrid 前端内置的旧版 Arrow JS 无法解码 LargeUtf8，会导致表格直接渲染为空白
-        slot_order = {name: index for index, name in enumerate(category_order)}
-        df["_slot_name_cat"] = df["_slot_name"].map(slot_order).astype("int64")
-        df.sort_values(by=["_slot_name_cat", "_slot_index", "ADD_TS"], inplace=True)
-        # 删除辅助列
-        df.drop(columns=["_slot_name", "_slot_index", "_slot_name_cat"], inplace=True)
+        df = sort_by_slot(df, "SKILL_SLOT")
 
     # 使用 streamlit-aggrid 实现可交互表格
     # 创建 LINK 列
